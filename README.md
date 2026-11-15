@@ -2,8 +2,21 @@
 
 Aplikasi catatan pribadi Android yang bekerja offline, dengan asisten AI yang berjalan sepenuhnya di perangkat.
 
+**[⬇ Unduh APK v1.3](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.3.apk)** · 35 MB · Android 8.0+ · arm64
+
 ![Tampilan terang](docs/screenshots/terang.png)
 ![Tampilan gelap](docs/screenshots/gelap.png)
+
+## Pasang
+
+1. Unduh [`Catatanku-1.3.apk`](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.3.apk).
+2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
+3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
+
+SHA-256: `cb98ece2cd17a7c861f6d3754bca6a0ceb18ec90e9b889124ec5e2445752688d`
+
+APK ini build *debug* yang ditandatangani kunci debug: aman untuk dipakai sendiri, tetapi bukan build rilis
+dan tidak bisa diterbitkan ke Play Store. Play Protect mungkin menampilkan peringatan aplikasi tak dikenal.
 
 ## Fitur
 
@@ -74,3 +87,10 @@ APK hanya memuat `arm64-v8a`; hapus `abiFilters` di `app/build.gradle.kts` untuk
 
 - [Arsitektur](docs/ARSITEKTUR.md) — struktur kode, alur data, keputusan desain
 - [Riwayat perubahan](CHANGELOG.md)
+
+## Lisensi
+
+[Apache License 2.0](LICENSE) © 2026 papertop221.
+
+Model AI tidak disertakan dan diunduh pengguna langsung dari penerbitnya di bawah lisensi masing-masing
+(Gemma 4 dan Qwen2.5: Apache-2.0). Pustaka pihak ketiga: LiteRT-LM, Jetpack Compose, Kotlin (Apache-2.0).
