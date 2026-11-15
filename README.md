@@ -13,7 +13,7 @@ Aplikasi catatan pribadi Android yang bekerja offline, dengan asisten AI yang be
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `f2719568395d18662179933fcaf41be02925c4bf003688a183eebd00671f9ccc`
+SHA-256: `6ce7f72a4326d350d598c1709216dcdf5899bb8e49c94a681548dd38ca7f952b`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 

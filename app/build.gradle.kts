@@ -34,6 +34,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Tanpa hash commit di dalam APK, sehingga build bisa direproduksi persis (syarat F-Droid
+            // memakai tanda tangan pengembang): APK GitHub dan APK buatan F-Droid identik.
+            vcsInfo.include = false
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
