@@ -1,0 +1,4 @@
+Pengingat dengan notifikasi atau gaya alarm, dan saran pengingat dari waktu di isi catatan.
+Mode AI ringan dan model dilepas otomatis dari RAM; Qwen3 1.7B sebagai unduhan kecil.
+Catatan panjang diproses utuh; rekap 7 hari; daftar tugas belum selesai.
+Kunci aplikasi, cadangan otomatis, dan riwayat versi.

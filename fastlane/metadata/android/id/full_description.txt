@@ -1,0 +1,22 @@
+<p>Catatanku adalah aplikasi catatan pribadi yang sepenuhnya offline. Catatan, pengingat, dan pemrosesan AI tetap di perangkatmu.</p>
+<p><b>Catatan</b></p>
+<ul>
+<li>Simpan otomatis, sematkan, folder, tag, arsip, dan sampah (pulih dalam 30 hari)</li>
+<li>Daftar centang dan poin; riwayat 20 versi terakhir tiap catatan</li>
+<li>Pencarian instan yang menoleransi imbuhan dan salah ketik, tanpa model</li>
+</ul>
+<p><b>Pengingat</b></p>
+<ul>
+<li>Sekali, harian, mingguan, atau bulanan; tetap berbunyi setelah HP dinyalakan ulang</li>
+<li>Notifikasi biasa atau gaya alarm yang berdering sampai ditanggapi</li>
+<li>Waktu di isi catatan seperti "besok jam 7 malam" dikenali dan ditawarkan sebagai pengingat</li>
+</ul>
+<p><b>Asisten AI lokal (opsional)</b></p>
+<ul>
+<li>Ringkas, perbaiki ejaan, rapikan struktur, ambil daftar tugas, buat judul</li>
+<li>Tanya catatan: jawaban dari catatanmu sendiri, lengkap dengan sumbernya</li>
+<li>Rekap 7 hari dan isi judul/tag/folder secara otomatis</li>
+</ul>
+<p>Fitur AI butuh model bahasa (1–3,7 GB) yang diunduh sekali dari huggingface.co atas permintaanmu, atau diimpor dari berkas .litertlm. Sesudahnya AI berjalan tanpa internet. Model yang disarankan, Gemma 4 E2B, memakai sekitar 2 GB RAM saat aktif.</p>
+<p><b>Keamanan</b>: kunci dengan sidik jari atau PIN layar HP, dan cadangan otomatis ke folder pilihan.</p>
+<p>Izin internet hanya dipakai untuk mengunduh model ketika kamu menekan Unduh. Tidak ada iklan, pelacak, atau akun.</p>

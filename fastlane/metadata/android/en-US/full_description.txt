@@ -1,0 +1,9 @@
+<p>Catatanku is a fully offline personal notes app. Notes, reminders and AI processing never leave your device. The interface is in Indonesian.</p>
+<ul>
+<li>Autosave, pinning, folders, tags, archive and a 30-day trash; checklists; history of the last 20 versions of each note</li>
+<li>Instant search that tolerates affixes and typos, with no model needed</li>
+<li>Reminders (once, daily, weekly, monthly) as a notification or an alarm that rings until answered; dates and times written in a note are detected and offered as reminders</li>
+<li>Optional on-device AI: summarize, fix spelling, tidy, extract tasks, title, ask questions about your notes with sources, weekly recap</li>
+<li>App lock with fingerprint or screen PIN, automatic backup to a folder of your choice</li>
+</ul>
+<p>AI features need a language model (1–3.7 GB, Apache-2.0) that you download once from huggingface.co on request, or import from a .litertlm file. After that the AI works without internet. The internet permission is used only for that download. No ads, trackers or accounts.</p>

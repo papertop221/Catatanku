@@ -1,0 +1,4 @@
+Reminders with notification or alarm style, suggested from times written in notes.
+Light AI mode and automatic model unloading; Qwen3 1.7B as a small download.
+Long notes processed in full; 7-day recap; list of open tasks.
+App lock, automatic backup and version history.
