@@ -341,8 +341,34 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
     var moreMenu by remember { mutableStateOf(false) }
     var confirmEmpty by remember { mutableStateOf(false) }
     var confirmOrganize by remember { mutableStateOf(false) }
+    // Kolom cari juga menerima perintah ("ingatkan saya …"). Dikenali dengan aturan, jadi tanpa model pun jalan.
+    val steps = remember(vm.query) { vm.commandSteps(vm.query) }
+    val isCommand = steps != null
+    val tags = vm.allTags
 
     Scaffold(
+        // Filter tag ada di bawah: tidak mendorong daftar catatan turun dan mudah dijangkau jempol.
+        bottomBar = {
+            if (tags.isNotEmpty() && view != NoteView.Trash) Column(Modifier.background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(tags) { t ->
+                        val on = vm.tagFilter == t
+                        Text(
+                            "#$t",
+                            Modifier.clip(CircleShape)
+                                .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { vm.tagFilter = if (on) null else t }.padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (on) MaterialTheme.colorScheme.onPrimary else muted,
+                        )
+                    }
+                }
+            }
+        },
         floatingActionButton = {
             if (view == NoteView.All || view is NoteView.Folder) FloatingActionButton(
                 { vm.open(null) },
@@ -422,16 +448,24 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 Icon(Icons.Default.Search, null, Modifier.size(20.dp), muted)
                 Spacer(Modifier.width(10.dp))
                 PlainField(
-                    vm.query, vm::updateQuery, if (hasModel) "Cari atau tanya catatanmu" else "Cari catatan",
+                    vm.query, vm::updateQuery, if (hasModel) "Cari, tanya, atau beri perintah" else "Cari catatan atau beri perintah",
                     Modifier.weight(1f), ime = ImeAction.Search,
-                )
+                ) {
+                    // Enter langsung membuka rencana, kecuali untuk perintah yang menyingkirkan catatan (harus sengaja ditekan).
+                    if (steps != null && steps.none { it is AgentStep.Trash || it is AgentStep.Archive }) vm.startAgent(vm.query)
+                }
                 if (vm.query.isNotEmpty()) IconButton({ vm.updateQuery("") }) { Icon(Icons.Default.Close, "Hapus pencarian", Modifier.size(18.dp), muted) }
             }
-            if (searching && hasModel && view != NoteView.Trash) Row(
+            // Kalimat bebas yang tidak dikenali aturan masih bisa dijalankan lewat model (≥ 3 kata agar tidak muncul di tiap pencarian).
+            val offerAgent = isCommand || (hasModel && vm.query.trim().split(Regex("\\s+")).size >= 3)
+            if (searching && view != NoteView.Trash && (hasModel || isCommand)) Row(
                 Modifier.padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                AiChip("Tanya AI") { vm.openAsk(vm.query) }
-                if (vm.aiTerms.isEmpty()) AiChip("Perluas pencarian", busy = vm.aiBusy, onClick = vm::expandQueryWithAi)
+                if (offerAgent) AiChip("Jalankan") { vm.startAgent(vm.query) }
+                if (hasModel) {
+                    AiChip("Tanya AI") { vm.openAsk(vm.query) }
+                    if (vm.aiTerms.isEmpty()) AiChip("Perluas pencarian", busy = vm.aiBusy, onClick = vm::expandQueryWithAi)
+                }
             }
             if (vm.aiTerms.isNotEmpty()) Muted("Juga mencari: " + vm.aiTerms.joinToString(", "), Modifier.padding(horizontal = Gutter, vertical = 4.dp))
 
@@ -458,28 +492,12 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 IconButton(vm::dismissAiBanner) { Icon(Icons.Default.Close, "Tutup", Modifier.size(16.dp), MaterialTheme.colorScheme.onTertiaryContainer) }
             }
 
-            val tags = vm.allTags
-            if (tags.isNotEmpty() && view != NoteView.Trash) LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(tags) { t ->
-                    val on = vm.tagFilter == t
-                    Text(
-                        "#$t",
-                        Modifier.clip(CircleShape)
-                            .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .clickable { vm.tagFilter = if (on) null else t }.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (on) MaterialTheme.colorScheme.onPrimary else muted,
-                    )
-                }
-            }
             if (view == NoteView.Trash) Muted("Dihapus permanen setelah 30 hari.", Modifier.padding(horizontal = Gutter, vertical = 6.dp))
 
             if (shown.isEmpty()) Box(Modifier.fillMaxSize().padding(40.dp), Alignment.Center) {
                 Muted(
                     when {
+                        isCommand -> "Ini terbaca sebagai perintah.\nTekan Jalankan untuk melihat rencananya."
                         searching || vm.tagFilter != null -> "Tidak ada yang cocok."
                         view == NoteView.Trash -> "Sampah kosong."
                         view == NoteView.Archive -> "Arsip kosong."
@@ -512,6 +530,116 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
             "Bisa dihentikan kapan saja; periksa hasilnya sesudahnya.",
         "Mulai", { confirmOrganize = false }) { vm.organizeAll() }
     ReminderSheet(vm)
+    AgentSheet(vm)
+}
+
+// ============================== ASISTEN PERINTAH ==============================
+
+/** Uraian satu langkah rencana: (apa yang dikerjakan, rinciannya). */
+private fun agentLabel(item: AgentItem): Pair<String, String?> {
+    val s = item.step
+    val name = if (s.target == Agent.PREV) "catatan yang sama" else item.target?.let { "“${it.heading.take(48)}”" } ?: "“${s.target.orEmpty()}”"
+    fun time(at: LocalDateTime?, repeat: Repeat, alarm: Boolean) = at?.let {
+        listOfNotNull(whenLabel(it.toMillis()), repeat.takeIf { r -> r != Repeat.None }?.label?.lowercase(), if (alarm) "gaya alarm" else null).joinToString("  ·  ")
+    }
+    return when (s) {
+        is AgentStep.Create -> "Buat catatan “${s.title.ifBlank { s.body.lineSequence().first() }.take(48)}”" to listOfNotNull(
+            time(s.at, s.repeat, s.alarm)?.let { "Pengingat $it" },
+            s.body.lines().count { it.startsWith("☐") }.takeIf { it > 0 }?.let { "$it butir daftar centang" },
+            s.folder.ifBlank { null }?.let { "Folder $it" },
+            s.tags.joinToString(" ") { "#$it" }.ifBlank { null },
+        ).joinToString("\n").ifBlank { null }
+        is AgentStep.Remind -> "Setel pengingat $name" to time(s.at, s.repeat, s.alarm)
+        is AgentStep.Unremind -> "Hapus pengingat $name" to null
+        is AgentStep.Append -> (if (s.task) "Tambah tugas ke $name" else "Tambah teks ke $name") to (if (s.task) "☐ " else "") + s.text.replaceFirstChar { it.uppercase() }
+        is AgentStep.Check -> "Centang butir di $name" to (item.target?.let { Agent.findTask(it.body, s.text) }?.replaceFirst("☐", "☑") ?: s.text)
+        is AgentStep.Tag -> "Beri tag ke $name" to s.tags.joinToString(" ") { "#$it" }
+        is AgentStep.Move -> "Pindahkan $name" to "Ke folder ${s.folder}"
+        is AgentStep.Pin -> (if (s.on) "Sematkan $name" else "Lepas sematan $name") to null
+        is AgentStep.Archive -> "Arsipkan $name" to null
+        is AgentStep.Trash -> "Pindahkan $name ke Sampah" to "Bisa dipulihkan selama 30 hari."
+    }
+}
+
+/** Lembar asisten: rencana ditampilkan dulu, dijalankan hanya setelah disetujui, dan hasilnya bisa diurungkan. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AgentSheet(vm: AppViewModel) {
+    val run = vm.agent ?: return
+    val ctx = LocalContext.current
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.runAgent() }
+    ModalBottomSheet(
+        onDismissRequest = vm::closeAgent,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(Modifier.padding(horizontal = Gutter).padding(bottom = 20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(AppIcons.Sparkle, null, Modifier.size(18.dp), aiColor)
+                Text(if (run.results != null) "Selesai" else "Rencana", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleMedium)
+            }
+            Muted("“${run.command.take(140)}”", Modifier.padding(top = 4.dp, bottom = 12.dp))
+            when {
+                run.planning -> {
+                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = aiColor)
+                    Muted("AI membaca perintah…", Modifier.padding(vertical = 12.dp), MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(vm::closeAgent, Modifier.fillMaxWidth()) { Text("Batal") }
+                }
+                run.error != null -> {
+                    Text(run.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    Muted(
+                        "Contoh yang dipahami:\n• ingatkan saya bayar listrik besok jam 7 malam\n• catat belanja: susu, telur, roti\n" +
+                            "• tambahkan tugas beli oli ke catatan servis motor\n• centang beli oli di catatan servis motor\n" +
+                            "• beri tag kerja ke catatan rapat, lalu sematkan\n• arsipkan catatan resep nasi goreng",
+                        Modifier.padding(top = 10.dp, bottom = 12.dp), MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(vm::closeAgent, Modifier.fillMaxWidth()) { Text("Tutup") }
+                }
+                run.results != null -> {
+                    run.results.forEach { r ->
+                        Row(Modifier.padding(vertical = 4.dp)) {
+                            Text("✓", Modifier.width(24.dp), color = aiColor, style = MaterialTheme.typography.bodyLarge)
+                            Text(r, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Button(vm::closeAgent, Modifier.fillMaxWidth()) { Text("Oke") }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        if (vm.agentCanUndo) TextButton(vm::undoAgent) { Text("Urungkan") } else Spacer(Modifier.width(1.dp))
+                        if (vm.notes.any { it.id == run.touched && !it.inTrash }) TextButton(vm::openAgentNote) { Text("Buka catatan") }
+                    }
+                }
+                else -> {
+                    run.items.forEachIndexed { i, item ->
+                        val (label, detail) = agentLabel(item)
+                        Row(Modifier.padding(vertical = 6.dp)) {
+                            Muted("${i + 1}", Modifier.width(24.dp).padding(top = 2.dp), MaterialTheme.typography.labelLarge)
+                            Column(Modifier.weight(1f)) {
+                                Text(label, style = MaterialTheme.typography.bodyLarge)
+                                if (item.problem != null) Text(item.problem, Modifier.padding(top = 2.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                else detail?.let { Muted(it, Modifier.padding(top = 2.dp)) }
+                                // Beberapa catatan cocok: pengguna yang menentukan sasarannya, bukan tebakan.
+                                if (item.options.size > 1) {
+                                    Muted("Bukan itu? Pilih catatannya:", Modifier.padding(top = 8.dp, bottom = 4.dp), MaterialTheme.typography.labelSmall)
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        item.options.forEach { n -> Choice(n.heading.take(26).ifBlank { "(kosong)" }, selected = n.id == item.target?.id) { vm.agentPick(i, n) } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Button(
+                        {
+                            if (vm.agentSetsReminder && Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            else vm.runAgent()
+                        },
+                        Modifier.fillMaxWidth().padding(top = 14.dp), enabled = vm.agentReady,
+                    ) { Text(if (run.items.size > 1) "Jalankan ${run.items.size} langkah" else "Jalankan") }
+                    TextButton(vm::closeAgent, Modifier.fillMaxWidth()) { Text("Batal") }
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

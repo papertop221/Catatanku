@@ -1,0 +1,4 @@
+Asisten perintah: ketik "ingatkan saya bayar listrik besok jam 7 malam" atau "tambahkan tugas beli oli ke catatan servis motor" di kolom cari.
+Rencana ditampilkan dulu, dijalankan setelah disetujui, dan bisa diurungkan.
+Perintah umum dikenali tanpa model AI.
+Baris tag di daftar pindah ke bawah layar.

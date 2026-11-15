@@ -1,0 +1,4 @@
+Command assistant: type commands (in Indonesian) such as "ingatkan saya bayar listrik besok jam 7 malam" in the search field.
+The plan is shown first, runs only after you approve it, and can be undone.
+Common commands work without an AI model.
+The tag row on the list moved to the bottom of the screen.

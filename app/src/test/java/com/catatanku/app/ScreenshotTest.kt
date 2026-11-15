@@ -95,7 +95,49 @@ abstract class Shots(private val suffix: String) {
         rule.runOnUiThread { vm.closeEditor(); vm.openAsk(); vm.askOpenTasks() }
         check(vm.askSources.size == 1 && vm.askAnswer.contains("☐ Rina"))
         shot("16-tugas-belum-selesai")
-        rule.runOnUiThread { vm.closeAsk(); vm.debugLock() }
+        rule.runOnUiThread { vm.closeAsk() }
+
+        // ---- 1.5: asisten perintah (tanpa model: fakeModel hanya berkas tiruan, aturan yang bekerja) ----
+        rule.runOnUiThread { vm.updateQuery("ingatkan saya bayar pajak motor besok jam 7 malam") }
+        shot("18-perintah-di-kolom-cari")
+        rule.runOnUiThread { vm.startAgent(vm.query) }
+        check(vm.agentReady) { "Rencana harus siap: ${vm.agent}" }
+        shot("19-rencana-asisten")
+        val count = vm.notes.size
+        rule.runOnUiThread { vm.runAgent() }
+        rule.waitUntil(10_000) { vm.agent?.results != null }
+        val made = vm.notes.single { it.title == "Bayar pajak motor" }
+        check(vm.notes.size == count + 1 && made.hasReminder && made.remindAt.toLocal().hour == 19) { "Catatan berpengingat harus dibuat: $made" }
+        check(vm.query.isEmpty())
+        shot("20-hasil-asisten")
+        rule.runOnUiThread { vm.undoAgent() }
+        rule.waitUntil(10_000) { vm.agent == null && vm.notes.size == count }
+        check(vm.notes.none { it.title == "Bayar pajak motor" }) { "Urungkan harus menghapus catatan yang dibuat" }
+
+        // Tiga langkah atas catatan yang sudah ada; sasaran dicari, isi lama masuk riwayat versi, dan semuanya bisa diurungkan.
+        val motor = vm.notes.first { it.title == "Servis motor" }
+        rule.runOnUiThread { vm.startAgent("tambahkan tugas beli oli ke catatan servis motor, beri tag penting ke catatan itu, lalu sematkan") }
+        check(vm.agentReady && vm.agent!!.items.size == 3 && vm.agent!!.items[0].target?.id == motor.id) { "Rencana 3 langkah: ${vm.agent}" }
+        shot("21-rencana-tiga-langkah")
+        rule.runOnUiThread { vm.runAgent() }
+        rule.waitUntil(10_000) { vm.agent?.results != null }
+        val after = vm.notes.first { it.id == motor.id }
+        check(after.body.endsWith("\n☐ Beli oli") && "penting" in after.tags && after.pinned && after.hasReminder) { "Tiga langkah harus diterapkan: $after" }
+        check(NoteDb.get(rule.activity).versions(motor.id).any { it.body == motor.body }) { "Isi lama harus masuk riwayat versi" }
+        rule.runOnUiThread { vm.startAgent("centang beli oli di catatan servis motor") }
+        check(vm.agentReady)
+        rule.runOnUiThread { vm.runAgent() }
+        rule.waitUntil(10_000) { vm.agent?.results != null && vm.notes.first { it.id == motor.id }.body.endsWith("☑ Beli oli") }
+        rule.runOnUiThread { vm.undoAgent() }
+        rule.waitUntil(10_000) { vm.agent == null && vm.notes.first { it.id == motor.id }.body.endsWith("☐ Beli oli") }
+
+        // Yang tidak bisa dijalankan dijelaskan, bukan ditebak.
+        rule.runOnUiThread { vm.startAgent("ingatkan saya bayar pajak") }
+        check(!vm.agentReady && vm.agent!!.items.single().problem != null)
+        rule.runOnUiThread { vm.startAgent("hapus catatan zzzz tidak ada") }
+        check(!vm.agentReady)
+        shot("22-rencana-bermasalah")
+        rule.runOnUiThread { vm.closeAgent(); vm.debugLock() }
         shot("17-terkunci")
     }
 }

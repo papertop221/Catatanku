@@ -3,6 +3,7 @@
 <li>Autosave, pinning, folders, tags, archive and a 30-day trash; checklists; history of the last 20 versions of each note</li>
 <li>Instant search that tolerates affixes and typos, with no model needed</li>
 <li>Reminders (once, daily, weekly, monthly) as a notification or an alarm that rings until answered; dates and times written in a note are detected and offered as reminders</li>
+<li>Command assistant: type a command in Indonesian in the search field (e.g. "ingatkan saya bayar listrik besok jam 7 malam"); the plan is shown first, runs after approval and can be undone; common commands need no model</li>
 <li>Optional on-device AI: summarize, fix spelling, tidy, extract tasks, title, ask questions about your notes with sources, weekly recap</li>
 <li>App lock with fingerprint or screen PIN, automatic backup to a folder of your choice</li>
 </ul>

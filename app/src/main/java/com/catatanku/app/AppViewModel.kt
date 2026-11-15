@@ -42,6 +42,16 @@ data class AiJob(
     val progress: String? = null,       // mis. "Bagian 2 dari 4" untuk catatan panjang
 )
 
+/** Satu langkah rencana asisten: catatan sasaran yang ditemukan, pilihan lain, dan alasan bila belum bisa dijalankan. */
+data class AgentItem(val step: AgentStep, val target: Note? = null, val options: List<Note> = emptyList(), val problem: String? = null)
+
+/** Perintah yang sedang ditangani asisten: menyusun rencana → menunggu persetujuan → hasil. Tak pernah jalan tanpa persetujuan. */
+data class AgentRun(
+    val command: String, val items: List<AgentItem> = emptyList(), val planning: Boolean = false, val error: String? = null,
+    val results: List<String>? = null,      // terisi setelah dijalankan
+    val touched: Long = 0,                  // catatan terakhir yang dibuat/diubah, untuk tombol "Buka catatan"
+)
+
 /** Cadangan otomatis ke folder pilihan pengguna (lewat Storage Access Framework; tanpa izin penyimpanan). */
 object AutoBackup {
     const val KEEP = 7
@@ -118,6 +128,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var askAnswer by mutableStateOf(""); private set
     var askRunning by mutableStateOf(false); private set
     var askQuery by mutableStateOf("")
+
+    // Asisten perintah
+    var agent by mutableStateOf<AgentRun?>(null); private set
+    private var agentUndo: Pair<List<Note>, List<Long>>? = null           // (keadaan sebelum diubah, id catatan yang dibuat)
+    val agentCanUndo get() = agentUndo != null
 
     private var running: Job? = null
     private var batchJob: Job? = null
@@ -649,6 +664,157 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.Ask
         if (askQuery.isNotEmpty()) ask(askQuery)
     }
+
+    // ============================== Asisten perintah ==============================
+
+    /** Perintah yang dikenali aturan (tanpa model); dipakai daftar untuk menawarkan tombol "Jalankan". */
+    fun commandSteps(q: String): List<AgentStep>? = if (q.isBlank()) null else Agent.parse(q)
+
+    /** Menyusun rencana dari [command]. Aturan dulu (instan, tanpa model); bila gagal dan ada model, LLM merumuskan ulang. */
+    fun startAgent(command: String) {
+        val cmd = command.trim()
+        if (cmd.isEmpty() || agent?.planning == true) return
+        agentUndo = null
+        Agent.parse(cmd)?.let { agent = AgentRun(cmd, resolve(it)); return }
+        if (!ai.hasModel) { agent = AgentRun(cmd, error = "Perintah itu belum dikenali."); return }
+        agent = AgentRun(cmd, planning = true)
+        running = viewModelScope.launch {
+            try {
+                val steps = Agent.parseModel(ai.generate(Agent.plannerPrompt(cmd)), cmd)
+                agent = if (steps.isEmpty()) AgentRun(cmd, error = "Perintah itu belum dikenali.") else AgentRun(cmd, resolve(steps))
+            } catch (e: CancellationException) { agent = null
+            } catch (e: Throwable) { agent = AgentRun(cmd, error = "AI gagal: ${e.message}") }
+        }
+    }
+
+    /** Mencari catatan sasaran tiap langkah dan memeriksa apakah langkah itu bisa dijalankan. */
+    private fun resolve(steps: List<AgentStep>): List<AgentItem> {
+        val byId = notes.associateBy { it.id }
+        var hasPrev = false
+        return steps.map { s ->
+            val t = s.target
+            val item = when {
+                t == null -> AgentItem(s, problem = problemFor(s, null))
+                t == Agent.PREV -> AgentItem(s, problem = if (hasPrev) problemFor(s, null) else "Catatan mana yang dimaksud?")
+                else -> {
+                    val opts = index.search(t, limit = 3).mapNotNull { byId[it.id] }
+                    AgentItem(s, opts.firstOrNull(), opts, if (opts.isEmpty()) "Tidak ada catatan yang cocok dengan “$t”." else problemFor(s, opts.first()))
+                }
+            }
+            if (item.problem == null) hasPrev = true
+            item
+        }
+    }
+
+    private fun problemFor(s: AgentStep, n: Note?): String? = when (s) {
+        is AgentStep.Create -> when {
+            s.wantsReminder && s.at == null -> "Waktunya belum jelas. Sebutkan, mis. “besok jam 7 malam”."
+            s.title.isBlank() && s.body.isBlank() -> "Isi catatannya kosong."
+            else -> null
+        }
+        is AgentStep.Remind -> if (s.at == null) "Waktunya belum jelas. Sebutkan, mis. “besok jam 7 malam”." else null
+        is AgentStep.Unremind -> if (n != null && !n.hasReminder) "Catatan itu tidak punya pengingat." else null
+        is AgentStep.Check -> if (n != null && Agent.findTask(n.body, s.text) == null) "Tidak ada butir “${s.text}” yang belum dicentang di catatan itu." else null
+        is AgentStep.Pin -> if (n != null && n.pinned == s.on) (if (s.on) "Catatan itu sudah disematkan." else "Catatan itu tidak disematkan.") else null
+        is AgentStep.Archive -> if (n?.archived == true) "Catatan itu sudah diarsipkan." else null
+        else -> null
+    }
+
+    /** Pengguna memilih catatan sasaran lain untuk langkah ke-[i]. */
+    fun agentPick(i: Int, note: Note) {
+        val run = agent ?: return
+        if (run.results != null) return
+        agent = run.copy(items = run.items.mapIndexed { j, it -> if (j == i) it.copy(target = note, problem = problemFor(it.step, note)) else it })
+    }
+
+    val agentReady get() = agent?.let { !it.planning && it.results == null && it.error == null && it.items.isNotEmpty() && it.items.none { i -> i.problem != null } } == true
+    val agentSetsReminder get() = agent?.items?.any { (it.step as? AgentStep.Create)?.at != null || it.step is AgentStep.Remind } == true
+
+    /** Menjalankan rencana yang sudah disetujui. Semua perubahan bisa diurungkan dengan [undoAgent]. */
+    fun runAgent() {
+        val run = agent ?: return
+        if (!agentReady) return
+        val known = folders
+        fun folderName(f: String) = known.firstOrNull { it.equals(f.trim(), ignoreCase = true) } ?: f.trim().replaceFirstChar { it.uppercase() }
+        viewModelScope.launch {
+            val before = ArrayList<Note>(); val created = ArrayList<Long>(); val results = ArrayList<String>()
+            var prev: Note? = null
+            try {
+                withContext(Dispatchers.IO) {
+                    for (item in run.items) {
+                        val s = item.step
+                        val now = System.currentTimeMillis()
+                        if (s is AgentStep.Create) {
+                            val n = Note(
+                                title = s.title, body = s.body, tags = s.tags, folder = if (s.folder.isBlank()) "" else folderName(s.folder),
+                                remindAt = s.at?.toMillis() ?: 0, remindRepeat = if (s.at != null) s.repeat else Repeat.None, remindAlarm = s.at != null && s.alarm,
+                            )
+                            val saved = n.copy(id = persist(n))
+                            created += saved.id; prev = saved
+                            results += "Catatan “${saved.heading.take(40)}” dibuat" + (s.at?.let { ", pengingat ${whenLabel(it.toMillis())}" } ?: "")
+                            continue
+                        }
+                        // Ambil keadaan terbaru: langkah sebelumnya bisa saja mengubah catatan yang sama.
+                        val base = (if (s.target == Agent.PREV) prev else item.target)?.let { db.get(it.id) }
+                        if (base == null) { results += "Dilewati: catatannya tidak ditemukan"; continue }
+                        val name = "“${base.heading.take(40)}”"
+                        val (changed, text) = when (s) {
+                            is AgentStep.Remind -> base.copy(remindAt = s.at!!.toMillis(), remindRepeat = s.repeat, remindAlarm = s.alarm, remindFired = false, archived = false) to
+                                "Pengingat $name: ${whenLabel(s.at.toMillis())}"
+                            is AgentStep.Unremind -> base.copy(remindAt = 0, remindRepeat = Repeat.None, remindAlarm = false, remindFired = false) to "Pengingat $name dihapus"
+                            is AgentStep.Append -> base.copy(body = Agent.append(base.body, s.text, s.task), updated = now) to
+                                (if (s.task) "Tugas" else "Teks") + " ditambahkan ke $name"
+                            is AgentStep.Check -> base.copy(body = Agent.check(base.body, s.text) ?: base.body, updated = now) to "Butir dicentang di $name"
+                            is AgentStep.Tag -> base.copy(tags = (base.tags + s.tags).distinct()) to "Tag ${s.tags.joinToString(" ") { "#$it" }} ke $name"
+                            is AgentStep.Move -> base.copy(folder = folderName(s.folder)) to "$name dipindah ke folder ${folderName(s.folder)}"
+                            is AgentStep.Pin -> base.copy(pinned = s.on) to (if (s.on) "$name disematkan" else "Sematan $name dilepas")
+                            is AgentStep.Archive -> base.copy(archived = true, pinned = false) to "$name diarsipkan"
+                            is AgentStep.Trash -> base.copy(deletedAt = now, pinned = false) to "$name dipindah ke Sampah"
+                            is AgentStep.Create -> base to ""
+                        }
+                        if (changed == base) { results += "Tidak ada yang berubah di $name"; prev = base; continue }
+                        if (before.none { it.id == base.id } && base.id !in created) before += base
+                        // Isi yang diubah asisten tetap bisa dilihat lagi lewat Riwayat versi.
+                        if (changed.body != base.body && base.body.isNotBlank()) db.addVersion(base.id, base.title, base.body, base.updated)
+                        persist(changed); prev = changed
+                        results += text
+                    }
+                }
+                if (agentSetsReminder && !Reminders.canNotify(ctx)) results += "Notifikasi Catatanku dimatikan; aktifkan di pengaturan HP agar pengingat muncul."
+            } catch (e: Throwable) { results += "Terhenti: ${e.message}" }
+            reload()
+            agentUndo = (before to created).takeIf { before.isNotEmpty() || created.isNotEmpty() }
+            agent = run.copy(results = results, touched = prev?.id ?: 0)
+            updateQuery("")
+        }
+    }
+
+    /** Mengembalikan semua yang diubah perintah terakhir: catatan baru dihapus, catatan lama dipulihkan. */
+    fun undoAgent() {
+        val (before, created) = agentUndo ?: return
+        agentUndo = null
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                created.forEach { db.delete(it); Reminders.clear(ctx, it) }
+                before.forEach { persist(it) }
+            }
+            prefs.edit().putBoolean("dirty", true).apply()
+            reload()
+            agent = null
+            messages.tryEmit("Perintah diurungkan.")
+        }
+    }
+
+    fun closeAgent() { if (agent?.planning == true) stopAi(); agent = null }
+
+    fun openAgentNote() {
+        val id = agent?.touched ?: 0
+        agent = null
+        notes.firstOrNull { it.id == id }?.let { open(it) }
+    }
+
+    /** Hanya untuk uji tangkapan layar. */
+    internal fun debugAgent(r: AgentRun) { agent = r }
 
     // ============================== Aksi cepat dari daftar ==============================
 

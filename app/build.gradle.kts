@@ -14,8 +14,8 @@ android {
         applicationId = "com.catatanku.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
         // Hanya arm64: hampir semua HP Android modern. Hapus baris ini bila perlu emulator x86_64.
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -32,6 +32,8 @@ android {
         }
     }
     buildTypes {
+        // Build uji bisa dipasang berdampingan dengan rilis resmi, tanpa menyentuh datanya.
+        debug { applicationIdSuffix = ".uji"; versionNameSuffix = "-uji" }
         release {
             isMinifyEnabled = false
             // Tanpa hash commit di dalam APK, sehingga build bisa direproduksi persis (syarat F-Droid

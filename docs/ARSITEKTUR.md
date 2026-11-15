@@ -1,7 +1,7 @@
 # Arsitektur
 
 Satu modul (`app`), satu Activity, UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
-Tujuannya kode yang kecil dan mudah dibaca: ±3.600 baris Kotlin di sepuluh berkas.
+Tujuannya kode yang kecil dan mudah dibaca: ±4.400 baris Kotlin di sebelas berkas.
 
 ## Berkas
 
@@ -12,6 +12,7 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 | `SearchEngine.kt` | Tokenisasi, indeks TF-IDF, pencarian, catatan terkait, kata kunci | Tidak |
 | `AiText.kt` | Prompt, pengurai keluaran model, alat teks (centang, hitung kata) | Tidak |
 | `TimeParse.kt` | Pengenal waktu bahasa Indonesia, aturan pengulangan pengingat | Tidak |
+| `Agent.kt` | Asisten perintah: pengurai perintah, prompt perumus ulang, penerapan pada isi catatan | Tidak |
 | `Models.kt` | Katalog model: URL terkunci revisi, ukuran, SHA-256, anjuran RAM | Tidak |
 | `Data.kt` | `Note`, SQLite (`NoteDb`), riwayat versi, cadangan JSON | Ya |
 | `Reminders.kt` | Alarm sistem, notifikasi, penerima siaran (`ReminderReceiver`) | Ya |
@@ -20,7 +21,7 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 | `Screens.kt` | Layar daftar, editor, tanya, pengaturan, kunci; lembar pengingat dan riwayat | Ya |
 | `Theme.kt` | Warna, tipografi, ikon | Ya |
 
-Empat berkas pertama sengaja murni Kotlin agar bisa diuji di JVM dan dipakai ulang di luar aplikasi.
+Lima berkas pertama sengaja murni Kotlin agar bisa diuji di JVM dan dipakai ulang di luar aplikasi.
 
 ## Alur data
 
@@ -109,6 +110,42 @@ Model yang "berpikir" dulu (mis. Qwen3) tidak cocok: di pengujian, satu perminta
 `DownloadManager` Android mengunduh ke penyimpanan eksternal milik aplikasi sebagai `.part`. Setelah selesai,
 ukuran dan SHA-256 diperiksa, baru berkas diganti nama dan dijadikan model aktif. Status dipantau dengan polling,
 dan dilanjutkan bila aplikasi sempat ditutup.
+
+## Asisten perintah
+
+Kolom cari menerima perintah. Alurnya selalu **perintah → rencana → persetujuan → jalankan → bisa diurungkan**.
+
+```
+perintah ──▶ Agent.parse (aturan) ──berhasil──▶ langkah (≤ 3)
+                 │ gagal, ada model
+                 └──▶ LLM merumuskan ulang ke bentuk baku ──▶ Agent.parseModel (aturan yang sama)
+langkah ──▶ AppViewModel.resolve: cari catatan sasaran (TF-IDF), periksa bisa/tidaknya ──▶ lembar rencana
+setuju  ──▶ runAgent: tulis lewat persist(), simpan keadaan lama untuk undoAgent
+```
+
+- **Aturan dulu.** `Agent.parse` mengenali pola umum dengan ekspresi reguler: instan, deterministik, dan jalan tanpa model.
+  Sepuluh jenis langkah (`AgentStep`): buat catatan, setel/hapus pengingat, tambah teks/tugas, centang butir, beri tag,
+  pindah folder, semat, arsip, dan pindah ke Sampah. Beberapa perintah disambung dengan "lalu", "dan", atau koma, tetapi
+  hanya bila diikuti kata kerja perintah, sehingga "catat beli susu dan roti" tetap satu catatan.
+- **LLM hanya merumuskan ulang.** Bila aturan gagal, model diminta menulis ulang kalimat ke bentuk baku
+  (`Agent.plannerPrompt`), lalu hasilnya diurai aturan yang sama. Model tidak memanggil fungsi, tidak menghitung tanggal,
+  dan tidak menyentuh data. Ini pola yang sama dengan "Sarankan pengingat".
+- **Pengaman keluaran model.** Tempat isian yang tersalin apa adanya dibuang; pertanyaan tidak pernah dianggap perintah;
+  "catat …" hanya diterima bila kalimat aslinya memang menyebut mencatat atau menyimpan; "catat X" yang diikuti
+  "ingatkan X" digabung menjadi satu catatan berpengingat.
+- **Sasaran tidak ditebak diam-diam.** Catatan sasaran dicari dengan `SearchIndex`; tiga teratas ditawarkan sebagai pilihan.
+  Langkah yang tidak bisa dijalankan (waktu tak dikenali, catatan tak ditemukan, butir tak ada) dijelaskan dan menahan
+  tombol Jalankan.
+- **Bisa dibatalkan.** `undoAgent` menghapus catatan yang dibuat dan memulihkan keadaan lama catatan yang diubah. Isi yang
+  diubah juga masuk riwayat versi. "Hapus" selalu berarti Sampah. Enter di kolom cari tidak membuka rencana untuk
+  perintah hapus atau arsip; tombol Jalankan harus ditekan.
+
+### Hasil uji perumus ulang (15 Nov 2026)
+
+Gemma 4 E2B di desktop Linux lewat `litertlm-jvm` 0.19.1, 2–3,6 detik per perintah. Dari 19 kalimat bebas yang tidak
+dikenali aturan: 15 menghasilkan rencana yang benar atau ditolak dengan benar, 3 menghasilkan rencana keliru (terlihat
+di lembar rencana sebelum dijalankan), 1 tidak dikenali. Pengingat, catatan baru, arsip, dan hapus andal; memberi tag
+dan menyemat dengan kalimat bebas paling sering keliru. Kecepatan di HP dan model lain belum diukur.
 
 ## Pengingat
 

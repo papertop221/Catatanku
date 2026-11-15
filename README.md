@@ -4,6 +4,9 @@ Aplikasi catatan pribadi Android yang bekerja offline, dengan asisten AI yang be
 
 **[⬇ Unduh APK v1.4](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.4.apk)** · 32 MB · Android 8.0+ · arm64
 
+> Kode sumber di cabang ini sudah versi 1.5 (asisten perintah, tag di bawah). APK 1.5 yang ditandatangani belum diterbitkan;
+> tautan di atas masih 1.4.
+
 ![Tampilan terang](docs/screenshots/terang.png)
 ![Tampilan gelap](docs/screenshots/gelap.png)
 
@@ -43,6 +46,13 @@ Mulai 1.4, pembaruan berikutnya bisa dipasang langsung selama dibangun dengan ku
 - Notifikasi biasa, atau gaya alarm yang berdering dengan volume alarm sampai ditanggapi
 - "Selesai" dan "Tunda 10 mnt" langsung dari notifikasi; yang belum ditanggapi tampil merah di daftar
 - Waktu di isi catatan ("besok jam 7 malam", "tanggal 24 jam 10 pagi") dikenali dan ditawarkan sebagai pengingat, tanpa model
+
+**Asisten perintah** — ketik perintah di kolom cari
+- "ingatkan saya bayar listrik besok jam 7 malam", "catat belanja: susu, telur, roti", "tambahkan tugas beli oli ke catatan servis motor",
+  "centang beli oli di catatan servis motor", "beri tag kerja ke catatan rapat, lalu sematkan", "arsipkan catatan …"
+- Perintah menjadi rencana paling banyak tiga langkah yang ditinjau dulu; sesudah dijalankan bisa diurungkan sekaligus
+- Perintah berpola umum dikenali tanpa model; kalimat bebas dirumuskan ulang oleh model bila terpasang (kurang andal, lihat [Arsitektur](docs/ARSITEKTUR.md#asisten-perintah))
+- "Hapus" hanya memindah ke Sampah; isi yang diubah asisten tersimpan di Riwayat versi
 
 **Pencarian** — tanpa model, instan
 - TF-IDF kata + trigram karakter: "lari" menemukan "berlari", salah ketik ringan ditoleransi
@@ -98,7 +108,7 @@ Butuh JDK 17+ dan Android SDK 36.
 
 ```bash
 ./gradlew assembleRelease      # APK: app/build/outputs/apk/release/
-./gradlew assembleDebug        # APK: app/build/outputs/apk/debug/
+./gradlew assembleDebug        # APK uji "Catatanku uji" (id .uji), bisa berdampingan dengan rilis resmi
 ./gradlew testDebugUnitTest    # uji logika + render layar
 ./gradlew testDebugUnitTest --tests '*Shots*' -Pshots=true   # tangkapan layar → app/build/shots/
 ```
@@ -122,10 +132,12 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Mesin pencarian, pengurai keluaran AI, katalog model, pengenal waktu, pemotongan catatan panjang | Uji unit otomatis |
+| Mesin pencarian, pengurai keluaran AI, katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
 | Pengingat (alarm, notifikasi, tunda, selesai, boot), riwayat versi, cadangan, migrasi v2 → v3 | Uji otomatis di Android tiruan (Robolectric) |
-| Tampilan 17 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
+| Asisten perintah: rencana, jalankan, urungkan, riwayat versi | Uji otomatis di Android tiruan (Robolectric) |
+| Tampilan 22 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
 | Prompt AI dengan Gemma 4 E2B, Qwen3 1.7B, Qwen2.5 1.5B | Diuji di desktop lewat `litertlm-jvm` |
+| Prompt asisten perintah | Diuji di desktop dengan Gemma 4 E2B saja: 15 dari 19 kalimat bebas benar |
 | Aplikasi di HP sungguhan (sentuhan, bunyi alarm, sidik jari, unduhan, kecepatan, RAM) | **Belum diuji** |
 
 ## Dokumentasi

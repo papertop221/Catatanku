@@ -1,5 +1,22 @@
 # Riwayat perubahan
 
+## 1.5
+Asisten perintah
+- Kolom cari kini juga menerima perintah: "ingatkan saya bayar listrik besok jam 7 malam", "catat belanja: susu, telur, roti",
+  "tambahkan tugas beli oli ke catatan servis motor", "centang beli oli di catatan servis motor", "beri tag kerja ke catatan
+  rapat, lalu sematkan", "arsipkan/hapus catatan …"
+- Perintah diubah menjadi rencana paling banyak tiga langkah yang ditampilkan dulu; tidak ada yang berjalan sebelum disetujui
+- Catatan sasaran dicari otomatis; bila beberapa cocok, pilih sendiri di rencana
+- Setelah dijalankan, semuanya bisa diurungkan sekaligus; isi lama juga masuk Riwayat versi; "hapus" hanya memindah ke Sampah
+- Perintah berpola umum dikenali tanpa model (instan). Kalimat bebas dirumuskan ulang oleh model, bila terpasang
+- Pengulangan dan gaya alarm dikenali dari kalimat: "tiap hari", "setiap Senin", "setiap tanggal 1", "pasang alarm …"
+
+Tampilan
+- Baris tag di daftar pindah ke bawah layar, sehingga tidak lagi mendorong catatan turun dan mudah dijangkau jempol
+
+Lain-lain
+- Build uji (`assembleDebug`) memakai id `com.catatanku.app.uji`, jadi bisa dipasang berdampingan dengan rilis resmi
+
 ## 1.4
 **Penting:** APK ini ditandatangani dengan kunci baru yang tetap, karena kunci 1.0–1.3 tidak tersimpan. Android menolak
 memasangnya di atas 1.3. Ekspor catatan di 1.3, copot 1.3, pasang 1.4, lalu impor. Model AI perlu diunduh ulang.

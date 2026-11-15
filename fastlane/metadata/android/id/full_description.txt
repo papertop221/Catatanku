@@ -11,6 +11,12 @@
 <li>Notifikasi biasa atau gaya alarm yang berdering sampai ditanggapi</li>
 <li>Waktu di isi catatan seperti "besok jam 7 malam" dikenali dan ditawarkan sebagai pengingat</li>
 </ul>
+<p><b>Asisten perintah</b></p>
+<ul>
+<li>Ketik perintah di kolom cari: "ingatkan saya bayar listrik besok jam 7 malam", "tambahkan tugas beli oli ke catatan servis motor"</li>
+<li>Rencana ditampilkan dulu, dijalankan setelah disetujui, dan bisa diurungkan</li>
+<li>Perintah umum dikenali tanpa model AI</li>
+</ul>
 <p><b>Asisten AI lokal (opsional)</b></p>
 <ul>
 <li>Ringkas, perbaiki ejaan, rapikan struktur, ambil daftar tugas, buat judul</li>
