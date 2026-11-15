@@ -1,4 +1,8 @@
 <resources>
-    <style name="Theme.Catatanku" parent="android:Theme.Material.Light.NoActionBar" />
-    <color name="ic_bg">#1F3A5F</color>
+    <!-- Jendela awal memakai warna yang sama dengan layar pertama, supaya tidak ada kilatan saat aplikasi dibuka. -->
+    <style name="Theme.Catatanku" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window</item>
+    </style>
+    <color name="window">#FBFBFA</color>
+    <color name="ic_bg">#191918</color>
 </resources>

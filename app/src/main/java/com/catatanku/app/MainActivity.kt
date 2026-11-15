@@ -14,9 +14,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : ComponentActivity() {
     val vm: AppViewModel by viewModels()
@@ -50,7 +53,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Membuka kunci dengan sidik jari/wajah atau PIN layar HP. Aplikasi tidak menyimpan sandi sendiri. */
-    private fun unlock() = try { showUnlockPrompt() } catch (e: Exception) { vm.messages.tryEmit("Kunci layar HP tidak bisa dibuka: ${e.message}"); Unit }
+    private fun unlock() = try { showUnlockPrompt() } catch (e: Exception) { vm.say("Kunci layar HP tidak bisa dibuka: ${e.message}") }
 
     private fun showUnlockPrompt() {
         if (Build.VERSION.SDK_INT >= 29) {
@@ -74,6 +77,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() { super.onStart(); vm.onReturn() }
     override fun onStop() { super.onStop(); vm.onLeave() }
+    /** Sistem kekurangan memori atau aplikasi ditinggalkan: model AI dilepas lebih dulu. */
+    override fun onTrimMemory(level: Int) { super.onTrimMemory(level); vm.onTrimMemory(level) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -82,15 +87,31 @@ class MainActivity : ComponentActivity() {
         applySecureFlag()
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
-            CatatankuTheme {
+            CatatankuTheme(vm.dynamicColor) {
                 val snack = remember { SnackbarHostState() }
-                LaunchedEffect(Unit) { vm.messages.collect { snack.showSnackbar(it) } }
+                // Pesan baru menggantikan yang sedang tampil, supaya "Urungkan" selalu milik aksi terakhir.
+                LaunchedEffect(Unit) {
+                    vm.notices.collectLatest { n ->
+                        val result = snack.showSnackbar(n.text, n.action, duration = if (n.action != null) SnackbarDuration.Long else SnackbarDuration.Short)
+                        if (result == SnackbarResult.ActionPerformed) n.onAction?.invoke()
+                    }
+                }
                 LaunchedEffect(vm.lockEnabled) { applySecureFlag() }
                 if (vm.locked) { BackHandler { moveTaskToBack(true) }; LockScreen(::unlock) }
                 else when (vm.screen) {
-                    Screen.List -> ListScreen(vm, snack)
+                    Screen.List -> {
+                        // Kembali menutup dulu apa yang sedang terbuka di atas daftar, baru keluar dari aplikasi.
+                        BackHandler(vm.askActive || vm.query.isNotEmpty() || vm.tagFilter != null || vm.view != NoteView.All) {
+                            when {
+                                vm.askActive -> vm.closeAsk()
+                                vm.query.isNotEmpty() -> vm.updateQuery("")
+                                vm.tagFilter != null -> vm.tagFilter = null
+                                else -> vm.view = NoteView.All
+                            }
+                        }
+                        ListScreen(vm, snack)
+                    }
                     Screen.Editor -> { BackHandler { vm.closeEditor() }; EditorScreen(vm, snack) }
-                    Screen.Ask -> { BackHandler { vm.closeAsk() }; AskScreen(vm, snack) }
                     Screen.Settings -> { BackHandler { vm.go(Screen.List) }; SettingsScreen(vm, snack) }
                 }
             }

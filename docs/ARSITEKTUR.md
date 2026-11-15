@@ -1,7 +1,7 @@
 # Arsitektur
 
 Satu modul (`app`), satu Activity, UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
-Tujuannya kode yang kecil dan mudah dibaca: ±4.400 baris Kotlin di sebelas berkas.
+Tujuannya kode yang kecil dan mudah dibaca: ±5.000 baris Kotlin di lima belas berkas.
 
 ## Berkas
 
@@ -18,8 +18,12 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 | `Reminders.kt` | Alarm sistem, notifikasi, penerima siaran (`ReminderReceiver`) | Ya |
 | `LocalAi.kt` | Unduh/impor/ganti model, engine LiteRT-LM, pembangkitan streaming | Ya |
 | `AppViewModel.kt` | Seluruh state dan logika aplikasi | Ya |
-| `Screens.kt` | Layar daftar, editor, tanya, pengaturan, kunci; lembar pengingat dan riwayat | Ya |
-| `Theme.kt` | Warna, tipografi, ikon | Ya |
+| `ListScreen.kt` | Layar utama: blok "Hari ini", jawaban, daftar, bilah bawah, geser baris | Ya |
+| `EditorScreen.kt` | Editor dan simpan otomatis | Ya |
+| `SettingsScreen.kt` | Pengaturan | Ya |
+| `Sheets.kt` | Lembar bawah dan dialog: pengingat, bantu tulis, rencana asisten, riwayat versi, folder, kunci | Ya |
+| `UiKit.kt` | Komponen bersama (tombol, baris, lembar, menu) | Ya |
+| `Theme.kt` | Warna, huruf, bentuk, ikon | Ya |
 
 Lima berkas pertama sengaja murni Kotlin agar bisa diuji di JVM dan dipakai ulang di luar aplikasi.
 
@@ -27,12 +31,16 @@ Lima berkas pertama sengaja murni Kotlin agar bisa diuji di JVM dan dipakai ulan
 
 ```
 Screens ──aksi──▶ AppViewModel ──▶ NoteDb (SQLite)
-   ▲                  │  ├──▶ SearchIndex (di memori, dibangun ulang tiap data berubah)
+   ▲                  │  ├──▶ SearchIndex (di memori, diperbarui di thread latar)
    └──── state ───────┘  └──▶ LocalAi ──▶ LiteRT-LM (.litertlm)
 ```
 
 State disimpan sebagai `mutableStateOf` di ViewModel; layar hanya membaca dan memanggil fungsi.
-Navigasi adalah satu enum `Screen`.
+Navigasi adalah satu enum `Screen` (daftar, editor, pengaturan).
+
+Yang mahal dihitung sekali saat data berubah, bukan tiap layar digambar: `Stats` (tag, folder, jumlah), `shown`
+(daftar yang tampil), dan `today`. Simpan dari editor menaruh hasilnya langsung ke daftar di memori (`putLocal`);
+basis data hanya dibaca ulang seluruhnya bila berubah di luar layar (alarm, impor, proses latar).
 
 ## Pencarian
 
@@ -47,8 +55,20 @@ Trigram menggantikan stemmer: "berlari" dan "lari" berbagi `lar`, `ari`.
 Agar trigram tidak menimbulkan kecocokan palsu, hasil harus lolos **gerbang relevansi**: minimal satu kata kueri
 ada persis, atau minimal dua dan separuh trigramnya ada. Tanpa ini "lari" cocok dengan "Januari".
 
-Indeks dibangun ulang penuh tiap perubahan. Itu sederhana dan cukup untuk ribuan catatan; untuk puluhan ribu,
-ganti dengan pembaruan inkremental.
+Indeks berbentuk ringkas: tiap fitur diberi nomor, tiap catatan menyimpan larik nomor fitur dan bobotnya, dan ada
+daftar terbalik (fitur → catatan), sehingga pencarian hanya menyentuh catatan yang memuat kata kuncinya.
+`SearchIndex.update` memakai ulang hasil catatan yang tidak berubah, jadi satu simpan hanya menghitung ulang satu
+catatan. Pembaruan dan pencarian berjalan di thread latar; hanya hasil ketikan terakhir yang dipakai.
+
+Pengukuran dengan catatan sintetis (`PerfTest`, JVM desktop; HP kelas menengah kira-kira 3–6× lebih lambat):
+
+| Catatan | Bangun dari awal | Satu catatan berubah | Cari | Terkait |
+|---|---|---|---|---|
+| 300 | 51 ms | 3 ms | 0,7 ms | 0,6 ms |
+| 1.000 | 118 ms | 7 ms | 1,3 ms | 0,7 ms |
+| 3.000 | 334 ms | 21 ms | 1,6 ms | 1,6 ms |
+
+Sebelum 1.6, tiap simpan otomatis membangun indeks dari awal di thread utama (kolom kedua).
 
 ## AI lokal
 
@@ -186,14 +206,26 @@ Skema v2 menambah `folder`, `archived`, `deleted` (stempel waktu; 0 = tidak di s
 Skema v3 menambah kolom pengingat (`remind_at`, `remind_repeat`, `remind_alarm`, `remind_fired`) dan tabel `versions`.
 `NoteDb` adalah satu objek untuk seluruh proses, karena layar dan penerima alarm memakai basis data yang sama.
 
-Simpan otomatis ditulis **sinkron** di thread utama. Satu baris hanya beberapa milidetik, dan ini mencegah
-catatan ganda bila simpan terpicu dua kali berdekatan.
+Simpan otomatis berjalan tiap jeda mengetik (0,7 detik) dan ditulis **sinkron**, agar tidak ada catatan ganda bila
+simpan terpicu dua kali berdekatan. Supaya murah, basis data memakai WAL dengan `synchronous=NORMAL`: satu simpan
+tidak memaksa tulis ke penyimpanan. Basis data tetap konsisten bila HP mati mendadak; yang bisa hilang hanya
+suntingan beberapa detik terakhir. Saat aplikasi ditinggalkan, `NoteDb.flush()` memaksanya tertulis.
+Alarm sistem hanya disentuh bila pengingat atau status sampah catatannya berubah.
 
 ## Desain
 
-Permukaan netral, tinta sebagai warna utama, dan satu aksen amber yang hanya dipakai untuk AI.
-Warna tetap (tidak mengikuti wallpaper) agar konsisten. Ikon digambar sendiri di `Theme.kt` supaya tidak perlu
-pustaka ikon besar.
+Aturannya ada di [DESAIN.md](DESAIN.md): permukaan netral, tinta sebagai warna utama, satu aksen amber yang berarti
+waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan sendiri (tanpa pustaka ikon).
+
+## Ukuran dan memori
+
+- **APK**: build rilis memakai R8 dan penyusutan sumber daya. Kode Java/Kotlin turun dari 24,8 MB menjadi 4,4 MB;
+  APK dari 32,0 MB menjadi 25,2 MB. Sisanya hampir seluruhnya mesin AI native (`liblitertlm_jni.so`, 22,7 MB).
+  Seluruh paket LiteRT-LM dikecualikan dari penyusutan karena dipanggil lewat JNI (`app/proguard-rules.pro`).
+- **Model AI** tidak dimuat saat aplikasi dibuka. Sebelum dimuat, RAM yang tersedia diperiksa; bila kurang, permintaan
+  ditolak dengan pesan yang jelas (bisa dipaksa lewat "Uji muat"). Model dilepas setelah menganggur, lebih cepat
+  begitu aplikasi ditinggalkan, dan segera bila sistem memberi sinyal kekurangan memori (`onTrimMemory`).
+- **Jendela awal** memakai warna layar pertama, jadi tidak ada kilatan putih saat aplikasi dibuka.
 
 ## Pengujian
 
@@ -203,7 +235,7 @@ pustaka ikon besar.
 | `AiTextTest` | Pengurai keluaran model, pembersih Markdown, tombol centang, batas prompt, katalog, pemotongan catatan panjang |
 | `TimeParseTest` | 40-an frasa waktu, termasuk yang BUKAN waktu ("pace 6:30", "km 24.500"), dan pengulangan |
 | `ReminderTest` | Alarm, notifikasi, tunda, selesai, gaya alarm, HP dinyalakan ulang, riwayat versi, cadangan, migrasi v2 → v3 |
-| `ShotsLight` / `ShotsDark` / `ShotsTall` | Render 17 layar ke PNG |
+| `ShotsLight` / `ShotsDark` / `ShotsTall` | Render 22 layar ke PNG |
 
 Uji tangkapan layar menjalankan aplikasi sungguhan di Robolectric dengan basis data nyata dan berkas model tiruan
 (model tidak pernah dimuat).

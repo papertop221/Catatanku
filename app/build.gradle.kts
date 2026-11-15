@@ -14,8 +14,8 @@ android {
         applicationId = "com.catatanku.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 7
+        versionName = "1.6"
         // Hanya arm64: hampir semua HP Android modern. Hapus baris ini bila perlu emulator x86_64.
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -35,7 +35,12 @@ android {
         // Build uji bisa dipasang berdampingan dengan rilis resmi, tanpa menyentuh datanya.
         debug { applicationIdSuffix = ".uji"; versionNameSuffix = "-uji" }
         release {
-            isMinifyEnabled = false
+            // R8 membuang kode pustaka yang tidak dipakai (sebagian besar isi APK selain mesin AI native) dan
+            // menyusutkan sumber daya. Nama kelas tidak disamarkan (lihat proguard-rules.pro): aplikasi ini sumber
+            // terbuka, dan jejak galat yang terbaca lebih berguna daripada beberapa ratus KB.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Tanpa hash commit di dalam APK, sehingga build bisa direproduksi persis (syarat F-Droid
             // memakai tanda tangan pengembang): APK GitHub dan APK buatan F-Droid identik.
             vcsInfo.include = false
@@ -58,6 +63,8 @@ android {
                 // Opsional: -Pshots=true merekam gambar ke app/build/shots; -ProboRepo=<url> memakai mirror Maven.
                 t.systemProperty("roborazzi.test.record", (project.findProperty("shots") ?: "false").toString())
                 project.findProperty("roboRepo")?.let { t.systemProperty("robolectric.dependency.repo.url", it.toString()) }
+                // Opsional: -Pperf=true menjalankan pengukuran mesin pencarian (PerfTest); hasilnya di laporan uji.
+                t.systemProperty("perf", (project.findProperty("perf") ?: "false").toString())
             }
         }
     }
@@ -69,7 +76,6 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")

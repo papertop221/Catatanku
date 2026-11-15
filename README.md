@@ -4,7 +4,7 @@ Aplikasi catatan pribadi Android yang bekerja offline, dengan asisten AI yang be
 
 **[⬇ Unduh APK v1.4](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.4.apk)** · 32 MB · Android 8.0+ · arm64
 
-> Kode sumber di cabang ini sudah versi 1.5 (asisten perintah, tag di bawah). APK 1.5 yang ditandatangani belum diterbitkan;
+> Kode sumber di cabang ini sudah versi 1.6 (tampilan baru, lebih ringan, asisten perintah). APK 1.6 belum diterbitkan di sini;
 > tautan di atas masih 1.4.
 
 ![Tampilan terang](docs/screenshots/terang.png)
@@ -39,7 +39,8 @@ Mulai 1.4, pembaruan berikutnya bisa dipasang langsung selama dibangun dengan ku
 - Daftar centang dan poin, hitung kata, urutkan
 - Riwayat versi: 20 versi terakhir tiap catatan bisa dipulihkan
 - Bagikan/salin, terima teks dari aplikasi lain
-- Tekan lama kartu untuk aksi cepat
+- Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; tekan lama untuk aksi lain
+- Blok "Hari ini": pengingat yang terlewat atau jatuh hari ini, dan jumlah tugas yang belum dicentang
 
 **Pengingat**
 - Sekali, harian, mingguan, atau bulanan; berbunyi saat aplikasi tertutup dan setelah HP dinyalakan ulang
@@ -142,7 +143,8 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 ## Dokumentasi
 
-- [Arsitektur](docs/ARSITEKTUR.md) — struktur kode, alur data, keputusan desain
+- [Arsitektur](docs/ARSITEKTUR.md) — struktur kode, alur data, keputusan teknis
+- [Desain](docs/DESAIN.md) — aturan tampilan "Kertas & Tinta"
 - [Riwayat perubahan](CHANGELOG.md)
 
 ## Lisensi

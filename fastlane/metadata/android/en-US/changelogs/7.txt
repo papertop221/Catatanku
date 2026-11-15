@@ -1,0 +1,4 @@
+New look: a single screen with a "Today" block, search at the bottom, and a flat list without cards.
+Swipe a note right to archive it, left to set a reminder.
+Smaller APK (25 MB); typing and searching are lighter.
+The AI model is released from memory as soon as you leave the app.

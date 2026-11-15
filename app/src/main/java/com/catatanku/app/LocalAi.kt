@@ -2,6 +2,7 @@ package com.catatanku.app
 
 import android.app.ActivityManager
 import android.app.DownloadManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.net.Uri
 import com.google.ai.edge.litertlm.Backend
@@ -54,6 +55,10 @@ class LocalAi(private val context: Context) {
         const val LIGHT_IDLE_MS = 20_000L
         const val LIGHT_TOKENS = 2048
         const val LIGHT_INPUT = 2400
+        // Aplikasi sudah ditinggalkan: model tidak perlu menahan RAM selama waktu tunggu biasa.
+        const val HIDDEN_IDLE_MS = 20_000L
+        // Model tidak dimuat bila RAM yang tersedia di bawah bagian ini dari kebutuhannya (perkiraan; belum diukur di HP).
+        const val MIN_FREE_PERCENT = 35
     }
     private val prefs = context.getSharedPreferences("ai", Context.MODE_PRIVATE)
     private val importFile = File(context.filesDir, "models/model.litertlm")
@@ -61,10 +66,11 @@ class LocalAi(private val context: Context) {
     private val dm get() = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
-    private var engine: Engine? = null
+    @Volatile private var engine: Engine? = null
     private var watcher: Job? = null
     private var idle: Job? = null
     @Volatile private var lastUse = 0L
+    @Volatile private var hidden = false      // aplikasi sedang tidak tampil
 
     private val _state = MutableStateFlow<AiState>(AiState.NoModel)
     val state: StateFlow<AiState> = _state
@@ -87,7 +93,7 @@ class LocalAi(private val context: Context) {
 
     /** Pilihan hemat untuk HP dengan RAM terbatas; berlaku untuk model mana pun. Ubah lewat [setLight]. */
     val lightMode: Boolean get() = prefs.getBoolean("light", deviceRamGb in 1 until ModelCatalog.LIGHT_BELOW_GB)
-    private val idleMs get() = if (lightMode) LIGHT_IDLE_MS else IDLE_MS
+    private val idleMs get() = if (hidden) minOf(HIDDEN_IDLE_MS, if (lightMode) LIGHT_IDLE_MS else IDLE_MS) else if (lightMode) LIGHT_IDLE_MS else IDLE_MS
 
     suspend fun setLight(on: Boolean) {
         unload()
@@ -303,9 +309,49 @@ class LocalAi(private val context: Context) {
         }
     }
 
-    private fun ensureLoaded(): Engine {
+    /** Aplikasi tampil lagi: waktu tunggu kembali normal. */
+    fun onForeground() {
+        if (!hidden) return
+        hidden = false
+        if (engine != null) touch()
+    }
+
+    /**
+     * Sinyal memori dari sistem. Model adalah pemakai RAM terbesar aplikasi ini, jadi ia yang dilepas lebih dulu:
+     * segera bila sistem kekurangan memori atau aplikasi sudah lama di latar, dan lebih cepat dari biasanya begitu
+     * aplikasi ditinggalkan. Permintaan yang sedang berjalan tidak diputus.
+     */
+    @Suppress("DEPRECATION")
+    fun onTrimMemory(level: Int) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) hidden = true
+        if (engine == null) return
+        val urgent = level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND ||
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+        if (urgent) scope.launch { if (lock.tryLock()) try { release() } finally { lock.unlock() } }
+        else if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) touch()      // hitung ulang dengan waktu tunggu pendek
+    }
+
+    /**
+     * Alasan model sebaiknya tidak dimuat sekarang, atau null bila memori cukup. Memuat model saat RAM nyaris habis
+     * membuat HP macet lalu aplikasi dimatikan sistem; lebih baik ditolak dengan pesan yang jelas.
+     */
+    private fun memoryShortage(file: File): String? {
+        val mi = ActivityManager.MemoryInfo()
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mi)
+        if (mi.totalMem <= 0) return null       // tidak ada data (mis. lingkungan uji)
+        val need = ModelCatalog.byId(activeId)?.workingBytes(lightMode) ?: (file.length() * 3 / 4)
+        if (!mi.lowMemory && mi.availMem >= need * MIN_FREE_PERCENT / 100) return null
+        return "RAM HP sedang penuh (tersedia ±%.1f GB, model butuh ±%.1f GB). Tutup aplikasi lain lalu coba lagi"
+            .format(mi.availMem / 1e9, need / 1e9)
+    }
+
+    private fun ensureLoaded(force: Boolean = false): Engine {
         engine?.let { return it }
         val file = checkNotNull(modelFile) { "Model belum dipasang." }
+        if (!force) memoryShortage(file)?.let { why ->
+            _state.value = AiState.Failed("$why, atau paksa lewat Pengaturan → Model AI → Uji muat.")
+            throw IllegalStateException(why)
+        }
         _state.value = AiState.Loading
         return try {
             Engine(
@@ -324,7 +370,8 @@ class LocalAi(private val context: Context) {
         }
     }
 
-    suspend fun load() = lock.withLock { withContext(Dispatchers.Default) { ensureLoaded() }; touch() }
+    /** Memuat model sekarang juga. [force] melewati pemeriksaan RAM (tombol "Uji muat" di Pengaturan). */
+    suspend fun load(force: Boolean = false) = lock.withLock { withContext(Dispatchers.Default) { ensureLoaded(force) }; touch() }
 
     /**
      * Menjalankan satu permintaan. [onPartial] menerima teks yang terkumpul sejauh ini (streaming).

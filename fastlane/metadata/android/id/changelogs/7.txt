@@ -1,0 +1,4 @@
+Tampilan baru: satu layar dengan blok "Hari ini", kolom cari di bawah, dan daftar tanpa kartu.
+Geser catatan ke kanan untuk mengarsipkan, ke kiri untuk pengingat.
+APK lebih kecil (25 MB), mengetik dan mencari lebih ringan.
+Model AI dilepas dari memori begitu aplikasi ditinggalkan.

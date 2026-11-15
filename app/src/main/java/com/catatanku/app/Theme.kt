@@ -1,107 +1,172 @@
 package com.catatanku.app
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * Tema minimalis: permukaan netral hangat, tinta sebagai warna utama, dan SATU aksen (amber)
- * yang dipakai hanya untuk AI — sehingga apa pun yang berwarna amber berarti "ini AI".
+/*
+ * Identitas "Kertas & Tinta". Aturannya tertulis di docs/DESAIN.md; berkas ini adalah wujud kodenya.
+ *
+ *  - Permukaan netral: kertas (terang) atau hitam pekat (gelap; piksel mati di layar AMOLED).
+ *  - Tinta sebagai warna utama: teks, ikon, tombol utama.
+ *  - SATU aksen, amber, dan artinya selalu WAKTU: pengingat, tenggat, blok "Hari ini".
+ *  - Merah hanya untuk yang terlewat dan tindakan yang menghapus.
+ *  - Tidak ada gradasi, bayangan, atau warna khusus untuk AI: AI adalah cara kerja, bukan maskot.
  */
+
 private val Light = lightColorScheme(
-    primary = Color(0xFF1C1C1A), onPrimary = Color(0xFFFBFBF9),
-    primaryContainer = Color(0xFFE9E7E0), onPrimaryContainer = Color(0xFF1C1C1A),
-    secondary = Color(0xFF55544F), onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE9E7E0), onSecondaryContainer = Color(0xFF1C1C1A),
-    tertiary = Color(0xFF8F5200), onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFFBE8C8), onTertiaryContainer = Color(0xFF5C3400),
-    background = Color(0xFFFBFBF9), onBackground = Color(0xFF1C1C1A),
-    surface = Color(0xFFFBFBF9), onSurface = Color(0xFF1C1C1A),
-    surfaceVariant = Color(0xFFF1F0EB), onSurfaceVariant = Color(0xFF6A6964),
-    surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF6F5F1),
-    surfaceContainer = Color(0xFFF1F0EB), surfaceContainerHigh = Color(0xFFEBE9E3),
-    surfaceContainerHighest = Color(0xFFE5E3DC),
-    outline = Color(0xFFB9B7AF), outlineVariant = Color(0xFFE3E1DA),
+    primary = Color(0xFF191918), onPrimary = Color(0xFFFBFBFA),
+    primaryContainer = Color(0xFFEAE9E5), onPrimaryContainer = Color(0xFF191918),
+    secondary = Color(0xFF5F5E5A), onSecondary = Color.White,
+    secondaryContainer = Color(0xFFEAE9E5), onSecondaryContainer = Color(0xFF191918),
+    tertiary = Color(0xFF8A5200), onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFBEACC), onTertiaryContainer = Color(0xFF5A3300),
+    background = Color(0xFFFBFBFA), onBackground = Color(0xFF191918),
+    surface = Color(0xFFFBFBFA), onSurface = Color(0xFF191918),
+    surfaceVariant = Color(0xFFF1F0ED), onSurfaceVariant = Color(0xFF5F5E5A),
+    surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF6F5F2),
+    surfaceContainer = Color(0xFFF1F0ED), surfaceContainerHigh = Color(0xFFEAE9E5),
+    surfaceContainerHighest = Color(0xFFE3E2DD),
+    outline = Color(0xFFB5B4AE), outlineVariant = Color(0xFFE6E5E1),
     error = Color(0xFFB3261E), onError = Color.White,
+    errorContainer = Color(0xFFF9DEDC), onErrorContainer = Color(0xFF601410),
+    inverseSurface = Color(0xFF2B2B29), inverseOnSurface = Color(0xFFF4F3F0), inversePrimary = Color.White,
+    surfaceTint = Color.Transparent, scrim = Color.Black,
 )
 
 private val Dark = darkColorScheme(
-    primary = Color(0xFFEDEDE9), onPrimary = Color(0xFF151514),
-    primaryContainer = Color(0xFF2E2E2B), onPrimaryContainer = Color(0xFFEDEDE9),
-    secondary = Color(0xFFBDBCB5), onSecondary = Color(0xFF151514),
-    secondaryContainer = Color(0xFF2E2E2B), onSecondaryContainer = Color(0xFFEDEDE9),
-    tertiary = Color(0xFFF2B84B), onTertiary = Color(0xFF3A2400),
-    tertiaryContainer = Color(0xFF4A3410), onTertiaryContainer = Color(0xFFFBE0A8),
-    background = Color(0xFF121211), onBackground = Color(0xFFEDEDE9),
-    surface = Color(0xFF121211), onSurface = Color(0xFFEDEDE9),
-    surfaceVariant = Color(0xFF1E1E1C), onSurfaceVariant = Color(0xFFA5A49D),
-    surfaceContainerLowest = Color(0xFF0D0D0C), surfaceContainerLow = Color(0xFF191918),
-    surfaceContainer = Color(0xFF1E1E1C), surfaceContainerHigh = Color(0xFF282826),
-    surfaceContainerHighest = Color(0xFF323230),
-    outline = Color(0xFF6E6D67), outlineVariant = Color(0xFF30302D),
-    error = Color(0xFFF2B8B5), onError = Color(0xFF601410),
+    primary = Color(0xFFECECE9), onPrimary = Color(0xFF111110),
+    primaryContainer = Color(0xFF2A2A28), onPrimaryContainer = Color(0xFFECECE9),
+    secondary = Color(0xFFA6A5A0), onSecondary = Color(0xFF111110),
+    secondaryContainer = Color(0xFF2A2A28), onSecondaryContainer = Color(0xFFECECE9),
+    tertiary = Color(0xFFF0B450), onTertiary = Color(0xFF3A2400),
+    tertiaryContainer = Color(0xFF3D2C0C), onTertiaryContainer = Color(0xFFFBE0A8),
+    background = Color.Black, onBackground = Color(0xFFECECE9),
+    surface = Color.Black, onSurface = Color(0xFFECECE9),
+    surfaceVariant = Color(0xFF1A1A19), onSurfaceVariant = Color(0xFFA6A5A0),
+    surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF161615),
+    surfaceContainer = Color(0xFF1A1A19), surfaceContainerHigh = Color(0xFF222221),
+    surfaceContainerHighest = Color(0xFF2C2C2A),
+    outline = Color(0xFF5E5D58), outlineVariant = Color(0xFF2A2A28),
+    error = Color(0xFFF28B82), onError = Color(0xFF601410),
+    errorContainer = Color(0xFF5C1A15), onErrorContainer = Color(0xFFF9DEDC),
+    inverseSurface = Color(0xFFECECE9), inverseOnSurface = Color(0xFF191918), inversePrimary = Color(0xFF191918),
+    surfaceTint = Color.Transparent, scrim = Color.Black,
 )
+
+/** Warna wallpaper (Android 12+) bila pengguna memilihnya; mode gelap tetap berlatar hitam pekat. */
+@Composable
+private fun scheme(dynamic: Boolean): ColorScheme {
+    val dark = isSystemInDarkTheme()
+    if (!dynamic || Build.VERSION.SDK_INT < 31) return if (dark) Dark else Light
+    val ctx = LocalContext.current
+    return if (dark) dynamicDarkColorScheme(ctx).copy(background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black)
+    else dynamicLightColorScheme(ctx)
+}
+
+/**
+ * Isi catatan memakai Atkinson Hyperlegible Next (OFL): dirancang agar huruf yang mirip mudah dibedakan.
+ * Satu berkas variabel untuk semua ketebalan. Antarmuka selebihnya memakai font sistem.
+ */
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private fun noteFont(weight: FontWeight) = Font(
+    R.font.atkinson_hyperlegible_next, weight, variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
+)
+val NoteFont = FontFamily(noteFont(FontWeight.Normal), noteFont(FontWeight.Medium), noteFont(FontWeight.SemiBold))
+
+/** Gaya teks untuk isi catatan. Label, tombol, dan keterangan memakai `MaterialTheme.typography`. */
+object NoteType {
+    val title = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp)
+    val body = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 26.sp)
+    val rowTitle = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp)
+    val rowSnippet = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp)
+}
 
 private val Type = Typography().run {
     copy(
-        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp),
-        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold),
+        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp),
+        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
         titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
-        bodyLarge = bodyLarge.copy(lineHeight = 26.sp, letterSpacing = 0.1.sp),
-        bodyMedium = bodyMedium.copy(lineHeight = 21.sp, letterSpacing = 0.1.sp),
+        bodyLarge = bodyLarge.copy(lineHeight = 24.sp, letterSpacing = 0.1.sp),
+        bodyMedium = bodyMedium.copy(lineHeight = 20.sp, letterSpacing = 0.1.sp),
+        bodySmall = bodySmall.copy(lineHeight = 17.sp, letterSpacing = 0.1.sp),
         labelSmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.2.sp),
     )
 }
 
+/** Dua radius saja: 8dp untuk elemen kecil (tombol, kolom, chip), 16dp untuk lembar bawah dan dialog. */
+val SmallShape = RoundedCornerShape(8.dp)
+
 @Composable
-fun CatatankuTheme(content: @Composable () -> Unit) = MaterialTheme(
-    colorScheme = if (isSystemInDarkTheme()) Dark else Light,
+fun CatatankuTheme(dynamic: Boolean = false, content: @Composable () -> Unit) = MaterialTheme(
+    colorScheme = scheme(dynamic),
     typography = Type,
     shapes = Shapes(
-        small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(16.dp),
-        large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(28.dp),
+        extraSmall = RoundedCornerShape(8.dp), small = SmallShape, medium = SmallShape,
+        large = RoundedCornerShape(16.dp), extraLarge = RoundedCornerShape(16.dp),
     ),
     content = content,
 )
 
-/** Ikon garis sendiri (24dp) agar tidak perlu pustaka ikon besar maupun emoji. */
+/**
+ * Satu set ikon garis (24dp, tebal 1,75, ujung membulat) yang digambar sendiri: gayanya seragam dan aplikasi
+ * tidak perlu membawa pustaka ikon. Ikon selalu ditemani kata, atau diberi keterangan untuk pembaca layar.
+ */
 object AppIcons {
-    private fun icon(name: String, vararg paths: String) = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
-        paths.forEach { addPath(addPathNodes(it), fill = SolidColor(Color.Black)) }
-    }.build()
+    private fun icon(name: String, vararg strokes: String, fills: List<String> = emptyList()) =
+        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
+            fills.forEach { addPath(addPathNodes(it), fill = SolidColor(Color.Black)) }
+            strokes.forEach {
+                addPath(addPathNodes(it), stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+            }
+        }.build()
 
-    val Sparkle = icon("sparkle",
-        "M11 3l1.7 5.1c.3.9 1 1.6 1.9 1.9L19.7 11.7l-5.1 1.7c-.9.3-1.6 1-1.9 1.9L11 20.4l-1.7-5.1c-.3-.9-1-1.6-1.9-1.9L2.3 11.7l5.1-1.7c.9-.3 1.6-1 1.9-1.9z",
-        "M19 2l.7 2.1c.1.4.4.7.8.8L22.6 5.6l-2.1.7c-.4.1-.7.4-.8.8L19 9.2l-.7-2.1c-.1-.4-.4-.7-.8-.8L15.4 5.6l2.1-.7c.4-.1.7-.4.8-.8z")
-    val Folder = icon("folder",
-        "M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zM4 18V8h16v10H4z")
-    val Pin = icon("pin",
-        "M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z")
-    val PinOutline = icon("pin-outline",
-        "M14 4v5c0 1.12.37 2.16 1 3H9c.65-.86 1-1.9 1-3V4h4m3-2H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3V4h1c.55 0 1-.45 1-1s-.45-1-1-1z")
-    val CheckBox = icon("checkbox",
-        "M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z",
-        "M10.3 16.4l-3.7-3.7 1.4-1.4 2.3 2.3 5.3-5.3 1.4 1.4z")
-    val Bullets = icon("bullets",
-        "M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z")
-    val Chevron = icon("chevron", "M7.4 8.6L12 13.2l4.6-4.6L18 10l-6 6-6-6z")
-    val Bell = icon("bell",
-        "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z")
-    val BellOutline = icon("bell-outline",
-        "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z")
-    val Lock = icon("lock",
-        "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z")
+    private fun dot(x: Float, y: Float, r: Float) = "M${x - r} ${y}a$r $r 0 1 0 ${2 * r} 0a$r $r 0 1 0 ${-2 * r} 0z"
+
+    private const val BELL = "M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"
+    private const val PIN = "M9 3.5h6l-.8 6.2 3.3 3.3v1.5h-11V13l3.3-3.3z"
+
+    val Plus = icon("plus", "M12 5v14M5 12h14")
+    val Search = icon("search", "M17 10.5a6.5 6.5 0 1 1-13 0a6.5 6.5 0 0 1 13 0z", "M15.3 15.3L20 20")
+    val Close = icon("close", "M6 6l12 12M18 6L6 18")
+    val Back = icon("back", "M20 12H4M10 6l-6 6 6 6")
+    val More = icon("more", fills = listOf(dot(12f, 5f, 1.6f), dot(12f, 12f, 1.6f), dot(12f, 19f, 1.6f)))
+    val ChevronDown = icon("chevron-down", "M6.5 9.5L12 15l5.5-5.5")
+    val ChevronUp = icon("chevron-up", "M6.5 14.5L12 9l5.5 5.5")
+    val ChevronRight = icon("chevron-right", "M9.5 6.5L15 12l-5.5 5.5")
+    val Check = icon("check", "M5 12.5l4.5 4.5L19 7.5")
+    val Bell = icon("bell", BELL, "M10 20.5a2 2 0 0 0 4 0")
+    val BellFilled = icon("bell-filled", BELL, "M10 20.5a2 2 0 0 0 4 0", fills = listOf(BELL))
+    val Pin = icon("pin", PIN, "M12 14.5V21")
+    val PinFilled = icon("pin-filled", PIN, "M12 14.5V21", fills = listOf(PIN))
+    val Folder = icon("folder", "M3.5 7A1.5 1.5 0 0 1 5 5.5h4.2l2 2.5H19a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z")
+    val CheckBox = icon("checkbox", "M6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5z", "M8.5 12.2l2.5 2.5 4.7-5.2")
+    val Bullets = icon("bullets", "M9 7h11M9 12h11M9 17h11", fills = listOf(dot(4.8f, 7f, 1.2f), dot(4.8f, 12f, 1.2f), dot(4.8f, 17f, 1.2f)))
+    val Archive = icon("archive", "M4.5 8.5v10A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-10", "M3 4.5h18v4H3z", "M10 12.5h4")
+    val Pen = icon("pen", "M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5z", "M14.5 6L18 9.5")
+    val Clock = icon("clock", "M20.5 12a8.5 8.5 0 1 1-17 0a8.5 8.5 0 0 1 17 0z", "M12 7.5V12l3 2")
+    val Lock = icon("lock", "M7 11h10a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 7 11z", "M8.5 11V8a3.5 3.5 0 0 1 7 0v3")
 }

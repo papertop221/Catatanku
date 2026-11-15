@@ -19,8 +19,11 @@ abstract class Shots(private val suffix: String) {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
     private val vm get() = rule.activity.vm
 
+    /** Indeks pencarian dan hasil cari dihitung di thread latar; tunggu sampai tenang. */
+    private fun settle() { rule.waitUntil(10_000) { !vm.settling }; rule.waitForIdle() }
+
     private fun shot(name: String) {
-        rule.waitForIdle()
+        settle()
         captureScreenRoboImage("build/shots/$name-$suffix.png")
     }
 
@@ -66,8 +69,8 @@ abstract class Shots(private val suffix: String) {
         shot("07-menu-ai")
         rule.runOnUiThread { vm.debugAiJob(AiJob(AiAction.Summarize, "• Rapat tim membahas peluncuran aplikasi kasir bulan depan.\n• Tiga tugas dibagi ke anggota tim.\n• Anggaran iklan 5 juta disetujui.\n• Rapat berikutnya tanggal 24 pukul 10 pagi.", running = false)) }
         shot("08-hasil-ai")
-        rule.runOnUiThread { vm.dismissAi(); vm.closeEditor(); vm.openAsk() }
-        shot("09-tanya")
+        rule.runOnUiThread { vm.dismissAi(); vm.closeEditor(); vm.askOpenTasks() }
+        shot("09-jawaban")
         rule.runOnUiThread { vm.closeAsk(); vm.go(Screen.Settings) }
         shot("10-pengaturan-aktif")
 
@@ -75,7 +78,7 @@ abstract class Shots(private val suffix: String) {
         rule.runOnUiThread { vm.go(Screen.List); vm.view = NoteView.Reminders }
         shot("11-tampilan-pengingat")
         rule.runOnUiThread { vm.view = NoteView.All; vm.open(vm.notes.first { it.title == "Rapat tim Senin" }) }
-        rule.mainClock.advanceTimeBy(1500); rule.waitForIdle()      // saran pengingat muncul setelah jeda singkat
+        rule.mainClock.advanceTimeBy(1500); Thread.sleep(400); rule.waitForIdle()      // saran pengingat muncul setelah jeda singkat
         val hint = vm.reminderHint()
         check(hint != null && hint.hasTime) { "Waktu di catatan rapat harus dikenali: $hint" }
         shot("12-editor-saran-pengingat")
@@ -92,7 +95,7 @@ abstract class Shots(private val suffix: String) {
         shot("15-riwayat-versi")
         rule.runOnUiThread { vm.restoreVersion(vm.versions!!.first()) }
         check(!vm.draft.body.contains("Tambahan")) { "Versi lama harus dipulihkan" }
-        rule.runOnUiThread { vm.closeEditor(); vm.openAsk(); vm.askOpenTasks() }
+        rule.runOnUiThread { vm.closeEditor(); vm.askOpenTasks() }
         check(vm.askSources.size == 1 && vm.askAnswer.contains("☐ Rina"))
         shot("16-tugas-belum-selesai")
         rule.runOnUiThread { vm.closeAsk() }
@@ -100,6 +103,7 @@ abstract class Shots(private val suffix: String) {
         // ---- 1.5: asisten perintah (tanpa model: fakeModel hanya berkas tiruan, aturan yang bekerja) ----
         rule.runOnUiThread { vm.updateQuery("ingatkan saya bayar pajak motor besok jam 7 malam") }
         shot("18-perintah-di-kolom-cari")
+        settle()
         rule.runOnUiThread { vm.startAgent(vm.query) }
         check(vm.agentReady) { "Rencana harus siap: ${vm.agent}" }
         shot("19-rencana-asisten")
@@ -115,6 +119,7 @@ abstract class Shots(private val suffix: String) {
         check(vm.notes.none { it.title == "Bayar pajak motor" }) { "Urungkan harus menghapus catatan yang dibuat" }
 
         // Tiga langkah atas catatan yang sudah ada; sasaran dicari, isi lama masuk riwayat versi, dan semuanya bisa diurungkan.
+        settle()
         val motor = vm.notes.first { it.title == "Servis motor" }
         rule.runOnUiThread { vm.startAgent("tambahkan tugas beli oli ke catatan servis motor, beri tag penting ke catatan itu, lalu sematkan") }
         check(vm.agentReady && vm.agent!!.items.size == 3 && vm.agent!!.items[0].target?.id == motor.id) { "Rencana 3 langkah: ${vm.agent}" }
@@ -124,6 +129,7 @@ abstract class Shots(private val suffix: String) {
         val after = vm.notes.first { it.id == motor.id }
         check(after.body.endsWith("\n☐ Beli oli") && "penting" in after.tags && after.pinned && after.hasReminder) { "Tiga langkah harus diterapkan: $after" }
         check(NoteDb.get(rule.activity).versions(motor.id).any { it.body == motor.body }) { "Isi lama harus masuk riwayat versi" }
+        settle()
         rule.runOnUiThread { vm.startAgent("centang beli oli di catatan servis motor") }
         check(vm.agentReady)
         rule.runOnUiThread { vm.runAgent() }
@@ -132,6 +138,7 @@ abstract class Shots(private val suffix: String) {
         rule.waitUntil(10_000) { vm.agent == null && vm.notes.first { it.id == motor.id }.body.endsWith("☐ Beli oli") }
 
         // Yang tidak bisa dijalankan dijelaskan, bukan ditebak.
+        settle()
         rule.runOnUiThread { vm.startAgent("ingatkan saya bayar pajak") }
         check(!vm.agentReady && vm.agent!!.items.single().problem != null)
         rule.runOnUiThread { vm.startAgent("hapus catatan zzzz tidak ada") }

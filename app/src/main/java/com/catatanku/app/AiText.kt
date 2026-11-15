@@ -67,6 +67,10 @@ object AiText {
     fun openTasks(body: String): List<String> =
         body.lineSequence().map { it.trim() }.filter { it.startsWith("☐") && it.length > 2 }.toList()
 
+    /** Jumlah [openTasks], tanpa membuat daftarnya; kebanyakan catatan tidak punya daftar centang sama sekali. */
+    fun openTaskCount(body: String): Int =
+        if ('☐' !in body) 0 else body.lineSequence().count { val t = it.trim(); t.startsWith("☐") && t.length > 2 }
+
     /** Menggabungkan daftar tugas dari beberapa bagian: tanpa duplikat dan tanpa baris "Tidak ada tugas". */
     fun mergeTasks(parts: List<String>): String =
         parts.flatMap { it.lines() }.map { it.trim() }.filter { it.startsWith("☐") }.distinctBy { it.lowercase() }
@@ -175,9 +179,19 @@ object AiText {
             "padanan bahasa Indonesia dan Inggris).\n" +
             "Jawab HANYA dengan kata kunci dipisahkan koma, tanpa penjelasan.\n\nKata kunci:"
 
+    // Pola dikompilasi sekali: cleanBlock dipanggil untuk tiap potongan teks yang mengalir dari model.
+    private val THINK = Regex("(?s)<think>.*?(</think>|$)")
+    private val TITLE_PREFIX = Regex("^(judul|title)\\s*:\\s*", RegexOption.IGNORE_CASE)
+    private val MD_HEADING = Regex("^#{1,6}\\s+")
+    private val MD_BULLET = Regex("^[*-]\\s+")
+    private val MD_BOLD = Regex("\\*\\*(.+?)\\*\\*")
+    private val MD_ITALIC = Regex("(?<![\\w*])\\*(?!\\s)(.+?)(?<!\\s)\\*(?![\\w*])")
+    private val MD_UNDERLINE = Regex("__(.+?)__")
+    private val SPACES = Regex("\\s+")
+
     /** Membuang blok penalaran (<think>…</think>) yang dikeluarkan sebagian model. */
     fun strip(raw: String): String =
-        raw.replace(Regex("(?s)<think>.*?(</think>|$)"), "").trim()
+        raw.replace(THINK, "").trim()
 
     fun organizePrompt(title: String, body: String, folders: List<String>, tags: List<String>): String =
         "Kamu merapikan catatan pribadi. Isi tiga baris berikut untuk catatan di bawah, tanpa penjelasan lain.\n" +
@@ -209,7 +223,7 @@ object AiText {
     /** Membersihkan satu baris jawaban (judul): kutip, tanda bintang, awalan "Judul:". */
     fun cleanLine(raw: String): String =
         raw.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
-            .replace(Regex("^(judul|title)\\s*:\\s*", RegexOption.IGNORE_CASE), "")
+            .replace(TITLE_PREFIX, "")
             .trim { it in " \"'`*#“”" }.trimEnd('.').trim { it in " \"'`*#“”" }
 
     /** Menjadikan keluaran model teks polos: buang penalaran, pagar kode, dan sisa Markdown. */
@@ -217,10 +231,10 @@ object AiText {
         strip(raw).removePrefix("```").removeSuffix("```").lines().joinToString("\n") { line ->
             val indent = line.takeWhile { it == ' ' }.length
             var t = line.trim()
-            t = t.replace(Regex("^#{1,6}\\s+"), "")                      // judul Markdown
-            t = t.replace(Regex("^[*-]\\s+"), "• ")                      // poin Markdown
-            t = t.replace(Regex("\\*\\*(.+?)\\*\\*"), "$1").replace(Regex("(?<![\\w*])\\*(?!\\s)(.+?)(?<!\\s)\\*(?![\\w*])"), "$1")
-            t = t.replace(Regex("__(.+?)__"), "$1").replace("`", "")
+            t = t.replace(MD_HEADING, "")                               // judul Markdown
+            t = t.replace(MD_BULLET, "• ")                              // poin Markdown
+            t = t.replace(MD_BOLD, "$1").replace(MD_ITALIC, "$1")
+            t = t.replace(MD_UNDERLINE, "$1").replace("`", "")
             (if (indent >= 2 && t.startsWith("• ")) "   " else "") + t
         }.trim()
 
@@ -234,7 +248,7 @@ object AiText {
             "Gunakan bahasa pertanyaan, teks polos.\n\n$ctx\n\nPertanyaan: ${question.take(300)}\nJawaban lengkap:"
     }
 
-    fun wordCount(text: String): Int = text.split(Regex("\\s+")).count { it.isNotBlank() }
+    fun wordCount(text: String): Int = text.split(SPACES).count { it.isNotBlank() }
 
     /** Mengganti awalan baris tempat kursor berada: tanpa → ☐ → ☑ → tanpa (atau poin). */
     fun toggleLinePrefix(text: String, cursor: Int, checklist: Boolean): Pair<String, Int> {

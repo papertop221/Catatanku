@@ -1,5 +1,26 @@
 # Riwayat perubahan
 
+## 1.6
+Tampilan baru "Kertas & Tinta" (aturannya di docs/DESAIN.md)
+- Satu layar utama: blok "Hari ini" (pengingat yang terlewat atau jatuh hari ini, jumlah tugas belum dicentang), lalu daftar
+- Kolom cari dan tombol catatan baru pindah ke bawah layar, sejangkauan ibu jari
+- Daftar berupa baris datar bergaris, tanpa kartu; geser kanan untuk mengarsipkan, geser kiri untuk pengingat
+- Jawaban "Tanya catatan", rekap, dan daftar tugas tampil di atas daftar; layar Tanya tersendiri dihapus
+- Editor: penanda "Tersimpan", simpan otomatis tiap jeda mengetik, alat berikon dan berlabel di atas papan ketik
+- Amber kini berarti waktu (pengingat), bukan AI; AI tidak lagi punya warna atau ikon khusus
+- Isi catatan memakai huruf Atkinson Hyperlegible Next; mode gelap berlatar hitam pekat
+- Arsip dan Sampah dari daftar bisa diurungkan; tombol diberi nama sesuai tindakannya
+- Pilihan warna mengikuti wallpaper (Android 12+)
+
+Lebih ringan
+- APK 25,2 MB (sebelumnya 32,0 MB): kode yang tidak dipakai dibuang saat build (R8)
+- Mengetik tidak lagi membangun ulang indeks pencarian: satu simpan menghitung ulang satu catatan, di thread latar
+- Pencarian berjalan di thread latar dan hanya menyentuh catatan yang memuat kata kuncinya
+- Daftar tidak lagi dibaca ulang dari penyimpanan tiap simpan; tag, folder, dan jumlah dihitung sekali per perubahan
+- Simpan otomatis lebih murah (WAL), dan alarm hanya disetel ulang bila pengingatnya berubah
+- Model AI dilepas dari RAM begitu aplikasi ditinggalkan atau sistem kekurangan memori, dan tidak dimuat bila RAM
+  yang tersedia tidak cukup
+
 ## 1.5
 Asisten perintah
 - Kolom cari kini juga menerima perintah: "ingatkan saya bayar listrik besok jam 7 malam", "catat belanja: susu, telur, roti",

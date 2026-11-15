@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.Catatanku" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window</item>
+    </style>
+    <color name="window">#000000</color>
+</resources>

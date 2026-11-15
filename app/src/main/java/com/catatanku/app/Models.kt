@@ -21,8 +21,16 @@ data class ModelSpec(
     val tier: String,       // satu kata untuk daftar ringkas: Ringan / Seimbang / Utama / Terberat
     val thinks: Boolean = false,   // model bernalar dulu secara bawaan; dimatikan agar cepat
     val legacy: Boolean = false,   // tidak ditawarkan lagi; hanya tampil bila sudah terpasang
+    val ramMb: Int = 0,            // puncak memori saat dipakai, diukur di desktop; 0 = belum diukur
+    val lightRamMb: Int = 0,       // sama, dalam Mode ringan
 ) {
     val sizeLabel: String get() = "%.1f GB".format(bytes / 1e9)
+
+    /** Perkiraan memori yang dipakai model saat berjalan. Yang belum diukur ditaksir dari ukuran berkasnya. */
+    fun workingBytes(light: Boolean): Long {
+        val mb = if (light && lightRamMb > 0) lightRamMb else ramMb
+        return if (mb > 0) mb * 1_000_000L else bytes * 3 / 4
+    }
 }
 
 object ModelCatalog {
@@ -37,7 +45,7 @@ object ModelCatalog {
             "gemma-4-E2B-it.litertlm",
             "$HF/gemma-4-E2B-it-litert-lm/resolve/2d74ac41a33d7da82f39f7d5720a04c68514a103/gemma-4-E2B-it.litertlm",
             2_588_147_712, "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c",
-            minRamGb = 4, recRamGb = 6, inputChars = 6000, tier = "Utama",
+            minRamGb = 4, recRamGb = 6, inputChars = 6000, tier = "Utama", ramMb = 1900, lightRamMb = 1650,
         ),
         ModelSpec(
             "qwen3-17b", "Qwen3 1.7B",
@@ -47,7 +55,7 @@ object ModelCatalog {
             "Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm",
             "$HF/Qwen3-1.7B/resolve/c421cc3775575372ac2ca4aa1bebc97300ae36b6/Qwen3-1.7B_dynamic_wi4b32_afp32.litertlm",
             977_184_032, "2a72330b504a6596d53a2c00923c57173b10f1b83e6a541213ffec08d1fc5de8",
-            minRamGb = 6, recRamGb = 8, inputChars = 2800, tier = "Unduhan kecil", thinks = true,
+            minRamGb = 6, recRamGb = 8, inputChars = 2800, tier = "Unduhan kecil", thinks = true, ramMb = 2800, lightRamMb = 2000,
         ),
         ModelSpec(
             "gemma4-e4b", "Gemma 4 E4B",
@@ -65,7 +73,7 @@ object ModelCatalog {
             "Qwen2.5-1.5B-Instruct_q8_ekv4096.litertlm",
             "$HF/Qwen2.5-1.5B-Instruct/resolve/60257f9f1d00ca1f24cc5ce3b829b4139be1ca2b/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
             1_597_922_856, "c4a9b7289365ab80fe599b844b77ad253eb3c53fb0e5d963d699146a6f01255e",
-            minRamGb = 6, recRamGb = 8, inputChars = 2800, tier = "Lama", legacy = true,
+            minRamGb = 6, recRamGb = 8, inputChars = 2800, tier = "Lama", legacy = true, ramMb = 2400,
         ),
     )
 

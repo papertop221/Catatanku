@@ -48,6 +48,26 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
                 "title TEXT NOT NULL, body TEXT NOT NULL, saved INTEGER NOT NULL)"
     }
 
+    init {
+        // WAL: pembacaan di thread latar tidak menunggu penulisan, dan satu simpan cukup satu kali tulis.
+        setWriteAheadLoggingEnabled(true)
+    }
+
+    /**
+     * Simpan otomatis berjalan selagi mengetik, jadi tiap simpan harus murah. Dengan `synchronous=NORMAL`,
+     * WAL tidak dipaksa ke penyimpanan pada tiap simpan. Basis data tetap konsisten bila aplikasi atau HP mati
+     * mendadak; yang bisa hilang hanya suntingan beberapa detik terakhir, dan itu pun hanya bila HP mati mendadak
+     * (bukan bila aplikasinya saja yang ditutup). [flush] memaksanya tertulis saat aplikasi ditinggalkan.
+     */
+    override fun onConfigure(db: SQLiteDatabase) {
+        db.execSQL("PRAGMA synchronous=NORMAL")
+    }
+
+    /** Memindahkan isi WAL ke berkas utama dan memastikannya tertulis ke penyimpanan. */
+    fun flush() {
+        runCatching { writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() } }
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT NOT NULL, " +
@@ -121,10 +141,12 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
 
     fun emptyTrash() { writableDatabase.delete("notes", "deleted>0", null); dropOrphanVersions() }
 
-    /** Sampah dibersihkan otomatis setelah 30 hari. */
-    fun purgeOldTrash() {
+    /** Sampah dibersihkan otomatis setelah 30 hari. Mengembalikan true bila ada yang dibersihkan. */
+    fun purgeOldTrash(): Boolean {
         val cutoff = System.currentTimeMillis() - 30L * 24 * 3600 * 1000
-        if (writableDatabase.delete("notes", "deleted>0 AND deleted<?", arrayOf(cutoff.toString())) > 0) dropOrphanVersions()
+        val purged = writableDatabase.delete("notes", "deleted>0 AND deleted<?", arrayOf(cutoff.toString())) > 0
+        if (purged) dropOrphanVersions()
+        return purged
     }
 
     // ---------- Riwayat versi ----------
