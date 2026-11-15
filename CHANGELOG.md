@@ -1,5 +1,33 @@
 # Riwayat perubahan
 
+## 1.4
+**Penting:** APK ini ditandatangani dengan kunci baru yang tetap, karena kunci 1.0–1.3 tidak tersimpan. Android menolak
+memasangnya di atas 1.3. Ekspor catatan di 1.3, copot 1.3, pasang 1.4, lalu impor. Model AI perlu diunduh ulang.
+
+Pengingat
+- Pengingat per catatan: sekali, harian, mingguan, atau bulanan; berbunyi saat aplikasi tertutup dan setelah HP dinyalakan ulang
+- Dua gaya: notifikasi biasa, atau gaya alarm yang berdering dengan volume alarm sampai ditanggapi
+- Tombol "Selesai" dan "Tunda 10 mnt" di notifikasi; pengingat yang belum ditanggapi tampil merah di daftar
+- Tampilan "Pengingat" di pemilih tampilan
+- Waktu di isi catatan ("besok jam 7 malam", "tanggal 24 jam 10 pagi", "lusa habis magrib") dikenali tanpa model dan ditawarkan sebagai pengingat
+
+AI
+- Mode ringan: jendela konteks lebih kecil dan model langsung dilepas dari RAM; aktif otomatis di HP ber-RAM di bawah 7 GB
+- Model dilepas sendiri dari RAM setelah 3 menit tidak dipakai
+- Qwen3 1.7B (1,0 GB) sebagai pilihan unduhan kecil; Qwen2.5 1.5B tidak lagi ditawarkan
+- Daftar model diringkas menjadi satu baris per model; rincian muncul saat diketuk
+- Catatan panjang: Ringkas, Daftar tugas, dan Perbaiki ejaan memproses seluruh isi bagian demi bagian
+- Tanya catatan mengambil bagian catatan yang paling relevan, bukan hanya bagian awalnya
+- Rekap 7 hari terakhir, daftar semua tugas yang belum dicentang, dan "Sarankan pengingat"
+- Rapikan otomatis (opsional): judul dan tag yang kosong diisi di latar setelah catatan ditutup
+
+Pondasi
+- Kunci aplikasi dengan sidik jari atau PIN layar HP; isi tersembunyi dari daftar aplikasi terbaru
+- Cadangan otomatis ke folder pilihan, 7 berkas terakhir; cadangan kini memuat Sampah dan pengingat
+- Riwayat versi: 20 versi terakhir tiap catatan, bisa dipulihkan
+- Build rilis (bukan debug) dengan kunci tanda tangan tetap
+- Perbaikan: anjuran RAM model didasarkan pada pengukuran; sebelumnya Qwen2.5 keliru disebut lebih ringan
+
 ## 1.3
 - Antarmuka baru: tema netral dengan satu aksen untuk AI, ikon garis, kartu tanpa bingkai
 - Satu kolom untuk mencari dan bertanya

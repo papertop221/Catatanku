@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,15 +14,27 @@ android {
         applicationId = "com.catatanku.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
         // Hanya arm64: hampir semua HP Android modern. Hapus baris ini bila perlu emulator x86_64.
         ndk { abiFilters += "arm64-v8a" }
+    }
+    // Kunci tanda tangan tetap dibaca dari keystore.properties (tidak ikut repositori). Tanpa berkas itu,
+    // build rilis memakai kunci debug mesin ini, yang TIDAK bisa memperbarui APK yang dibangun di mesin lain.
+    val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }
+        ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+    signingConfigs {
+        if (keystoreProps != null) create("release") {
+            storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
+        }
     }
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

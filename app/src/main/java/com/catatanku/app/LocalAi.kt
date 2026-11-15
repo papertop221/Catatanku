@@ -10,6 +10,7 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,13 @@ data class Download(val id: String, val percent: Int, val note: String)
  * DownloadManager milik Android; kode aplikasi sendiri tidak pernah membuka koneksi.
  */
 class LocalAi(private val context: Context) {
+    companion object {
+        const val IDLE_MS = 3 * 60_000L
+        // Mode ringan: jendela konteks lebih kecil (RAM lebih hemat), masukan lebih pendek, model segera dilepas.
+        const val LIGHT_IDLE_MS = 20_000L
+        const val LIGHT_TOKENS = 2048
+        const val LIGHT_INPUT = 2400
+    }
     private val prefs = context.getSharedPreferences("ai", Context.MODE_PRIVATE)
     private val importFile = File(context.filesDir, "models/model.litertlm")
     private val dlDir: File? get() = context.getExternalFilesDir("models")
@@ -55,6 +63,8 @@ class LocalAi(private val context: Context) {
     private val lock = Mutex()
     private var engine: Engine? = null
     private var watcher: Job? = null
+    private var idle: Job? = null
+    @Volatile private var lastUse = 0L
 
     private val _state = MutableStateFlow<AiState>(AiState.NoModel)
     val state: StateFlow<AiState> = _state
@@ -74,6 +84,16 @@ class LocalAi(private val context: Context) {
     var useGpu: Boolean
         get() = prefs.getBoolean("gpu", false)
         set(v) { prefs.edit().putBoolean("gpu", v).apply() }
+
+    /** Pilihan hemat untuk HP dengan RAM terbatas; berlaku untuk model mana pun. Ubah lewat [setLight]. */
+    val lightMode: Boolean get() = prefs.getBoolean("light", deviceRamGb in 1 until ModelCatalog.LIGHT_BELOW_GB)
+    private val idleMs get() = if (lightMode) LIGHT_IDLE_MS else IDLE_MS
+
+    suspend fun setLight(on: Boolean) {
+        unload()
+        prefs.edit().putBoolean("light", on).apply()
+        applyActive()
+    }
 
     var activeId: String?
         get() = prefs.getString("active", null)
@@ -105,8 +125,8 @@ class LocalAi(private val context: Context) {
     private fun applyActive() {
         _state.value = if (hasModel) AiState.Idle else AiState.NoModel
         // Model besar punya jendela konteks lebih lebar, jadi boleh membaca catatan lebih panjang.
-        AiText.maxInput = ModelCatalog.byId(activeId)?.inputChars
-            ?: if ((modelFile?.length() ?: 0) > 1_800_000_000L) 6000 else 2800
+        val full = ModelCatalog.byId(activeId)?.inputChars ?: if ((modelFile?.length() ?: 0) > 1_800_000_000L) 6000 else 2800
+        AiText.maxInput = if (lightMode) minOf(full, LIGHT_INPUT) else full
         _revision.value++
     }
 
@@ -261,10 +281,26 @@ class LocalAi(private val context: Context) {
     // ============================== Menjalankan ==============================
 
     /** Melepas model dari RAM (file tetap ada). */
-    suspend fun unload() = lock.withLock {
+    suspend fun unload() = lock.withLock { release() }
+
+    private suspend fun release() {
         withContext(Dispatchers.IO) { runCatching { engine?.close() } }
         engine = null
         if (_state.value !is AiState.Importing) _state.value = if (hasModel) AiState.Idle else AiState.NoModel
+    }
+
+    /**
+     * Model memakai RAM ratusan MB sampai beberapa GB. Setelah beberapa menit tanpa permintaan, model dilepas
+     * sendiri supaya HP tidak terbebani; permintaan berikutnya memuatnya lagi.
+     */
+    private fun touch() {
+        lastUse = System.currentTimeMillis()
+        idle?.cancel()
+        idle = scope.launch {
+            val wait = idleMs
+            delay(wait)
+            lock.withLock { if (engine != null && System.currentTimeMillis() - lastUse >= wait) release() }
+        }
     }
 
     private fun ensureLoaded(): Engine {
@@ -276,6 +312,7 @@ class LocalAi(private val context: Context) {
                 EngineConfig(
                     modelPath = file.path,
                     backend = if (useGpu) Backend.GPU() else Backend.CPU(),
+                    maxNumTokens = if (lightMode) LIGHT_TOKENS else null,
                     cacheDir = context.cacheDir.path,
                 )
             ).also { it.initialize(); engine = it; _state.value = AiState.Ready }
@@ -287,7 +324,7 @@ class LocalAi(private val context: Context) {
         }
     }
 
-    suspend fun load() = lock.withLock { withContext(Dispatchers.Default) { ensureLoaded() }; Unit }
+    suspend fun load() = lock.withLock { withContext(Dispatchers.Default) { ensureLoaded() }; touch() }
 
     /**
      * Menjalankan satu permintaan. [onPartial] menerima teks yang terkumpul sejauh ini (streaming).
@@ -297,9 +334,11 @@ class LocalAi(private val context: Context) {
         withContext(Dispatchers.Default) {
             val e = ensureLoaded()
             // Percakapan baru tiap permintaan: tanpa riwayat, konteks kecil, hasil konsisten.
-            val config = ConversationConfig(
-                samplerConfig = SamplerConfig(topK = 20, topP = 0.9, temperature = 0.3, seed = 1),
-            )
+            val sampler = SamplerConfig(topK = 20, topP = 0.9, temperature = 0.3, seed = 1)
+            // Model yang "berpikir" dulu terlalu lambat di HP; penalarannya dimatikan.
+            val config = if (ModelCatalog.byId(activeId)?.thinks == true)
+                ConversationConfig(samplerConfig = sampler, thinkingConfig = ThinkingConfig(false))
+            else ConversationConfig(samplerConfig = sampler)
             val c = e.createConversation(config)
             try {
                 var acc = ""
@@ -315,9 +354,14 @@ class LocalAi(private val context: Context) {
                 throw t
             } finally {
                 runCatching { c.close() }
+                touch()
             }
         }
     }
+
+    /** Frasa waktu yang layak diingatkan dari sebuah catatan, atau null bila tidak ada. */
+    suspend fun reminderPhrase(title: String, body: String): String? =
+        AiText.parseReminder(generate(AiText.reminderPrompt(title, body)))
 
     suspend fun suggestTags(title: String, body: String, existing: List<String>): List<String> =
         TextTools.parseList(AiText.strip(generate(AiText.tagsPrompt(title, body, existing))), 5).map(TextTools::normalizeTag)

@@ -1,12 +1,16 @@
 package com.catatanku.app
 
 /** Aksi bantu-tulis. [replaces] = hasilnya wajar menggantikan isi (bukan ditambahkan). */
-enum class AiAction(val label: String, val hint: String, val replaces: Boolean = false, val forTitle: Boolean = false) {
+enum class AiAction(
+    val label: String, val hint: String, val replaces: Boolean = false, val forTitle: Boolean = false,
+    /** Catatan yang lebih panjang dari jendela model diproses bagian demi bagian, bukan dipotong. */
+    val wholeNote: Boolean = false,
+) {
     Continue("Lanjutkan tulisan", "Menulis satu–dua paragraf berikutnya"),
-    Fix("Perbaiki ejaan", "Ejaan dan tata bahasa, makna tetap", replaces = true),
+    Fix("Perbaiki ejaan", "Ejaan dan tata bahasa, makna tetap", replaces = true, wholeNote = true),
     Tidy("Rapikan struktur", "Dikelompokkan dengan subjudul dan poin", replaces = true),
-    Summarize("Ringkas", "Menjadi 3–5 poin"),
-    Tasks("Ambil daftar tugas", "Tugas dijadikan daftar centang"),
+    Summarize("Ringkas", "Menjadi 3–5 poin", wholeNote = true),
+    Tasks("Ambil daftar tugas", "Tugas dijadikan daftar centang", wholeNote = true),
     Title("Buat judul", "Maksimal enam kata", forTitle = true),
     Custom("Instruksi bebas", ""),
 }
@@ -18,6 +22,111 @@ object AiText {
 
     fun clip(text: String, max: Int = maxInput, fromEnd: Boolean = false): String =
         if (text.length <= max) text else if (fromEnd) text.takeLast(max) else text.take(max)
+
+    const val MAX_PARTS = 8
+
+    /**
+     * Membagi teks panjang menjadi bagian ≤ [max] huruf di batas paragraf, baris, kalimat, atau kata.
+     * Bagian-bagian itu bila disambung kembali persis sama dengan teks asal; yang melebihi [limit] bagian dibuang.
+     */
+    fun chunks(text: String, max: Int = maxInput, limit: Int = MAX_PARTS): List<String> {
+        val out = ArrayList<String>()
+        var rest = text
+        while (rest.length > max && out.size < limit) {
+            val w = rest.substring(0, max)
+            val half = max / 2
+            var cut = w.lastIndexOf("\n\n").let { if (it >= half) it + 2 else -1 }
+            if (cut < 0) cut = w.lastIndexOf('\n').let { if (it >= half) it + 1 else -1 }
+            if (cut < 0) cut = listOf(". ", "! ", "? ").maxOf { w.lastIndexOf(it) }.let { if (it >= half) it + 2 else -1 }
+            if (cut < 0) cut = w.lastIndexOf(' ').let { if (it >= half) it + 1 else max }
+            out += rest.substring(0, cut); rest = rest.substring(cut)
+        }
+        if (rest.isNotEmpty() && out.size < limit) out += rest
+        return out
+    }
+
+    /** Prompt untuk satu bagian dari catatan panjang (lihat [AiAction.wholeNote]). */
+    fun partPrompt(action: AiAction, title: String, part: String, index: Int, total: Int): String {
+        val text = part.trim()
+        return when (action) {
+            AiAction.Summarize ->
+                "Berikut bagian ${index + 1} dari $total sebuah catatan panjang" + (if (title.isNotBlank()) " berjudul \"${title.take(120)}\"" else "") +
+                    ". Ringkas bagian ini menjadi 2 sampai 3 poin singkat, tiap poin diawali \"• \". Gunakan bahasa yang sama " +
+                    "dengan catatan, teks polos tanpa tanda * atau #. Tulis HANYA poin-poinnya.\n\n$text\n\nRingkasan:"
+            else -> prompt(action, "", text)
+        }
+    }
+
+    fun mergeSummaryPrompt(title: String, points: String): String =
+        "Berikut poin-poin ringkasan dari bagian-bagian sebuah catatan panjang" + (if (title.isNotBlank()) " berjudul \"${title.take(120)}\"" else "") +
+            ". Gabungkan menjadi 3 sampai 5 poin terpenting tanpa mengulang, tiap poin diawali \"• \". Jangan menambah " +
+            "informasi baru. Gunakan bahasa yang sama, teks polos tanpa tanda * atau #. Tulis HANYA poin-poinnya.\n\n" +
+            clip(points) + "\n\nRingkasan akhir:"
+
+    /** Baris daftar centang yang belum dicentang. */
+    fun openTasks(body: String): List<String> =
+        body.lineSequence().map { it.trim() }.filter { it.startsWith("☐") && it.length > 2 }.toList()
+
+    /** Menggabungkan daftar tugas dari beberapa bagian: tanpa duplikat dan tanpa baris "Tidak ada tugas". */
+    fun mergeTasks(parts: List<String>): String =
+        parts.flatMap { it.lines() }.map { it.trim() }.filter { it.startsWith("☐") }.distinctBy { it.lowercase() }
+            .joinToString("\n").ifBlank { "Tidak ada tugas." }
+
+    /**
+     * Potongan [size] huruf dari [body] yang paling banyak memuat kata-kata [query]. Catatan panjang sering
+     * menyimpan jawabannya jauh dari awal, jadi mengambil bagian depan saja membuat AI "tidak menemukan".
+     */
+    fun bestWindow(body: String, query: String, size: Int): String {
+        if (body.length <= size) return body
+        val words = TextTools.tokenize(query).toSet()
+        val lower = body.lowercase()
+        val hits = words.flatMap { w -> generateSequence(lower.indexOf(w)) { i -> lower.indexOf(w, i + w.length).takeIf { it >= 0 } }.takeWhile { it >= 0 }.toList() }.sorted()
+        if (hits.isEmpty()) return body.take(size)
+        // Jendela geser atas posisi kemunculan: cari awal yang memuat kemunculan terbanyak dalam [size] huruf.
+        var best = 0; var bestCount = 0; var j = 0
+        for (i in hits.indices) {
+            while (hits[j] < hits[i] - size * 3 / 4) j++
+            if (i - j + 1 > bestCount) { bestCount = i - j + 1; best = hits[j] }
+        }
+        var start = (best - size / 8).coerceAtLeast(0)
+        if (start > 0) start = (body.lastIndexOf('\n', start).takeIf { it >= start - 200 } ?: body.lastIndexOf(' ', start)).coerceAtLeast(0)
+        start = start.coerceAtMost(body.length - size)
+        return (if (start > 0) "… " else "") + body.substring(start, start + size).trim()
+    }
+
+    // ---------- Pengingat ----------
+
+    /**
+     * LLM hanya menulis ulang waktunya ke pola baku; tanggal sebenarnya dihitung [TimeParse].
+     * Model kecil buruk dalam aritmetika tanggal, tetapi cukup baik menemukan dan merumuskan ulang frasa.
+     */
+    fun reminderPrompt(title: String, body: String): String =
+        "Cari SATU jadwal atau tenggat terpenting yang akan datang di catatan berikut, yaitu yang paling perlu diingatkan.\n" +
+            "Jawab tepat dua baris, tanpa penjelasan:\n" +
+            "WAKTU: salin waktunya dari catatan lalu bakukan, seperti \"tanggal 24 November jam 10.00\", \"besok jam 19.00\", " +
+            "\"lusa jam 18.00\", atau \"Jumat jam 15.00\". Jangan menghitung tanggal sendiri; pertahankan kata besok, lusa, atau nama harinya.\n" +
+            "HAL: apa yang perlu diingat, maksimal 8 kata\n" +
+            "Jika catatan tidak memuat jadwal atau tenggat, jawab: WAKTU: -\n\n" +
+            "Catatan:\n" + (if (title.isNotBlank()) "Judul: ${title.take(120)}\n" else "") + clip(body, 2400) + "\n\nWAKTU:"
+
+    /** Mengambil frasa waktu dari jawaban [reminderPrompt]; null bila model menyatakan tidak ada. */
+    fun parseReminder(raw: String): String? {
+        val lines = strip(raw).lines().map { it.trim().trim('*', '#', ' ') }.filter { it.isNotEmpty() }
+        val line = lines.firstOrNull { it.startsWith("WAKTU:", ignoreCase = true) }?.substringAfter(':')
+            ?: lines.firstOrNull()?.takeIf { !it.startsWith("HAL", ignoreCase = true) }
+        return line?.trim { it in " *#\"'“”.`" }?.takeIf { it.length >= 3 }
+    }
+
+    // ---------- Rekap ----------
+
+    fun recapPrompt(notes: List<Pair<String, String>>): String {
+        val per = ((if (maxInput > 4000) 5000 else 2400) / notes.size.coerceAtLeast(1)).coerceAtMost(900)
+        val ctx = notes.mapIndexed { i, (t, b) -> "[${i + 1}] ${t.ifBlank { "(tanpa judul)" }.take(80)}\n${clip(b, per)}" }.joinToString("\n\n")
+        return "Berikut catatan pribadi yang ditulis atau diubah dalam 7 hari terakhir. Buat rekap singkat: 3 sampai 6 poin " +
+            "tentang hal terpenting dan yang masih perlu dikerjakan, tiap poin diawali \"• \" dan diakhiri nomor catatannya, " +
+            "misalnya [2]. Pakai hanya isi catatan; jangan mengarang. Bahasa sama dengan catatan, teks polos tanpa tanda * atau #.\n\n" +
+            "$ctx\n\nRekap:"
+    }
 
     fun prompt(action: AiAction, title: String, body: String, custom: String = ""): String {
         val note = (if (title.isNotBlank()) "Judul: ${title.take(120)}\n" else "") + clip(body)
@@ -117,7 +226,7 @@ object AiText {
 
     fun askPrompt(question: String, sources: List<Pair<String, String>>): String {
         val per = ((if (maxInput > 4000) 4000 else 2400) / sources.size.coerceAtLeast(1)).coerceAtMost(if (maxInput > 4000) 1500 else 900)
-        val ctx = sources.mapIndexed { i, (t, b) -> "[${i + 1}] ${t.ifBlank { "(tanpa judul)" }.take(80)}\n${clip(b, per)}" }
+        val ctx = sources.mapIndexed { i, (t, b) -> "[${i + 1}] ${t.ifBlank { "(tanpa judul)" }.take(80)}\n${bestWindow(b, question, per)}" }
             .joinToString("\n\n")
         return "Jawab pertanyaan HANYA berdasarkan catatan pribadi di bawah. Tulis jawabannya dalam satu atau dua " +
             "kalimat lengkap yang memuat faktanya, lalu akhiri dengan nomor catatan sumbernya, misalnya [1]. " +

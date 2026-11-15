@@ -109,15 +109,63 @@ class AiTextTest {
     }
 
     @Test fun catalogIsConsistent() {
-        assertEquals("gemma4-e2b", ModelCatalog.recommended(8).id)
-        assertEquals("qwen25-15b", ModelCatalog.recommended(6).id)
-        assertEquals("qwen25-15b", ModelCatalog.recommended(3).id)
-        assertEquals("gemma4-e4b", ModelCatalog.recommended(12).id)
+        // Gemma 4 E2B paling hemat RAM pada pengukuran, jadi disarankan untuk semua ukuran RAM.
+        listOf(3, 6, 8, 12).forEach { assertEquals("gemma4-e2b", ModelCatalog.recommended(it).id) }
         ModelCatalog.all.forEach {
             assertTrue(it.url.startsWith("https://huggingface.co/") && it.url.contains("/resolve/") && it.sha256.length == 64)
-            assertTrue(it.fileName.endsWith(".litertlm") && it.minRamGb <= it.recRamGb)
+            assertTrue(it.fileName.endsWith(".litertlm") && it.minRamGb <= it.recRamGb && it.tier.isNotBlank())
         }
         assertEquals(ModelCatalog.all.size, ModelCatalog.all.map { it.id }.toSet().size)
+        assertEquals(ModelCatalog.all.size, ModelCatalog.all.map { it.fileName }.toSet().size)
+        assertTrue(ModelCatalog.all.first { it.id == "qwen25-15b" }.legacy)      // tetap dikenali bagi yang sudah mengunduh
+    }
+
+    @Test fun chunksRebuildTheOriginal() {
+        val text = (1..60).joinToString("\n\n") { "Paragraf $it. " + "Kalimat pengisi yang cukup panjang. ".repeat(6) }
+        val parts = AiText.chunks(text, 1000, limit = 100)
+        assertEquals(text, parts.joinToString(""))
+        assertTrue(parts.all { it.length <= 1000 } && parts.size > 5)
+        assertTrue("potong di batas paragraf", parts.dropLast(1).all { it.endsWith("\n\n") })
+        assertEquals(listOf("pendek"), AiText.chunks("pendek", 1000))
+        assertEquals(3, AiText.chunks("x".repeat(5000), 1000, limit = 3).size)                // batas jumlah bagian
+        assertEquals("a".repeat(950) + " ", AiText.chunks("a".repeat(950) + " " + "b".repeat(500), 1000).first())
+    }
+
+    @Test fun partPromptsStayWithinBudget() {
+        AiText.maxInput = 2800
+        val parts = AiText.chunks("kata ".repeat(5000))
+        assertEquals(AiText.MAX_PARTS, parts.size)
+        listOf(AiAction.Summarize, AiAction.Tasks, AiAction.Fix).forEach { a ->
+            assertTrue(a.wholeNote)
+            parts.forEachIndexed { i, p -> assertTrue(AiText.partPrompt(a, "Judul", p, i, parts.size).length < 3600) }
+        }
+        assertTrue(AiText.mergeSummaryPrompt("Judul", "• poin\n".repeat(2000)).length < 3400)
+        assertTrue(AiText.recapPrompt(List(8) { "Judul" to "kata ".repeat(5000) }).length < 3600)
+        assertTrue(AiText.reminderPrompt("Judul", "kata ".repeat(5000)).length < 3400)
+    }
+
+    @Test fun tasksAreMergedWithoutDuplicates() {
+        assertEquals("☐ Beli oli\n☐ Bayar pajak", AiText.mergeTasks(listOf("☐ Beli oli\nTidak ada tugas.", "Tidak ada tugas.", "☐ beli oli\n☐ Bayar pajak")))
+        assertEquals("Tidak ada tugas.", AiText.mergeTasks(listOf("Tidak ada tugas.", "")))
+        assertEquals(listOf("☐ Rina siapkan materi"), AiText.openTasks("☑ selesai\n  ☐ Rina siapkan materi\n☐\nteks biasa"))
+    }
+
+    @Test fun bestWindowFindsTheRelevantPassage() {
+        val body = "Pembuka yang tidak penting. ".repeat(80) + "\nServis motor berikutnya awal Januari di bengkel Jaya.\n" + "Penutup lain. ".repeat(80)
+        val w = AiText.bestWindow(body, "kapan servis motor berikutnya?", 400)
+        assertTrue(w, w.contains("awal Januari") && w.length <= 410)
+        assertEquals("pendek", AiText.bestWindow("pendek", "apa saja", 400))
+        assertEquals(body.take(400), AiText.bestWindow(body, "zzzz", 400))                       // tak ada kecocokan: bagian awal
+        AiText.maxInput = 2800
+        assertTrue(AiText.askPrompt("kapan servis motor berikutnya?", listOf("Motor" to body)).contains("awal Januari"))
+    }
+
+    @Test fun reminderAnswerIsParsed() {
+        assertEquals("tanggal 24 November jam 10.00", AiText.parseReminder(" tanggal 24 November jam 10.00\nHAL: rapat tim"))
+        assertEquals("besok jam 19.00", AiText.parseReminder("**WAKTU:** \"besok jam 19.00\"\nHAL: jemput ibu"))
+        assertEquals(null, AiText.parseReminder("WAKTU: -"))
+        assertEquals(null, AiText.parseReminder("-"))
+        assertEquals(null, AiText.parseReminder("<think>mungkin besok</think>"))
     }
 
     @Test fun wordCount() = assertEquals(3, AiText.wordCount("  satu dua\n tiga "))
