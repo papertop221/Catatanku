@@ -1,8 +1,11 @@
 package com.catatanku.app
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -201,7 +204,11 @@ internal fun Notices(state: SnackbarHostState) = SnackbarHost(state) { data ->
 }
 
 internal fun copyText(ctx: Context, text: String) {
-    (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Catatan", text))
+    val clip = ClipData.newPlainText("Catatan", text)
+    if (Build.VERSION.SDK_INT >= 33 && ctx.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("lock", false)) {
+        clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+    }
+    (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
 }
 
 /** Keterangan pengingat sebuah catatan: waktu, pengulangan, dan gaya alarm. */

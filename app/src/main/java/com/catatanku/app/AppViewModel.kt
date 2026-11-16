@@ -87,8 +87,8 @@ class Stats(notes: List<Note>) {
 object AutoBackup {
     const val KEEP = 7
 
-    /** Menulis cadangan hari ini (menimpa berkas hari yang sama) dan menyisakan [KEEP] berkas terbaru. */
-    fun write(ctx: Context, tree: Uri, json: String): String {
+    /** Menulis cadangan hari ini (menimpa berkas hari yang sama) dan menyisakan [KEEP] berkas terbaru secara streaming. */
+    fun write(ctx: Context, tree: Uri, notes: List<Note>): String {
         val cr = ctx.contentResolver
         val dirId = DocumentsContract.getTreeDocumentId(tree)
         val dir = DocumentsContract.buildDocumentUriUsingTree(tree, dirId)
@@ -100,7 +100,7 @@ object AutoBackup {
         val name = "catatanku-" + SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) + ".json"
         val target = existing.firstOrNull { it.second == name }?.let { DocumentsContract.buildDocumentUriUsingTree(tree, it.first) }
             ?: DocumentsContract.createDocument(cr, dir, "application/json", name) ?: error("berkas tidak bisa dibuat")
-        cr.openOutputStream(target, "wt")!!.use { it.write(json.toByteArray()) }
+        cr.openOutputStream(target, "wt")!!.use { Backup.writeJson(notes, it, pretty = false) }
         existing.filter { it.second != name }.sortedByDescending { it.second }.drop(KEEP - 1).forEach {
             runCatching { DocumentsContract.deleteDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, it.first)) }
         }
@@ -122,6 +122,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var stats by mutableStateOf(Stats(emptyList())); private set
     var loaded by mutableStateOf(false); private set                      // pembacaan pertama dari basis data sudah selesai
     var index by mutableStateOf(SearchIndex(emptyList())); private set    // tanpa sampah; diperbarui di latar
+    private var notesById: Map<Long, Note> = emptyMap()                   // peta id->catatan terbaru, termasuk saat editor menunda bangun ulang daftar
+    private var listStale = false
     private var writeGen = 0                                              // bertambah tiap daftar di memori diubah langsung
     private var indexJob: Job? = null
     private var searchJob: Job? = null
@@ -256,8 +258,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Daftar catatan berubah: perbarui ringkasan dan daftar yang tampil sekarang juga, indeks pencarian di latar. */
     private fun applyNotes(list: List<Note>) {
+        listStale = false
         notes = list
         stats = Stats(list)
+        notesById = stats.byId
         today = dueToday(list)
         refreshShown()
         indexJob?.cancel()
@@ -281,18 +285,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (gen != writeGen) continue       // ada simpan selagi membaca: baca lagi agar tidak menimpa yang lebih baru
             // Catatan yang tidak berubah memakai objek lama, sehingga barisnya tidak digambar ulang dan
             // fiturnya di indeks pencarian tidak dihitung ulang.
-            val old = stats.byId
+            val old = notesById
             applyNotes(read.map { n -> old[n.id]?.takeIf { it == n } ?: n })
             loaded = true
             return
         }
     }
 
-    /** Menaruh hasil simpan langsung ke daftar di memori, tanpa membaca ulang seluruh basis data. */
-    private fun putLocal(n: Note) {
+    /** Menaruh hasil simpan langsung ke daftar di memori; selama di Editor, bangun ulang indeks/daftar ditunda sampai keluar. */
+    private fun putLocal(n: Note, deferList: Boolean = false) {
         writeGen++
         val i = notes.indexOfFirst { it.id == n.id }
-        applyNotes(if (i < 0) notes + n else notes.toMutableList().also { it[i] = n })
+        val updatedList = if (i < 0) notes + n else notes.toMutableList().also { it[i] = n }
+        if (deferList) {
+            notes = updatedList
+            notesById = notesById + (n.id to n)
+            listStale = true
+        } else {
+            applyNotes(updatedList)
+        }
+    }
+
+    private fun flushListIfStale() {
+        if (listStale) applyNotes(notes)
     }
 
     private fun dropLocal(id: Long) { writeGen++; applyNotes(notes.filter { it.id != id }) }
@@ -352,7 +367,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         query = q; aiTerms = emptyList()
         refreshShown()
     }
-    fun go(s: Screen) { screen = s }
+    fun go(s: Screen) { if (s != Screen.Editor) flushListIfStale(); screen = s }
 
     /** Pencarian cerdas: LLM memperluas kata kunci, lalu mesin TF-IDF yang mencari. */
     fun expandQueryWithAi() {
@@ -408,7 +423,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveDraft() {
         val d = draft
         if (d.isBlank && d.id == 0L) return
-        val original = stats.byId[d.id]
+        val original = notesById[d.id]
         if (original != null && original.copy(updated = d.updated) == d) { clean = d; return }   // tak berubah
         // Tulis sinkron agar tidak ada catatan ganda bila simpan dipicu dua kali berdekatan. Satu baris dalam
         // mode WAL tanpa paksa-tulis hanya sepersekian milidetik (lihat NoteDb.onConfigure).
@@ -422,7 +437,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val saved = toSave.copy(id = persist(toSave, original))
         draft = saved; clean = saved
         if (opened == null) { opened = saved; snapshotDone = true }       // catatan baru: belum ada versi lama
-        putLocal(saved)
+        putLocal(saved, deferList = screen == Screen.Editor)
     }
 
     fun closeEditor() {
@@ -432,17 +447,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (fresh && d.id != 0L && d.isBlank && !d.hasReminder) {
             dropLocal(d.id)
             appScope.launch { db.delete(d.id) }
-        } else if (autoOrganize) organizeInBackground(d.id)
+        } else {
+            flushListIfStale()
+            if (autoOrganize) organizeInBackground(d.id)
+        }
     }
-    fun openRelated(note: Note) { saveDraft(); open(note) }
+    fun openRelated(note: Note) { saveDraft(); flushListIfStale(); open(note) }
 
     /** Hapus = pindah ke sampah (bisa dipulihkan 30 hari). */
     fun trashDraft() {
         stopAi()
-        if (draft.id == 0L) { draft = Note(); screen = Screen.List; return }
+        if (draft.id == 0L) { draft = Note(); screen = Screen.List; flushListIfStale(); return }
         val pinned = draft.pinned
         draft = draft.copy(deletedAt = System.currentTimeMillis(), pinned = false)
-        saveDraft(); screen = Screen.List
+        saveDraft(); screen = Screen.List; flushListIfStale()
         val id = draft.id
         say("Dipindah ke Sampah.", "Urungkan") { stats.byId[id]?.let { update(it.copy(deletedAt = 0, pinned = pinned)) } }
     }
@@ -456,6 +474,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             dropLocal(id)
             appScope.launch { db.delete(id); Reminders.clear(ctx, id); Attachments.cleanup(ctx, db.all()) }
             markDirty()
+        } else {
+            flushListIfStale()
         }
     }
 
@@ -627,7 +647,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun changeReminder(id: Long, f: (Note) -> Note) {
         if (screen == Screen.Editor && draft.id == id) { draft = f(draft); saveDraft() }
-        else stats.byId[id]?.let { update(f(it)) }
+        else notesById[id]?.let { update(f(it)) }
     }
 
     fun saveReminder(at: Long, repeat: Repeat, alarm: Boolean) {
@@ -695,7 +715,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Catatan yang mirip dengan [d]. Aman dipanggil dari thread latar. */
     fun relatedTo(d: Note): List<Note> {
-        val byId = stats.byId
+        val byId = notesById
         return index.related(d.title, d.body, d.tags, d.id).mapNotNull { byId[it.id] }
     }
 
@@ -1185,33 +1205,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun renameFolder(oldName: String, newName: String) {
-        val target = newName.trim().take(30)
-        if (target.isEmpty() || target == oldName) return
-        val affected = notes.filter { !it.inTrash && it.folder == oldName }
-        if (affected.isEmpty()) return
-        affected.forEach { persist(it.copy(folder = target)) }
-        view = NoteView.Folder(target)
-        viewModelScope.launch { reload() }
-        say("Folder diubah menjadi $target.", "Urungkan") {
-            affected.forEach { old -> stats.byId[old.id]?.let { persist(it.copy(folder = oldName)) } }
-            view = NoteView.Folder(oldName)
-            viewModelScope.launch { reload() }
+    private fun moveFolderNotes(from: String, to: String, nextView: NoteView, undoView: NoteView, message: String) {
+        val affectedIds = notes.filter { !it.inTrash && it.folder == from }.map { it.id }.toSet()
+        if (affectedIds.isEmpty()) { view = nextView; return }
+        writeGen++
+        applyNotes(notes.map { if (it.id in affectedIds) it.copy(folder = to) else it })
+        view = nextView
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { db.moveFolder(from, to) }
+            markDirty()
+        }
+        say(message, "Urungkan") {
+            val restore = notes.filter { it.id in affectedIds }
+            if (restore.isNotEmpty()) {
+                writeGen++
+                applyNotes(notes.map { if (it.id in affectedIds) it.copy(folder = from) else it })
+                view = undoView
+                viewModelScope.launch {
+                    withContext(Dispatchers.IO) { restore.forEach { db.upsert(it.copy(folder = from)) } }
+                    markDirty()
+                }
+            }
         }
     }
 
-    fun dissolveFolder(name: String) {
-        val affected = notes.filter { !it.inTrash && it.folder == name }
-        if (affected.isEmpty()) { view = NoteView.All; return }
-        affected.forEach { persist(it.copy(folder = "")) }
-        view = NoteView.All
-        viewModelScope.launch { reload() }
-        say("Folder $name dibubarkan (catatan tetap ada).", "Urungkan") {
-            affected.forEach { old -> stats.byId[old.id]?.let { persist(it.copy(folder = name)) } }
-            view = NoteView.Folder(name)
-            viewModelScope.launch { reload() }
-        }
+    fun renameFolder(oldName: String, newName: String) {
+        val target = newName.trim().take(30)
+        if (target.isEmpty() || target == oldName) return
+        if (notes.none { !it.inTrash && it.folder == oldName }) return
+        moveFolderNotes(oldName, target, NoteView.Folder(target), NoteView.Folder(oldName), "Folder diubah menjadi $target.")
     }
+
+    fun dissolveFolder(name: String) =
+        moveFolderNotes(name, "", NoteView.All, NoteView.Folder(name), "Folder $name dibubarkan (catatan tetap ada).")
 
     // ============================== Pengaturan ==============================
 
@@ -1236,16 +1262,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val data = notes      // termasuk Sampah, agar cadangan benar-benar lengkap
             withContext(Dispatchers.IO) {
-                ctx.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Backup.toJson(data).toByteArray()) }
+                ctx.contentResolver.openOutputStream(uri, "wt")!!.use { Backup.writeJson(data, it, pretty = true) }
             }
             say("${data.size} catatan diekspor.")
         } catch (e: Throwable) { say("Ekspor gagal: ${e.message}") }
     }
 
+    private fun readBoundedUtf8(uri: Uri, maxBytes: Long): String {
+        val stream = ctx.contentResolver.openInputStream(uri) ?: error("berkas tidak terbaca")
+        return stream.use { input ->
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            var total = 0L
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                total += n
+                if (total > maxBytes) error("berkas terlalu besar (maks ${maxBytes / (1024 * 1024)} MB)")
+                out.write(buf, 0, n)
+            }
+            out.toString(Charsets.UTF_8.name())
+        }
+    }
+
     fun importFrom(uri: Uri) = viewModelScope.launch {
         try {
             val n = withContext(Dispatchers.IO) {
-                val text = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() }
+                if (!Attachments.isSafeExternalUri(ctx, uri)) error("sumber berkas tidak diizinkan")
+                val text = readBoundedUtf8(uri, Backup.MAX_IMPORT_BYTES)
                 val seen = db.all().map { it.title to it.body }.toSet()
                 val now = System.currentTimeMillis()
                 Backup.fromJson(text).filter { (it.title to it.body) !in seen }.map { n ->
@@ -1283,7 +1327,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         appScope.launch {
             try {
                 dirty = false       // perubahan sesudah titik ini menandainya lagi
-                AutoBackup.write(ctx, Uri.parse(tree), Backup.toJson(db.all()))
+                AutoBackup.write(ctx, Uri.parse(tree), db.all())
                 val now = System.currentTimeMillis()
                 prefs.edit().putBoolean("dirty", dirty).putLong("backup_at", now).remove("backup_error").apply()
                 backupAt = now; backupError = null
@@ -1306,16 +1350,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             say("Setel dulu kunci layar HP (PIN, pola, atau sidik jari).")
             return false
         }
-        lockEnabled = on; locked = false
+        lockEnabled = on; locked = false; leftAt = 0L
         prefs.edit().putBoolean("lock", on).apply()
         return true
     }
 
-    fun unlocked() { locked = false }
+    fun unlocked() { locked = false; leftAt = 0L }
+    fun shouldDeferForLock(): Boolean { enforceLockIfExpired(); return locked }
+    private fun enforceLockIfExpired() {
+        if (lockEnabled && leftAt != 0L && System.currentTimeMillis() - leftAt > LOCK_GRACE_MS) locked = true
+    }
     /** Dari pintasan ikon atau asisten: daftar pengingat, daftar tugas belum selesai, atau fokus kolom perintah. */
-    fun showReminders() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.Reminders }
-    fun showTasks() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.All; askOpenTasks() }
-    fun openAssist() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.All; searchFocusTick++ }
+    fun showReminders() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; view = NoteView.Reminders }
+    fun showTasks() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; view = NoteView.All; askOpenTasks() }
+    fun openAssist() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; view = NoteView.All; searchFocusTick++ }
 
     /** Hanya untuk uji tangkapan layar. */
     internal fun debugLock() { locked = true }
@@ -1328,7 +1376,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onReturn() {
-        if (lockEnabled && leftAt != 0L && System.currentTimeMillis() - leftAt > LOCK_GRACE_MS) locked = true
+        enforceLockIfExpired()
+        leftAt = 0L
+        flushListIfStale()
         if (prefs.getBoolean("dirty", false)) dirty = true      // ada catatan yang disimpan dari luar layar ini
         // Pengingat yang ditahan sistem diberitahukan sekali, dengan jalan menuju perbaikannya.
         val (late, at) = Reminders.lastLate(ctx)

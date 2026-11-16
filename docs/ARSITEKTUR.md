@@ -41,8 +41,11 @@ State disimpan sebagai `mutableStateOf` di ViewModel; layar hanya membaca dan me
 Navigasi adalah satu enum `Screen` (daftar, editor, pengaturan).
 
 Yang mahal dihitung sekali saat data berubah, bukan tiap layar digambar: `Stats` (tag, folder, jumlah), `shown`
-(daftar yang tampil), dan `today`. Simpan dari editor menaruh hasilnya langsung ke daftar di memori (`putLocal`);
-basis data hanya dibaca ulang seluruhnya bila berubah di luar layar (alarm, impor, proses latar).
+(daftar yang tampil), dan `today`. Selama pengguna menyunting di Editor (`deferList`), simpan otomatis hanya memperbarui
+catatan dan peta `notesById` di memori, lalu menunda pembaruan `Stats`/`SearchIndex` hingga keluar dari Editor atau
+berpindah catatan agar mengetik tetap ringan di HP spek rendah. Basis data hanya dibaca ulang seluruhnya bila berubah
+di luar layar (alarm, impor, proses latar), dan pemindahan/pembubaran folder dijalankan dalam satu transaksi di
+`Dispatchers.IO` (`NoteDb.moveFolder`).
 
 ## Pencarian
 
@@ -210,12 +213,15 @@ dan menyemat dengan kalimat bebas paling sering keliru. Kecepatan di HP dan mode
   langsung disimpan sebagai catatan, disimpan beserta pengingat bila `TimeParse.best(text)` menemukan waktu, atau
   diolah dengan AI lokal (Ringkas, Perbaiki ejaan, Ambil daftar tugas). Bila aplikasi asal mengizinkan penyuntingan
   (`EXTRA_PROCESS_TEXT_READONLY == false`), tombol utamanya mengganti teks terpilih di aplikasi asal lewat `RESULT_OK`.
-  Layar ini hanya menulis catatan baru dan tidak menampilkan catatan yang ada, sehingga aman dipakai walau kunci
+  Layar ini hanya menulis catatan baru dan tidak menampilkan catatan yang ada, serta menerapkan `FLAG_SECURE` bila kunci
   aplikasi aktif. Begitu ditutup (`onDestroy`), ia memberi sinyal `TRIM_MEMORY_UI_HIDDEN` ke `LocalAi.get(this)` agar
   model tidak menahan RAM.
 - **Tile Setelan Cepat (`QuickNoteTile`)**, **pintasan ikon dinamis (`publishShortcuts`)**, dan **intent publik**
   (`com.catatanku.app.NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS`) membuka `MainActivity` langsung ke catatan baru,
-  tampilan Pengingat, atau daftar tugas yang belum selesai.
+  tampilan Pengingat, atau daftar tugas yang belum selesai. Saat kunci aplikasi aktif, semua intent masuk (kecuali saat
+  sudah terautentikasi dan masa tenggang aktif) ditunda hingga pengguna membuka kunci, dan pembukaan dari notifikasi
+  pengingat (`EXTRA_OPEN`) diverifikasi dengan token rahasia per pemasangan (`EXTRA_TOKEN`). URI eksternal pada
+  `ACTION_SEND` dan impor disaring (`Attachments.isSafeExternalUri`) agar hanya `content://` pihak ketiga yang diterima.
 
 **Pengenal waktu** (`TimeParse`) deterministik: ekspresi reguler untuk tanggal, hari, jam, dan kata relatif, lalu
 dipasangkan per baris. LLM tidak menghitung tanggal. "Sarankan pengingat" hanya meminta LLM menyalin frasa waktunya
@@ -226,10 +232,17 @@ pengguna di lembar pengingat.
 
 - **Kunci aplikasi** memakai `BiometricPrompt` sistem dengan PIN layar sebagai cadangan (Android 8–9: layar konfirmasi
   kredensial). Aplikasi tidak menyimpan sandi. Jeda di bawah 60 detik (pemilih berkas, dialog izin) tidak mengunci
-  ulang. `FLAG_SECURE` menyembunyikan isi dari daftar aplikasi terbaru. Ini gerbang akses, bukan enkripsi: basis data
-  mengandalkan enkripsi penyimpanan bawaan Android.
-- **Cadangan otomatis** ditulis ke folder pilihan pengguna lewat Storage Access Framework saat aplikasi ditinggalkan
-  dan ada perubahan. Satu berkas per hari, 7 terakhir disimpan. Berkasnya JSON polos, tidak dienkripsi.
+  ulang, dan masa tenggang juga dicek di `onNewIntent` sebelum menjalankan aksi luar. `FLAG_SECURE` diterapkan di layar
+  utama maupun `ProcessTextActivity`, salinan papan klip ditandai `EXTRA_IS_SENSITIVE` (Android 13+) saat kunci aktif,
+  dan `EXTRA_OPEN` dilindungi token acak 128-bit per pemasangan (`SecureRandom`). Ini gerbang akses, bukan enkripsi: basis
+  data mengandalkan enkripsi penyimpanan bawaan Android.
+- **Validasi masukan & media**: `network_security_config.xml` menolak lalu lintas cleartext; semua pintu masuk URI menolak
+  `file://` dan otoritas paket internal; impor JSON dibatasi 32 MB dengan sanitasi nama lampiran (`img_*`/`aud_*`); transkode
+  audio membatasi laju sampel (`8–192 kHz`), kanal (`1–8`), serta batas waktu 10 detik; dan `AiText.sanitizeInput` membuang
+  token kendali templat model.
+- **Cadangan otomatis** ditulis streaming (`Backup.writeJson` via `JsonWriter`) ke folder pilihan pengguna lewat Storage
+  Access Framework saat aplikasi ditinggalkan dan ada perubahan. Satu berkas per hari, 7 terakhir disimpan. Berkasnya JSON
+  polos, tidak dienkripsi.
 - **Riwayat versi**: sekali per sesi sunting, keadaan catatan saat dibuka disimpan ke tabel `versions` sebelum isinya
   berubah. 20 versi terakhir per catatan.
 
@@ -258,9 +271,14 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 - **APK**: build rilis memakai R8 dan penyusutan sumber daya. Kode Java/Kotlin turun dari 24,8 MB menjadi 4,4 MB;
   APK dari 32,0 MB menjadi 25,2 MB. Sisanya hampir seluruhnya mesin AI native (`liblitertlm_jni.so`, 22,7 MB).
   Seluruh paket LiteRT-LM dikecualikan dari penyusutan karena dipanggil lewat JNI (`app/proguard-rules.pro`).
-- **Model AI** tidak dimuat saat aplikasi dibuka. Sebelum dimuat, RAM yang tersedia diperiksa; bila kurang, permintaan
-  ditolak dengan pesan yang jelas (bisa dipaksa lewat "Uji muat"). Model dilepas setelah menganggur, lebih cepat
-  begitu aplikasi ditinggalkan, dan segera bila sistem memberi sinyal kekurangan memori (`onTrimMemory`).
+- **Model AI** tidak dimuat saat aplikasi dibuka. Sebelum dimuat, RAM yang tersedia diperiksa (ditambah cadangan +200 MB
+  bila multimodal gambar/suara aktif); bila kurang, permintaan ditolak dengan pesan yang jelas (bisa dipaksa lewat "Uji
+  muat"). Bila inisialisasi GPU gagal di perangkat lawas, mesin otomatis jatuh ke CPU. Mode ringan memicu `System.gc()`
+  sebelum memuat model dan melepas sesi segera setelah selesai; cache native/XNNPACK ikut dihapus saat model dibuang.
+  Model juga dilepas setelah menganggur, lebih cepat begitu aplikasi ditinggalkan, dan segera bila sistem memberi sinyal
+  kekurangan memori (`onTrimMemory`).
+- **Media & UI**: lampiran gambar didekode di thread IO dengan `ImageDecoder` / `inSampleSize` + `RGB_565` (720 px untuk
+  pratinjau editor, ≤ 1600 px layar penuh), dan durasi rekaman dihitung di thread IO agar scroll daftar & editor tetap mulus.
 - **Jendela awal** memakai warna layar pertama, jadi tidak ada kilatan putih saat aplikasi dibuka.
 
 ## Pengujian

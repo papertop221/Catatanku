@@ -3,7 +3,6 @@ package com.catatanku.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -458,13 +459,12 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
     }
 
     previewImage?.let { name ->
-        val ctxLocal = LocalContext.current
-        val bmp = remember(name) { runCatching { BitmapFactory.decodeFile(Attachments.file(ctxLocal, name).absolutePath)?.asImageBitmap() }.getOrNull() }
+        val (done, bmp) = rememberAttachmentBitmap(name, Attachments.MAX_IMAGE_PX)
         AlertDialog(
             onDismissRequest = { previewImage = null },
             text = {
                 if (bmp != null) Image(bmp, "Gambar lampiran", Modifier.fillMaxWidth().clip(SmallShape), contentScale = ContentScale.FillWidth)
-                else Muted("Gambar tidak ditemukan.")
+                else if (done) Muted("Gambar tidak ditemukan.")
             },
             confirmButton = { TextAction("Tutup") { previewImage = null } },
             dismissButton = {
@@ -485,11 +485,21 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
 }
 
 @Composable
+private fun rememberAttachmentBitmap(name: String, maxPx: Int): Pair<Boolean, ImageBitmap?> {
+    val ctx = LocalContext.current
+    val state by produceState<Pair<Boolean, ImageBitmap?>>(false to null, name, maxPx) {
+        value = withContext(Dispatchers.IO) {
+            true to runCatching { Attachments.decodeSampled(ctx, name, maxPx)?.asImageBitmap() }.getOrNull()
+        }
+    }
+    return state
+}
+
+@Composable
 private fun AttachmentImageRow(
     name: String, hasModel: Boolean, onOpen: () -> Unit, onRead: () -> Unit, onTasks: () -> Unit, onRemove: () -> Unit,
 ) {
-    val ctx = LocalContext.current
-    val bmp = remember(name) { runCatching { BitmapFactory.decodeFile(Attachments.file(ctx, name).absolutePath)?.asImageBitmap() }.getOrNull() }
+    val (_, bmp) = rememberAttachmentBitmap(name, 720)
     Column(Modifier.fillMaxWidth().clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer)) {
         if (bmp != null) {
             Image(
@@ -514,7 +524,9 @@ private fun AttachmentAudioRow(
     name: String, playing: Boolean, hasModel: Boolean, onToggle: () -> Unit, onTranscribe: () -> Unit, onTasks: () -> Unit, onRemove: () -> Unit,
 ) {
     val ctx = LocalContext.current
-    val dur = remember(name) { Attachments.audioDurationSec(ctx, name) }
+    val dur by produceState(0, name) {
+        value = withContext(Dispatchers.IO) { Attachments.audioDurationSec(ctx, name) }
+    }
     Column(Modifier.fillMaxWidth().clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconAction(if (playing) AppIcons.Stop else AppIcons.Play, if (playing) "Hentikan putar" else "Putar rekaman", onClick = onToggle)

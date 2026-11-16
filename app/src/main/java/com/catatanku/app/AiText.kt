@@ -20,8 +20,16 @@ object AiText {
     /** Batas teks catatan yang dikirim ke model; model kecil punya jendela konteks sempit. */
     @Volatile var maxInput = 2800
 
-    fun clip(text: String, max: Int = maxInput, fromEnd: Boolean = false): String =
-        if (text.length <= max) text else if (fromEnd) text.takeLast(max) else text.take(max)
+    /** Membersihkan token kendali model dan karakter null agar teks luar diperlakukan sebagai data, bukan perintah. */
+    private val MODEL_TOKENS = Regex("(?i)<(?:/?think|/?start_of_turn|/?end_of_turn|\\|im_start\\||\\|im_end\\||\\|endoftext\\||bos|eos)>")
+
+    fun sanitizeInput(text: String): String =
+        text.replace("\u0000", "").replace(MODEL_TOKENS, " ")
+
+    fun clip(text: String, max: Int = maxInput, fromEnd: Boolean = false): String {
+        val clean = sanitizeInput(text)
+        return if (clean.length <= max) clean else if (fromEnd) clean.takeLast(max) else clean.take(max)
+    }
 
     const val MAX_PARTS = 8
 
@@ -47,21 +55,24 @@ object AiText {
 
     /** Prompt untuk satu bagian dari catatan panjang (lihat [AiAction.wholeNote]). */
     fun partPrompt(action: AiAction, title: String, part: String, index: Int, total: Int): String {
-        val text = part.trim()
+        val text = sanitizeInput(part).trim()
+        val safeTitle = sanitizeInput(title).take(120)
         return when (action) {
             AiAction.Summarize ->
-                "Berikut bagian ${index + 1} dari $total sebuah catatan panjang" + (if (title.isNotBlank()) " berjudul \"${title.take(120)}\"" else "") +
+                "Berikut bagian ${index + 1} dari $total sebuah catatan panjang" + (if (safeTitle.isNotBlank()) " berjudul \"$safeTitle\"" else "") +
                     ". Ringkas bagian ini menjadi 2 sampai 3 poin singkat, tiap poin diawali \"• \". Gunakan bahasa yang sama " +
                     "dengan catatan, teks polos tanpa tanda * atau #. Tulis HANYA poin-poinnya.\n\n$text\n\nRingkasan:"
             else -> prompt(action, "", text)
         }
     }
 
-    fun mergeSummaryPrompt(title: String, points: String): String =
-        "Berikut poin-poin ringkasan dari bagian-bagian sebuah catatan panjang" + (if (title.isNotBlank()) " berjudul \"${title.take(120)}\"" else "") +
+    fun mergeSummaryPrompt(title: String, points: String): String {
+        val safeTitle = sanitizeInput(title).take(120)
+        return "Berikut poin-poin ringkasan dari bagian-bagian sebuah catatan panjang" + (if (safeTitle.isNotBlank()) " berjudul \"$safeTitle\"" else "") +
             ". Gabungkan menjadi 3 sampai 5 poin terpenting tanpa mengulang, tiap poin diawali \"• \". Jangan menambah " +
             "informasi baru. Gunakan bahasa yang sama, teks polos tanpa tanda * atau #. Tulis HANYA poin-poinnya.\n\n" +
             clip(points) + "\n\nRingkasan akhir:"
+    }
 
     /** Baris daftar centang yang belum dicentang. */
     fun openTasks(body: String): List<String> =
@@ -111,7 +122,7 @@ object AiText {
             "\"lusa jam 18.00\", atau \"Jumat jam 15.00\". Jangan menghitung tanggal sendiri; pertahankan kata besok, lusa, atau nama harinya.\n" +
             "HAL: apa yang perlu diingat, maksimal 8 kata\n" +
             "Jika catatan tidak memuat jadwal atau tenggat, jawab: WAKTU: -\n\n" +
-            "Catatan:\n" + (if (title.isNotBlank()) "Judul: ${title.take(120)}\n" else "") + clip(body, 2400) + "\n\nWAKTU:"
+            "Catatan:\n" + (if (title.isNotBlank()) "Judul: ${sanitizeInput(title).take(120)}\n" else "") + clip(body, 2400) + "\n\nWAKTU:"
 
     /** Mengambil frasa waktu dari jawaban [reminderPrompt]; null bila model menyatakan tidak ada. */
     fun parseReminder(raw: String): String? {
@@ -125,7 +136,7 @@ object AiText {
 
     fun recapPrompt(notes: List<Pair<String, String>>): String {
         val per = ((if (maxInput > 4000) 5000 else 2400) / notes.size.coerceAtLeast(1)).coerceAtMost(900)
-        val ctx = notes.mapIndexed { i, (t, b) -> "[${i + 1}] ${t.ifBlank { "(tanpa judul)" }.take(80)}\n${clip(b, per)}" }.joinToString("\n\n")
+        val ctx = notes.mapIndexed { i, (t, b) -> "[${i + 1}] ${sanitizeInput(t).ifBlank { "(tanpa judul)" }.take(80)}\n${clip(b, per)}" }.joinToString("\n\n")
         return "Berikut catatan pribadi yang ditulis atau diubah dalam 7 hari terakhir. Buat rekap singkat: 3 sampai 6 poin " +
             "tentang hal terpenting dan yang masih perlu dikerjakan, tiap poin diawali \"• \" dan diakhiri nomor catatannya, " +
             "misalnya [2]. Pakai hanya isi catatan; jangan mengarang. Bahasa sama dengan catatan, teks polos tanpa tanda * atau #.\n\n" +
@@ -133,7 +144,8 @@ object AiText {
     }
 
     fun prompt(action: AiAction, title: String, body: String, custom: String = ""): String {
-        val note = (if (title.isNotBlank()) "Judul: ${title.take(120)}\n" else "") + clip(body)
+        val safeTitle = sanitizeInput(title).take(120)
+        val note = (if (safeTitle.isNotBlank()) "Judul: $safeTitle\n" else "") + clip(body)
         val same = "Gunakan bahasa yang sama dengan catatan. Tulis teks polos tanpa format Markdown (tanpa tanda * atau #)."
         return when (action) {
             AiAction.Continue ->
@@ -160,7 +172,7 @@ object AiText {
                     "Tulis HANYA judulnya, tanpa tanda kutip.\n\n${clip(body, 1500)}\n\nJudul:"
             AiAction.Custom ->
                 "Kerjakan instruksi berikut terhadap catatan di bawah. Tulis HANYA hasilnya.\n\n" +
-                    "Instruksi: ${custom.take(300)}\n\nCatatan:\n$note\n\nHasil:"
+                    "Instruksi: ${sanitizeInput(custom).take(300)}\n\nCatatan:\n$note\n\nHasil:"
         }
     }
 
@@ -170,11 +182,11 @@ object AiText {
         return "Kamu memberi tag pada catatan pribadi. Beri 3 sampai 5 tag topik yang singkat " +
             "(1-2 kata, huruf kecil, bahasa yang sama dengan catatan).\n$known" +
             "Jawab HANYA dengan daftar tag dipisahkan koma, tanpa penjelasan.\n\n" +
-            "Judul: ${title.take(120)}\nIsi: ${clip(body, 1500)}\n\nTag:"
+            "Judul: ${sanitizeInput(title).take(120)}\nIsi: ${clip(body, 1500)}\n\nTag:"
     }
 
     fun expandPrompt(query: String): String =
-        "Seseorang mencari di catatan pribadinya dengan kata: \"${query.take(100)}\".\n" +
+        "Seseorang mencari di catatan pribadinya dengan kata: \"${sanitizeInput(query).take(100)}\".\n" +
             "Tuliskan 6 kata kunci lain yang berkaitan erat (sinonim, istilah terkait, " +
             "padanan bahasa Indonesia dan Inggris).\n" +
             "Jawab HANYA dengan kata kunci dipisahkan koma, tanpa penjelasan.\n\nKata kunci:"
@@ -200,7 +212,7 @@ object AiText {
             else "FOLDER: pilih SATU yang paling cocok dari [${folders.take(20).joinToString(", ")}], atau - bila tak ada yang cocok\n") +
             "TAG: 3 sampai 5 tag singkat huruf kecil dipisahkan koma" +
             (if (tags.isEmpty()) "" else ", utamakan dari [${tags.take(30).joinToString(", ")}]") + "\n\n" +
-            "Catatan:\n" + (if (title.isNotBlank()) "Judul saat ini: ${title.take(120)}\n" else "") +
+            "Catatan:\n" + (if (title.isNotBlank()) "Judul saat ini: ${sanitizeInput(title).take(120)}\n" else "") +
             clip(body, 1800) + "\n\nJUDUL:"
 
     data class Organized(val title: String, val folder: String, val tags: List<String>)
@@ -240,12 +252,12 @@ object AiText {
 
     fun askPrompt(question: String, sources: List<Pair<String, String>>): String {
         val per = ((if (maxInput > 4000) 4000 else 2400) / sources.size.coerceAtLeast(1)).coerceAtMost(if (maxInput > 4000) 1500 else 900)
-        val ctx = sources.mapIndexed { i, (t, b) -> "[${i + 1}] ${t.ifBlank { "(tanpa judul)" }.take(80)}\n${bestWindow(b, question, per)}" }
+        val ctx = sources.mapIndexed { i, (t, b) -> "[${i + 1}] ${sanitizeInput(t).ifBlank { "(tanpa judul)" }.take(80)}\n${bestWindow(sanitizeInput(b), question, per)}" }
             .joinToString("\n\n")
         return "Jawab pertanyaan HANYA berdasarkan catatan pribadi di bawah. Tulis jawabannya dalam satu atau dua " +
             "kalimat lengkap yang memuat faktanya, lalu akhiri dengan nomor catatan sumbernya, misalnya [1]. " +
             "Jika jawabannya tidak ada di catatan, katakan bahwa itu tidak ditemukan di catatan; jangan mengarang. " +
-            "Gunakan bahasa pertanyaan, teks polos.\n\n$ctx\n\nPertanyaan: ${question.take(300)}\nJawaban lengkap:"
+            "Gunakan bahasa pertanyaan, teks polos.\n\n$ctx\n\nPertanyaan: ${sanitizeInput(question).take(300)}\nJawaban lengkap:"
     }
 
     fun wordCount(text: String): Int = text.split(SPACES).count { it.isNotBlank() }

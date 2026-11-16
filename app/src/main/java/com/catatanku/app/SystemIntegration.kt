@@ -255,11 +255,13 @@ class ProcessTextActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val text = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.trim().orEmpty()
+        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
+        if (prefs.getBoolean("lock", false)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        val text = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.trim().orEmpty().take(100_000)
         val readOnly = intent?.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true) != false
         if (text.isEmpty()) { finish(); return }
         val time = TimeParse.best(text)?.at?.toMillis()
-        val dynamic = getSharedPreferences("ui", MODE_PRIVATE).getBoolean("dynamic_color", false)
+        val dynamic = prefs.getBoolean("dynamic_color", false)
         setContent {
             CatatankuTheme(dynamic) {
                 val aiState by ai.state.collectAsStateWithLifecycle()

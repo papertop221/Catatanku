@@ -44,10 +44,36 @@ Pengingat tahan penghemat baterai
   pengecualian pengoptimalan baterai Android
 - "Salin juga ke Kalender HP" di lembar pengingat sebagai cadangan tanpa meminta izin kalender
 
+Keamanan
+- Kunci aplikasi & intent masuk: saat kunci aktif, intent dari luar (`ACTION_SEND`, `EXTRA_OPEN`, pintasan, asisten) ditunda
+  sampai autentikasi berhasil, dan masa tenggang dicek sebelum `onNewIntent` memproses aksi apa pun
+- Pelindung notifikasi `EXTRA_OPEN`: token acak 128-bit per pemasangan (`SecureRandom`, dibandingkan dengan
+  `MessageDigest.isEqual`) mencegah aplikasi lain menandai pengingat selesai atau membuka catatan lewat intent tiruan
+- Tolak `file://` dan otoritas internal aplikasi pada semua pintu masuk URI eksternal (`ACTION_SEND`, impor gambar/suara,
+  impor cadangan JSON, impor model AI)
+- Batas baca impor cadangan 32 MB, sanitasi ketat nama lampiran (`img_*`/`aud_*`) dan panjang kolom JSON di `Backup.fromJson`,
+  validasi header WAV (`8–192 kHz`, `1–8` kanal) dan batas waktu 10 detik saat transkode audio
+- Perlindungan layar & papan klip saat kunci aktif: `FLAG_SECURE` di `ProcessTextActivity`, `ClipDescription.EXTRA_IS_SENSITIVE`
+  pada penyalinan (Android 13+), dan batas panjang teks masuk (`100.000` karakter)
+- Pengaman prompt AI (`AiText.sanitizeInput`): membuang byte nol dan token kendali templat percakapan (`<start_of_turn>`,
+  `<|im_start|>`, `<think>`, dll.), serta konfigurasi eksplisit `network_security_config.xml` (menolak lalu lintas cleartext)
+
+Performa & HP spek rendah
+- Menulis di Editor jauh lebih ringan: selama di Editor, simpan otomatis tidak membangun ulang `Stats` dan indeks pencarian
+  setiap jeda 0,7 detik; pembaruan daftar/indeks ditunda sampai keluar dari Editor atau berganti catatan
+- Dekode gambar lampiran secara asinkron di thread IO (`ImageDecoder` di Android 9+, `BitmapFactory.inSampleSize` +
+  `RGB_565` untuk pratinjau daftar 720px), serta hitung durasi audio di thread IO agar scroll dan pembukaan Editor tidak patah
+- Ekspor & cadangan otomatis memakai `JsonWriter` streaming (`O(1)` memori, tanpa menampung seluruh JSON sebagai string),
+  dan transkode audio menulis langsung ke berkas WAV tanpa buffer `ByteArrayOutputStream` raksasa di RAM
+- Pemindahan/pembubaran folder kini dijalankan dalam satu transaksi SQLite di `Dispatchers.IO` (`NoteDb.moveFolder`)
+- Model AI multimodal menyertakan cadangan tambahan +200 MB dalam pemeriksaan kecukupan RAM, langsung jatuh ke CPU bila
+  inisialisasi GPU gagal di perangkat lama, membersihkan cache native/XNNPACK saat model dihapus, dan memanggil `System.gc()`
+  sebelum memuat model pada mode ringan
+
 Lain-lain
 - `LocalAi` menjadi satu objek per proses agar layar utama dan lembar teks terpilih tidak memuat model dua kali
 - Pemformat waktu (`whenLabel`) memakai `DateTimeFormatter` bersama tanpa membuat `SimpleDateFormat` tiap baris;
-  filter bahasa sumber daya (`id`, `en`)
+  `NoteRow` menyimpannya lewat `remember`; filter bahasa sumber daya (`id`, `en`)
 
 ## 1.6
 Tampilan baru "Kertas & Tinta" (aturannya di docs/DESAIN.md)

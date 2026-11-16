@@ -1,9 +1,11 @@
 package com.catatanku.app
 
 import android.annotation.SuppressLint
+import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaCodec
@@ -13,10 +15,11 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import java.io.ByteArrayOutputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -41,32 +44,82 @@ object Attachments {
     fun isImage(name: String): Boolean = name.startsWith("img_")
     fun isAudio(name: String): Boolean = name.startsWith("aud_")
 
-    /** Menyalin dan mengecilkan gambar dari [uri] ke penyimpanan internal; mengembalikan nama berkasnya. */
+    /**
+     * Hanya menerima URI `content://` dari penyedia sistem/aplikasi lain; menolak `file://` maupun URI
+     * yang menunjuk otoritas paket ini sendiri agar tidak membaca berkas internal sandbox.
+     */
+    fun isSafeExternalUri(ctx: Context, uri: Uri): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
+        val auth = uri.authority?.lowercase().orEmpty()
+        val pkg = ctx.packageName.lowercase()
+        return auth != pkg && !auth.startsWith("$pkg.")
+    }
+
+    /** Menyalin dan mengecilkan gambar dari [uri] ke penyimpanan internal (sekaligus menghapus metadata EXIF); mengembalikan nama berkasnya. */
     fun importImage(ctx: Context, uri: Uri): String {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) error("Gambar tidak bisa dibaca.")
-        var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_IMAGE_PX) sample *= 2
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        val decoded = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
-            ?: error("Gambar tidak bisa dibuka.")
-        val longest = max(decoded.width, decoded.height)
-        val scaled = if (longest > MAX_IMAGE_PX) {
-            val ratio = MAX_IMAGE_PX.toFloat() / longest
-            val w = (decoded.width * ratio).roundToInt().coerceAtLeast(1)
-            val h = (decoded.height * ratio).roundToInt().coerceAtLeast(1)
-            Bitmap.createScaledBitmap(decoded, w, h, true).also { if (it !== decoded) decoded.recycle() }
-        } else decoded
+        if (!isSafeExternalUri(ctx, uri)) error("Sumber gambar tidak diizinkan.")
+        val bmp = if (Build.VERSION.SDK_INT >= 28) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(ctx.contentResolver, uri)) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                val longest = max(info.size.width, info.size.height)
+                if (longest > MAX_IMAGE_PX) {
+                    val ratio = MAX_IMAGE_PX.toFloat() / longest
+                    decoder.setTargetSize(
+                        (info.size.width * ratio).roundToInt().coerceAtLeast(1),
+                        (info.size.height * ratio).roundToInt().coerceAtLeast(1),
+                    )
+                }
+            }
+        } else {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) error("Gambar tidak bisa dibaca.")
+            var sample = 1
+            while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_IMAGE_PX) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            val decoded = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+                ?: error("Gambar tidak bisa dibuka.")
+            val longest = max(decoded.width, decoded.height)
+            if (longest > MAX_IMAGE_PX) {
+                val ratio = MAX_IMAGE_PX.toFloat() / longest
+                val w = (decoded.width * ratio).roundToInt().coerceAtLeast(1)
+                val h = (decoded.height * ratio).roundToInt().coerceAtLeast(1)
+                try {
+                    Bitmap.createScaledBitmap(decoded, w, h, true)
+                } finally {
+                    decoded.recycle()
+                }
+            } else decoded
+        }
         val name = "img_${System.currentTimeMillis()}_${(100..999).random()}.jpg"
         val out = file(ctx, name)
-        FileOutputStream(out).use { scaled.compress(Bitmap.CompressFormat.JPEG, 85, it) }
-        scaled.recycle()
+        try {
+            BufferedOutputStream(FileOutputStream(out), 16 * 1024).use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        } finally {
+            bmp.recycle()
+        }
         return name
+    }
+
+    /** Mendekode gambar secara hemat RAM (target ≤ [maxPx]) untuk pratinjau di daftar/editor tanpa membebani heap. */
+    fun decodeSampled(ctx: Context, name: String, maxPx: Int): Bitmap? {
+        val f = file(ctx, name)
+        if (!f.exists()) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(f.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        return BitmapFactory.decodeFile(f.absolutePath, opts)
     }
 
     /** Menyalin berkas suara yang dibagikan dari aplikasi lain (maks 25 MB), dan mengubahnya ke WAV 16kHz mono bila bisa agar dibaca model AI. */
     fun importAudio(ctx: Context, uri: Uri): String {
+        if (!isSafeExternalUri(ctx, uri)) error("Sumber audio tidak diizinkan.")
         val mime = ctx.contentResolver.getType(uri).orEmpty().lowercase()
         val ext = when {
             "wav" in mime -> "wav"
@@ -103,7 +156,7 @@ object Attachments {
         return name
     }
 
-    /** Mendekode berkas audio (m4a, mp3, ogg, aac) ke WAV 16 kHz mono lewat MediaExtractor/MediaCodec bawaan Android. */
+    /** Mendekode berkas audio (m4a, mp3, ogg, aac) ke WAV 16 kHz mono secara streaming (hemat RAM) lewat MediaExtractor/MediaCodec. */
     private fun transcodeToWav16k(src: File, dst: File): Boolean = runCatching {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
@@ -115,70 +168,71 @@ object Attachments {
             extractor.selectTrack(trackIdx)
             val fmt = extractor.getTrackFormat(trackIdx)
             val mime = fmt.getString(MediaFormat.KEY_MIME) ?: return false
-            val srcRate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-            val channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+            val srcRate = if (fmt.containsKey(MediaFormat.KEY_SAMPLE_RATE)) fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE) else return false
+            val channels = if (fmt.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 1
+            if (srcRate !in 8_000..192_000 || channels !in 1..8) return false
 
             val c = MediaCodec.createDecoderByType(mime)
             codec = c
             c.configure(fmt, null, null, 0)
             c.start()
 
-            val pcmOut = ByteArrayOutputStream()
-            val maxSamples = SAMPLE_RATE * 5 * 60   // batas 5 menit agar hemat RAM/ruang
-            var writtenSamples = 0
+            val maxSamples = SAMPLE_RATE * 5 * 60   // batas 5 menit agar hemat ruang
+            val deadlineNs = System.nanoTime() + 10_000_000_000L
+            var writtenSamples = 0L
             val info = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
             var posAcc = 0.0
             val step = srcRate.toDouble() / SAMPLE_RATE
 
-            while (!outputDone && writtenSamples < maxSamples) {
-                if (!inputDone) {
-                    val inIdx = c.dequeueInputBuffer(10_000)
-                    if (inIdx >= 0) {
-                        val buf = c.getInputBuffer(inIdx)!!
-                        val sampleSize = extractor.readSampleData(buf, 0)
-                        if (sampleSize < 0) {
-                            c.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            c.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
-                            extractor.advance()
+            BufferedOutputStream(FileOutputStream(dst), 16 * 1024).use { out ->
+                out.write(ByteArray(44))    // tempat untuk kepala WAV
+                while (!outputDone && writtenSamples < maxSamples && System.nanoTime() < deadlineNs) {
+                    if (!inputDone) {
+                        val inIdx = c.dequeueInputBuffer(10_000)
+                        if (inIdx >= 0) {
+                            val buf = c.getInputBuffer(inIdx)!!
+                            val sampleSize = extractor.readSampleData(buf, 0)
+                            if (sampleSize < 0) {
+                                c.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                inputDone = true
+                            } else {
+                                c.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
+                                extractor.advance()
+                            }
                         }
                     }
-                }
-                val outIdx = c.dequeueOutputBuffer(info, 10_000)
-                if (outIdx >= 0) {
-                    val buf = c.getOutputBuffer(outIdx)
-                    if (buf != null && info.size > 0) {
-                        buf.position(info.offset)
-                        buf.limit(info.offset + info.size)
-                        val shorts = buf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                        val frames = shorts.remaining() / channels
-                        var frameIdx = posAcc.toInt()
-                        while (frameIdx < frames && writtenSamples < maxSamples) {
-                            var sum = 0
-                            for (ch in 0 until channels) sum += shorts.get(frameIdx * channels + ch)
-                            val mono = (sum / channels).toShort()
-                            pcmOut.write(mono.toInt() and 0xFF)
-                            pcmOut.write((mono.toInt() ushr 8) and 0xFF)
-                            writtenSamples++
-                            posAcc += step
-                            frameIdx = posAcc.toInt()
+                    val outIdx = c.dequeueOutputBuffer(info, 10_000)
+                    if (outIdx >= 0) {
+                        val buf = c.getOutputBuffer(outIdx)
+                        if (buf != null && info.size > 0) {
+                            buf.position(info.offset)
+                            buf.limit(info.offset + info.size)
+                            val shorts = buf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                            val frames = shorts.remaining() / channels
+                            var frameIdx = posAcc.toInt()
+                            while (frameIdx < frames && writtenSamples < maxSamples) {
+                                var sum = 0
+                                for (ch in 0 until channels) sum += shorts.get(frameIdx * channels + ch)
+                                val mono = (sum / channels).toShort()
+                                out.write(mono.toInt() and 0xFF)
+                                out.write((mono.toInt() ushr 8) and 0xFF)
+                                writtenSamples++
+                                posAcc += step
+                                frameIdx = posAcc.toInt()
+                            }
+                            posAcc -= frames
+                            if (posAcc < 0) posAcc = 0.0
                         }
-                        posAcc -= frames
-                        if (posAcc < 0) posAcc = 0.0
+                        c.releaseOutputBuffer(outIdx, false)
+                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
                     }
-                    c.releaseOutputBuffer(outIdx, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
                 }
             }
-            val pcm = pcmOut.toByteArray()
-            if (pcm.size < 1600) return false
-            FileOutputStream(dst).use { out ->
-                out.write(wavHeader(pcm.size.toLong()))
-                out.write(pcm)
-            }
+            val pcmBytes = writtenSamples * 2
+            if (pcmBytes < 1600) return false
+            RandomAccessFile(dst, "rw").use { raf -> raf.seek(0); raf.write(wavHeader(pcmBytes)) }
             true
         } finally {
             runCatching { codec?.stop() }
@@ -260,7 +314,7 @@ class VoiceRecorder(private val ctx: Context) {
         worker = thread(name = "catatanku-mic") {
             var pcmBytes = 0L
             try {
-                FileOutputStream(target).use { out ->
+                BufferedOutputStream(FileOutputStream(target), 16 * 1024).use { out ->
                     out.write(ByteArray(44))    // tempat untuk kepala WAV
                     val buf = ByteArray(4096)
                     while (recording) {

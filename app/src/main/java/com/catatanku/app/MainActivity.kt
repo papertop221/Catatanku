@@ -24,36 +24,63 @@ import kotlinx.coroutines.flow.collectLatest
 class MainActivity : ComponentActivity() {
     val vm: AppViewModel by viewModels()
 
+    private var pendingIntent: Intent? = null
+
     /** Android 8–9: konfirmasi PIN/pola lewat layar sistem. */
     private val confirmCredential = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == RESULT_OK) vm.unlocked()
+        if (it.resultCode == RESULT_OK) { vm.unlocked(); replayPendingIntent() }
+    }
+
+    private fun replayPendingIntent() {
+        val pending = pendingIntent ?: return
+        pendingIntent = null
+        handleIntent(pending)
     }
 
     /** Teks yang dibagikan dari aplikasi lain menjadi catatan baru; notifikasi pengingat membuka catatannya. */
     private fun handleIntent(intent: Intent?) {
-        val remindId = intent?.getLongExtra(Reminders.EXTRA_OPEN, 0L) ?: 0L
+        if (intent == null) return
+        if (vm.shouldDeferForLock()) {
+            pendingIntent = intent
+            return
+        }
+        val remindId = intent.getLongExtra(Reminders.EXTRA_OPEN, 0L)
         if (remindId != 0L) {
-            intent?.removeExtra(Reminders.EXTRA_OPEN)       // jangan dibuka ulang saat layar diputar
-            vm.openFromReminder(remindId)
+            val token = intent.getStringExtra(Reminders.EXTRA_TOKEN)
+            intent.removeExtra(Reminders.EXTRA_OPEN)       // jangan dibuka ulang saat layar diputar
+            intent.removeExtra(Reminders.EXTRA_TOKEN)
+            if (Reminders.isValidOpenToken(this, token)) vm.openFromReminder(remindId)
             return
         }
         // Tile Setelan Cepat, pintasan ikon, asisten perangkat, dan aplikasi otomasi.
-        when (intent?.action) {
+        when (intent.action) {
             Actions.NEW_NOTE -> { vm.saveDraft(); vm.open(null); return }
             Actions.SHOW_REMINDERS -> { vm.showReminders(); return }
             Actions.SHOW_TASKS -> { vm.showTasks(); return }
             Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND -> { vm.openAssist(); return }
         }
-        if (intent?.action != Intent.ACTION_SEND) return
+        if (intent.action != Intent.ACTION_SEND) return
         val type = intent.type.orEmpty()
         val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty().take(120)
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty().take(100_000)
         @Suppress("DEPRECATION")
         val stream = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
         else intent.getParcelableExtra(Intent.EXTRA_STREAM)
         when {
-            type.startsWith("image/") && stream != null -> { vm.saveDraft(); vm.openSharedMedia(stream, isImage = true, title = subject, body = text) }
-            type.startsWith("audio/") && stream != null -> { vm.saveDraft(); vm.openSharedMedia(stream, isImage = false, title = subject, body = text) }
+            type.startsWith("image/") && stream != null -> {
+                if (Attachments.isSafeExternalUri(this, stream)) {
+                    vm.saveDraft(); vm.openSharedMedia(stream, isImage = true, title = subject, body = text)
+                } else {
+                    vm.say("Sumber berkas tidak didukung.")
+                }
+            }
+            type.startsWith("audio/") && stream != null -> {
+                if (Attachments.isSafeExternalUri(this, stream)) {
+                    vm.saveDraft(); vm.openSharedMedia(stream, isImage = false, title = subject, body = text)
+                } else {
+                    vm.say("Sumber berkas tidak didukung.")
+                }
+            }
             type == "text/plain" && text.isNotEmpty() -> { vm.saveDraft(); vm.open(Note(title = subject, body = text)) }
         }
     }
@@ -76,16 +103,18 @@ class MainActivity : ComponentActivity() {
                 b.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
             else @Suppress("DEPRECATION") b.setDeviceCredentialAllowed(true)
             b.build().authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) = vm.unlocked()
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) { vm.unlocked(); replayPendingIntent() }
                 override fun onAuthenticationError(code: Int, msg: CharSequence?) {
                     // Kunci layar HP sudah dihapus pengguna: tidak ada lagi yang bisa dipakai membuka, jadi jangan mengunci selamanya.
-                    if (getSystemService(KeyguardManager::class.java)?.isDeviceSecure != true) { vm.updateLock(false); applySecureFlag() }
+                    if (getSystemService(KeyguardManager::class.java)?.isDeviceSecure != true) {
+                        vm.updateLock(false); applySecureFlag(); replayPendingIntent()
+                    }
                 }
             })
         } else {
             val km = getSystemService(KeyguardManager::class.java)
             @Suppress("DEPRECATION") val i = km?.createConfirmDeviceCredentialIntent("Buka Catatanku", null)
-            if (i == null) { vm.updateLock(false); applySecureFlag() } else confirmCredential.launch(i)
+            if (i == null) { vm.updateLock(false); applySecureFlag(); replayPendingIntent() } else confirmCredential.launch(i)
         }
     }
 

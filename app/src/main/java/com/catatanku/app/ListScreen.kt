@@ -479,11 +479,12 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
                     if (n.hasReminder && !n.inTrash) {
                         // Amber = waktu. Pengingat yang sudah berbunyi tetapi belum ditandai selesai tampil merah agar tidak terlupa.
                         val tint = if (n.remindFired) MaterialTheme.colorScheme.error else timeColor
+                        val remLabel = remember(n.remindAt, n.remindRepeat, n.remindFired) {
+                            " " + (if (n.remindFired) "Terlewat · " else "") + whenLabel(n.remindAt) +
+                                if (n.remindRepeat != Repeat.None) ", ${n.remindRepeat.label.lowercase()}" else ""
+                        }
                         Icon(AppIcons.Bell, null, Modifier.size(12.dp), tint)
-                        Text(
-                            " " + (if (n.remindFired) "Terlewat · " else "") + whenLabel(n.remindAt) + if (n.remindRepeat != Repeat.None) ", ${n.remindRepeat.label.lowercase()}" else "",
-                            style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1,
-                        )
+                        Text(remLabel, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
                         Text("  ·  ", style = MaterialTheme.typography.labelSmall, color = muted)
                     }
                     Text(meta, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)

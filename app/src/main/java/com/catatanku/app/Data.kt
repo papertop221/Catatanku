@@ -5,8 +5,11 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.util.JsonWriter
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.OutputStream
+import java.io.OutputStreamWriter
 
 data class Note(
     val id: Long = 0,
@@ -166,6 +169,19 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
         return purged
     }
 
+    /** Memindahkan semua catatan aktif dari satu folder ke folder lain dalam satu transaksi SQLite. */
+    fun moveFolder(from: String, to: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val v = ContentValues().apply { put("folder", to) }
+            db.update("notes", v, "deleted=0 AND folder=?", arrayOf(from))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     // ---------- Riwayat versi ----------
 
     fun versions(noteId: Long): List<Version> = readableDatabase
@@ -184,43 +200,68 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
 }
 
 object Backup {
-    /** Semua catatan, termasuk yang di Sampah dan pengingatnya. Riwayat versi tidak ikut agar berkas tetap kecil. */
-    fun toJson(notes: List<Note>): String = JSONObject().apply {
-        put("app", "Catatanku"); put("version", 3)
-        put("notes", JSONArray().apply {
+    const val MAX_IMPORT_BYTES = 32L * 1024 * 1024
+    private val SAFE_ATTACHMENT = Regex("^(?:img|aud)_[A-Za-z0-9_.-]{1,80}$")
+
+    /** Menulis cadangan langsung ke stream lewat JsonWriter agar hemat RAM (O(1) memori, tanpa string raksasa). */
+    fun writeJson(notes: List<Note>, out: OutputStream, pretty: Boolean = false) {
+        JsonWriter(OutputStreamWriter(out, Charsets.UTF_8)).use { w ->
+            if (pretty) w.setIndent("  ")
+            w.beginObject()
+            w.name("app").value("Catatanku")
+            w.name("version").value(3)
+            w.name("notes").beginArray()
             notes.forEach { n ->
-                put(JSONObject().apply {
-                    put("title", n.title); put("body", n.body); put("tags", JSONArray(n.tags))
-                    put("pinned", n.pinned); put("folder", n.folder); put("archived", n.archived)
-                    put("created", n.created); put("updated", n.updated)
-                    if (n.inTrash) put("deleted", n.deletedAt)
-                    if (n.hasReminder) {
-                        put("remindAt", n.remindAt); put("remindRepeat", n.remindRepeat.name)
-                        put("remindAlarm", n.remindAlarm); put("remindFired", n.remindFired)
-                    }
-                    if (n.attachments.isNotEmpty()) put("attachments", JSONArray(n.attachments))
-                })
+                w.beginObject()
+                w.name("title").value(n.title)
+                w.name("body").value(n.body)
+                w.name("tags").beginArray(); n.tags.forEach { w.value(it) }; w.endArray()
+                w.name("pinned").value(n.pinned)
+                w.name("folder").value(n.folder)
+                w.name("archived").value(n.archived)
+                w.name("created").value(n.created)
+                w.name("updated").value(n.updated)
+                if (n.inTrash) w.name("deleted").value(n.deletedAt)
+                if (n.hasReminder) {
+                    w.name("remindAt").value(n.remindAt)
+                    w.name("remindRepeat").value(n.remindRepeat.name)
+                    w.name("remindAlarm").value(n.remindAlarm)
+                    w.name("remindFired").value(n.remindFired)
+                }
+                if (n.attachments.isNotEmpty()) {
+                    w.name("attachments").beginArray(); n.attachments.forEach { w.value(it) }; w.endArray()
+                }
+                w.endObject()
             }
-        })
-    }.toString(2)
+            w.endArray()
+            w.endObject()
+            w.flush()
+        }
+    }
+
+    /** Semua catatan, termasuk yang di Sampah dan pengingatnya. Riwayat versi tidak ikut agar berkas tetap kecil. */
+    fun toJson(notes: List<Note>): String = java.io.ByteArrayOutputStream().also { writeJson(notes, it, pretty = true) }.toString("UTF-8")
 
     fun fromJson(text: String): List<Note> {
         val arr = JSONObject(text).getJSONArray("notes")
-        return (0 until arr.length()).map { i ->
+        return (0 until arr.length().coerceAtMost(20_000)).map { i ->
             val o = arr.getJSONObject(i)
             val t = o.optJSONArray("tags") ?: JSONArray()
             val att = o.optJSONArray("attachments") ?: JSONArray()
             Note(
-                title = o.optString("title"), body = o.optString("body"),
-                tags = (0 until t.length()).map { t.getString(it) },
-                pinned = o.optBoolean("pinned"), folder = o.optString("folder"), archived = o.optBoolean("archived"),
+                title = o.optString("title").take(500),
+                body = o.optString("body").take(500_000),
+                tags = (0 until t.length().coerceAtMost(10)).map { t.getString(it).let(TextTools::normalizeTag) }.filter { it.isNotEmpty() }.distinct(),
+                pinned = o.optBoolean("pinned"),
+                folder = o.optString("folder").trim().take(30),
+                archived = o.optBoolean("archived"),
                 created = o.optLong("created", System.currentTimeMillis()),
                 updated = o.optLong("updated", System.currentTimeMillis()),
-                deletedAt = o.optLong("deleted", 0),
-                remindAt = o.optLong("remindAt", 0),
+                deletedAt = o.optLong("deleted", 0).coerceAtLeast(0),
+                remindAt = o.optLong("remindAt", 0).coerceAtLeast(0),
                 remindRepeat = runCatching { Repeat.valueOf(o.optString("remindRepeat", "None")) }.getOrDefault(Repeat.None),
                 remindAlarm = o.optBoolean("remindAlarm"), remindFired = o.optBoolean("remindFired"),
-                attachments = (0 until att.length()).map { att.getString(it) }.filter { it.isNotBlank() },
+                attachments = (0 until att.length().coerceAtMost(20)).map { att.getString(it) }.filter { SAFE_ATTACHMENT.matches(it) }.distinct(),
             )
         }
     }

@@ -150,7 +150,13 @@ class LocalAi private constructor(private val context: Context) {
 
     suspend fun delete(id: String) {
         if (id == activeId) unload()
-        withContext(Dispatchers.IO) { fileFor(id)?.delete() }
+        withContext(Dispatchers.IO) {
+            fileFor(id)?.delete()
+            // Bersihkan tembolok XNNPACK/GPU di cacheDir saat model dihapus agar penyimpanan HP hemat ruang.
+            context.cacheDir.listFiles()?.forEach { f ->
+                if (f.name.contains("litert", ignoreCase = true) || f.name.endsWith(".xnnpack_cache") || f.name.endsWith(".bin")) f.delete()
+            }
+        }
         if (id == activeId) activeId = installedIds.firstOrNull()
         applyActive()
     }
@@ -258,6 +264,7 @@ class LocalAi private constructor(private val context: Context) {
     // ============================== Impor berkas ==============================
 
     suspend fun importModel(uri: Uri) = withContext(Dispatchers.IO) {
+        if (!Attachments.isSafeExternalUri(context, uri)) error("Sumber berkas model tidak diizinkan.")
         if (activeId == ModelCatalog.IMPORT_ID) unload()
         val tmp = File(importFile.parentFile!!.apply { mkdirs() }, "import.tmp")
         val before = _state.value
@@ -342,15 +349,28 @@ class LocalAi private constructor(private val context: Context) {
      * Alasan model sebaiknya tidak dimuat sekarang, atau null bila memori cukup. Memuat model saat RAM nyaris habis
      * membuat HP macet lalu aplikasi dimatikan sistem; lebih baik ditolak dengan pesan yang jelas.
      */
-    private fun memoryShortage(file: File): String? {
+    private fun memoryShortage(file: File, multimodal: Boolean = false): String? {
         val mi = ActivityManager.MemoryInfo()
         (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mi)
         if (mi.totalMem <= 0) return null       // tidak ada data (mis. lingkungan uji)
-        val need = ModelCatalog.byId(activeId)?.workingBytes(lightMode) ?: (file.length() * 3 / 4)
+        val base = ModelCatalog.byId(activeId)?.workingBytes(lightMode) ?: (file.length() * 3 / 4)
+        val need = base + if (multimodal) 200_000_000L else 0L
         if (!mi.lowMemory && mi.availMem >= need * MIN_FREE_PERCENT / 100) return null
         return "RAM HP sedang penuh (tersedia ±%.1f GB, model butuh ±%.1f GB). Tutup aplikasi lain lalu coba lagi"
             .format(mi.availMem / 1e9, need / 1e9)
     }
+
+    private fun startEngine(file: File, gpu: Boolean, vOn: Boolean, aOn: Boolean): Engine = Engine(
+        EngineConfig(
+            modelPath = file.path,
+            backend = if (gpu) Backend.GPU() else Backend.CPU(),
+            visionBackend = if (vOn) Backend.CPU() else null,
+            audioBackend = if (aOn) Backend.CPU() else null,
+            maxNumTokens = if (lightMode) LIGHT_TOKENS else null,
+            maxNumImages = if (vOn) 1 else null,
+            cacheDir = context.cacheDir.path,
+        )
+    ).also { it.initialize() }
 
     private fun ensureLoaded(force: Boolean = false, wantVision: Boolean = false, wantAudio: Boolean = false): Engine {
         engine?.let {
@@ -359,32 +379,36 @@ class LocalAi private constructor(private val context: Context) {
             engine = null; hasVision = false; hasAudio = false
         }
         val file = checkNotNull(modelFile) { "Model belum dipasang." }
-        if (!force) memoryShortage(file)?.let { why ->
+        val vOn = wantVision || hasVision
+        val aOn = wantAudio || hasAudio
+        if (!force) memoryShortage(file, vOn || aOn)?.let { why ->
             _state.value = AiState.Failed("$why, atau paksa lewat Pengaturan → Model AI → Uji muat.")
             throw IllegalStateException(why)
         }
+        // Bebaskan objek Java/Bitmap yang tidak terpakai sebelum mengalokasikan memori native besar di HP spek rendah.
+        if (lightMode) System.gc()
         _state.value = AiState.Loading
-        val vOn = wantVision || hasVision
-        val aOn = wantAudio || hasAudio
         return try {
-            Engine(
-                EngineConfig(
-                    modelPath = file.path,
-                    backend = if (useGpu) Backend.GPU() else Backend.CPU(),
-                    visionBackend = if (vOn) Backend.CPU() else null,
-                    audioBackend = if (aOn) Backend.CPU() else null,
-                    maxNumTokens = if (lightMode) LIGHT_TOKENS else null,
-                    maxNumImages = if (vOn) 1 else null,
-                    cacheDir = context.cacheDir.path,
-                )
-            ).also { it.initialize(); engine = it; hasVision = vOn; hasAudio = aOn; _state.value = AiState.Ready }
+            val loaded = if (useGpu) {
+                try {
+                    startEngine(file, gpu = true, vOn, aOn)
+                } catch (_: Throwable) {
+                    // GPU pada sebagian HP spek rendah tidak mendukung akselerasi ini: jatuh otomatis ke CPU.
+                    useGpu = false
+                    events.tryEmit("GPU tidak didukung di HP ini; beralih otomatis ke CPU.")
+                    startEngine(file, gpu = false, vOn, aOn)
+                }
+            } else {
+                startEngine(file, gpu = false, vOn, aOn)
+            }
+            loaded.also { engine = it; hasVision = vOn; hasAudio = aOn; _state.value = AiState.Ready }
         } catch (e: Throwable) {
             if (vOn || aOn) {
                 _state.value = if (hasModel) AiState.Idle else AiState.NoModel
                 throw IllegalStateException("Model $activeName belum mendukung gambar/suara. Gunakan Gemma 4 E2B untuk membaca gambar atau rekaman suara.")
             }
             _state.value = AiState.Failed(
-                "Model gagal dimuat" + (if (useGpu) " dengan GPU; coba matikan GPU" else "; mungkin RAM tidak cukup") + ": ${e.message}"
+                "Model gagal dimuat; mungkin RAM tidak cukup: ${e.message}"
             )
             throw e
         }

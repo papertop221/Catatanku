@@ -249,4 +249,28 @@ class ReminderTest {
         assertEquals(1, db.versions(n.id).size)
         assertNull(db.get(9999))
     }
+
+    @Test fun streamingBackupAndAttachmentSanitization() {
+        val src = listOf(
+            Note(title = "Streaming", body = "Baris\nKedua", tags = listOf("a"), attachments = listOf("img_ok.jpg", "../catatan.db", "aud_1.wav")),
+        )
+        val stream = java.io.ByteArrayOutputStream()
+        Backup.writeJson(src, stream, pretty = false)
+        val back = Backup.fromJson(stream.toByteArray().decodeToString()).single()
+        assertEquals("Streaming", back.title)
+        assertEquals(listOf("img_ok.jpg", "aud_1.wav"), back.attachments)
+
+        // URI eksternal: hanya content:// dari penyedia luar; file:// dan FileProvider internal ditolak.
+        assertFalse(Attachments.isSafeExternalUri(app, android.net.Uri.parse("file:///data/data/${app.packageName}/databases/catatan.db")))
+        assertFalse(Attachments.isSafeExternalUri(app, android.net.Uri.parse("content://${app.packageName}.files/secret")))
+        assertTrue(Attachments.isSafeExternalUri(app, android.net.Uri.parse("content://com.android.externalstorage.documents/document/primary%3A1.jpg")))
+    }
+
+    @Test fun openTokenRejectsForgedIntentAndAcceptsAppToken() {
+        val valid = Reminders.authToken(app)
+        assertTrue(Reminders.isValidOpenToken(app, valid))
+        assertFalse(Reminders.isValidOpenToken(app, null))
+        assertFalse(Reminders.isValidOpenToken(app, ""))
+        assertFalse(Reminders.isValidOpenToken(app, "0".repeat(valid.length)))
+    }
 }

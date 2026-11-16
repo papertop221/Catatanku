@@ -13,7 +13,7 @@
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
 [![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-### [Unduh Catatanku 1.7 (APK, 25 MB)](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.7.apk)
+### [Unduh Catatanku 1.7 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.7.apk)
 
 Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 
@@ -30,7 +30,7 @@ Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 | **Tidak kelupaan** | Pengingat sekali atau berulang, gaya alarm, mode tahan penghemat baterai, dan blok "Hari ini" untuk yang terlewat dan tugas yang belum selesai. |
 | **Cukup diketik** | "ingatkan saya bayar listrik besok jam 7 malam" di kolom cari menjadi catatan berpengingat, setelah kamu setujui. |
 | **AI yang membantu, bukan mengambil alih** | Ringkas, perbaiki ejaan, ambil daftar tugas, tanya catatan — juga langsung dari menu teks terpilih di aplikasi lain. Hasil selalu ditinjau dulu dan bisa diurungkan. |
-| **Ringan** | APK 25 MB. Pencarian instan tanpa model; model AI opsional dan hanya memakai RAM saat dipakai. |
+| **Ringan** | APK 24,9 MB. Pencarian instan tanpa model; dekode media dan indeks ditunda hemat RAM untuk HP berspesifikasi rendah; AI hanya memakai RAM saat dipakai. |
 
 **Isi:** [Pasang](#pasang) · [Fitur](#fitur) · [Model AI](#model-ai) · [Privasi](#privasi) · [Build](#build) · [Status pengujian](#status-pengujian) · [Dokumentasi](#dokumentasi) · [Lisensi](#lisensi)
 
@@ -40,7 +40,7 @@ Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `9a0bdb19a6ce9228d1e77dd2d5d95042697dce3ff886ef77a0920d083e148b89`
+SHA-256: `9a0734c572218dd13ac76c86621e12c600dbb3bc427961fccd76ded1289df070`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
@@ -48,7 +48,7 @@ Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini
 sebaiknya ekspor dulu lewat Pengaturan → Cadangan → **Ekspor**.
 
 > [!IMPORTANT]
-> Versi 1.7 lulus 39 uji unit JVM di Termux (dan membawa 20 uji Robolectric untuk desktop Linux), serta telah mulai diuji sebagian di HP. Bila menemukan masalah,
+> Versi 1.7 lulus 40 uji unit JVM + 1 benchmark `PerfTest` di Termux (dan membawa 19 uji Robolectric yang terkompilasi untuk desktop Linux glibc), serta telah mulai diuji sebagian di HP. Bila menemukan masalah,
 > [laporkan di sini](https://github.com/papertop221/Catatanku/issues/new/choose) dengan menyebut merek HP dan versi Android.
 
 <details>
@@ -113,8 +113,9 @@ Hasil AI selalu ditinjau dulu sebelum diterapkan; "Ganti isi" bisa diurungkan, d
 - Aturan desainnya tertulis di [DESAIN.md](docs/DESAIN.md)
 
 **Keamanan dan cadangan**
-- Kunci aplikasi dengan sidik jari atau PIN layar HP
-- Cadangan otomatis ke folder pilihan (7 berkas terakhir), ditambah ekspor/impor JSON manual
+- Kunci aplikasi dengan sidik jari atau PIN layar HP (`FLAG_SECURE` juga melindungi layar teks terpilih dan salinan papan klip ditandai sensitif di Android 13+)
+- Validasi ketat intent notifikasi (`EXTRA_TOKEN`), URI eksternal (menolak `file://` dan otoritas internal), batas baca impor JSON 32 MB, dan pembersih token templat prompt AI
+- Cadangan otomatis streaming (`JsonWriter`) ke folder pilihan (7 berkas terakhir), ditambah ekspor/impor JSON manual
 - Cadangan memuat semua catatan, Sampah, dan pengingat. Berkasnya tidak dienkripsi.
 
 ## Model AI
@@ -179,9 +180,9 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Semua uji di bawah | 39 uji unit JVM lulus di Termux (`AgentTest` 7, `AiTextTest` 16, `SearchEngineTest` 9, `TimeParseTest` 7); 20 uji Robolectric (`ReminderTest`, `ScreenshotTest`) disiapkan untuk desktop Linux glibc |
-| Mesin pencarian, pengurai keluaran AI, ekstraksi tugas dua langkah (gambar/suara), katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
-| Pengingat (alarm, mode tahan penghemat baterai, deteksi terlambat vs HP mati, uji mandiri, notifikasi, tunda, selesai, boot), catatan dari luar, riwayat versi, cadangan, migrasi v2 → v3 → v4 | Uji otomatis di Android tiruan (Robolectric) |
+| Semua uji di bawah | 40 uji unit JVM + 1 benchmark `PerfTest` lulus di Termux (`AgentTest` 7, `AiTextTest` 17, `SearchEngineTest` 9, `TimeParseTest` 7, `PerfTest` 1); 19 uji Robolectric (`ReminderTest` 16, `Shots*` 3) terkompilasi dan disiapkan untuk desktop Linux glibc |
+| Mesin pencarian, pengurai keluaran AI, pengaman prompt, ekstraksi tugas dua langkah (gambar/suara), katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
+| Pengingat (alarm, mode tahan penghemat baterai, deteksi terlambat vs HP mati, uji mandiri, token intent, notifikasi, tunda, selesai, boot), catatan dari luar, riwayat versi, cadangan streaming & sanitasi lampiran/URI, migrasi v2 → v3 → v4 | Uji otomatis di Android tiruan (Robolectric) |
 | Asisten perintah: rencana, jalankan, urungkan, riwayat versi | Uji otomatis di Android tiruan (Robolectric) |
 | Tampilan 23 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
 | Prompt AI dengan Gemma 4 E2B, Qwen3 1.7B, Qwen2.5 1.5B | Diuji di desktop lewat `litertlm-jvm` |

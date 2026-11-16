@@ -253,7 +253,7 @@ object Agent {
             "Permintaan: catatan ide lagu kasih label musik\nPerintah:\nberi tag musik ke catatan ide lagu\n\n" +
             "Permintaan: jadwal dokter gigi\nPerintah:\n-\n\n" +
             "Permintaan: bagaimana cara merawat tanaman\nPerintah:\n-\n\n" +
-            "Permintaan: ${command.take(300)}\nPerintah:"
+            "Permintaan: ${AiText.sanitizeInput(command).take(300)}\nPerintah:"
 
     private val R_PLACEHOLDER = Regex("[<>]|\\b(?:KATA KUNCI|WAKTU|BUTIR|JUDUL|TUGAS|TEKS|ISI|HAL|TAG|NAMA)\\b")
 

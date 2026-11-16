@@ -69,6 +69,7 @@ object Reminders {
     const val LATE_MS = 3 * 60_000L      // di atas ini pengingat dianggap ditahan sistem
     const val EXTRA_ID = "note_id"
     const val EXTRA_OPEN = "open_note"
+    const val EXTRA_TOKEN = "open_token"
     const val SNOOZE_MINUTES = 10
     const val RING_MINUTES = 2
 
@@ -121,11 +122,27 @@ object Reminders {
     private fun openNote(ctx: Context, id: Long): PendingIntent = PendingIntent.getActivity(
         ctx, 0,
         Intent(ctx, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(Uri.parse("catatanku://note/$id"))
-            .putExtra(EXTRA_OPEN, id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            .putExtra(EXTRA_OPEN, id).putExtra(EXTRA_TOKEN, authToken(ctx))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("ui", Context.MODE_PRIVATE)
+
+    /** Token acak per pemasangan agar hanya PendingIntent milik Catatanku yang boleh membuka catatan atau menandai selesai. */
+    internal fun authToken(ctx: Context): String {
+        val p = prefs(ctx)
+        p.getString("open_token", null)?.takeIf { it.length >= 16 }?.let { return it }
+        val bytes = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        return bytes.joinToString("") { "%02x".format(it) }.also { p.edit().putString("open_token", it).apply() }
+    }
+
+    internal fun isValidOpenToken(ctx: Context, token: String?): Boolean {
+        if (token.isNullOrEmpty()) return false
+        val expected = authToken(ctx).toByteArray(Charsets.UTF_8)
+        val actual = token.toByteArray(Charsets.UTF_8)
+        return java.security.MessageDigest.isEqual(expected, actual)
+    }
 
     /**
      * "Tahan penghemat baterai": semua pengingat dijadwalkan dengan `setAlarmClock`, jenis alarm yang dipakai jam
