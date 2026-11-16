@@ -1,0 +1,3 @@
+• Menghapus fitur pembaruan mandiri & izin REQUEST_INSTALL_PACKAGES (sepenuhnya patuh kebijakan F-Droid)
+• Menyelaraskan Pengaturan AI & pencarian makna ke bahasa Indonesia manusiawi tanpa jargon teknis
+• Memperjelas dialog sandi pemulihan cadangan dan penguncian batas bacaan saat Mode ringan aktif

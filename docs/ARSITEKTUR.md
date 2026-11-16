@@ -1,7 +1,7 @@
 # Arsitektur
 
 Satu modul Gradle (`app`), dua Activity (`MainActivity` dan lembar `ProcessTextActivity`), UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
-Pada `prd-1.8`, kode diorganisasi ke dalam subpaket domain/data/AI/UI di bawah `com.catatanku.app` (32 berkas Kotlin), sementara komponen Android Manifest tetap berada pada paket akar `com.catatanku.app` demi kompatibilitas pembaruan.
+Pada `prd-1.8`, kode diorganisasi ke dalam subpaket domain/data/AI/UI di bawah `com.catatanku.app` (31 berkas Kotlin), sementara komponen Android Manifest tetap berada pada paket akar `com.catatanku.app` demi kompatibilitas pembaruan.
 
 ## Berkas
 
@@ -9,7 +9,7 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 
 | Paket / Berkas | Tanggung jawab | Murni JVM? |
 |---|---|---|
-| `MainActivity.kt`, `ReminderReceiver.kt`, `SystemIntegration.kt`, `Updater.kt` | Pintu masuk Manifest (`MainActivity`, `ProcessTextActivity`, `QuickNoteTile`, `ReminderReceiver`, `UpdateInstallReceiver`), pembaruan APK & verifikasi ulang TOCTOU | Tidak |
+| `MainActivity.kt`, `ReminderReceiver.kt`, `SystemIntegration.kt` | Pintu masuk Manifest (`MainActivity`, `ProcessTextActivity`, `QuickNoteTile`, `ReminderReceiver`) | Tidak |
 | `domain/model/` (`NoteModels.kt`, `BackupModels.kt`) | Model domain (`Note`, `Version`, `Repeat`, `AiAction`, `AgentStep`, model manifest/progres cadangan) | Ya |
 | `domain/usecase/` (`SearchEngine.kt`, `HybridSearch.kt`, `TimeParse.kt`) | Indeks TF-IDF + trigram, pencarian hibrida (TF-IDF + kemiripan vektor embedding lokal), pengenal waktu bahasa Indonesia | Ya |
 | `data/backup/` (`BackupArchive.kt`, `BackupCodec.kt`, `JsonStream.kt`) | Ekspor/impor ZIP lengkap (`catatanku-backup.zip`), SHA-256 `checksums.json`, pelindung traversal/ZIP bomb, JSON streaming O(1) | Ya |
@@ -140,18 +140,6 @@ Model yang "berpikir" dulu (mis. Qwen3) tidak cocok: di pengujian, satu perminta
 ukuran dan SHA-256 diperiksa, baru berkas diganti nama dan dijadikan model aktif. Status dipantau dengan polling,
 dan dilanjutkan bila aplikasi sempat ditutup.
 
-### Pembaruan aplikasi
-
-`Updater` meminta `https://api.github.com/repos/papertop221/Catatanku/releases/latest` lewat HTTPS tanpa akun. Pemeriksaan
-otomatis berjalan paling banyak sekali sehari saat aplikasi dibuka (bisa dimatikan di Pengaturan); tombol **Periksa
-pembaruan** selalu tersedia. Hanya aset bernama `Catatanku-<versi>.apk` yang punya digest SHA-256 dan tautan resmi repo
-yang diterima; rilis draf, prarilis, tautan non-HTTPS, dan repo lain diabaikan.
-
-APK diunduh lewat `DownloadManager`, lalu diperiksa berlapis sebelum dipasang: ukuran dan SHA-256 dari rilis, nama paket,
-nomor versi lebih tinggi, serta sertifikat tanda tangan APK harus sama dengan aplikasi terpasang. Pemasangan memakai
-`PackageInstaller` (izin `REQUEST_INSTALL_PACKAGES`) dan tetap menampilkan layar persetujuan Android. Build uji
-(`FLAG_DEBUGGABLE`) tidak boleh memasang pembaruan karena paket dan kunci tanda tangannya berbeda.
-
 ## Asisten perintah
 
 Kolom cari menerima perintah. Alurnya selalu **perintah → rencana → persetujuan → jalankan → bisa diurungkan**.
@@ -263,7 +251,7 @@ Skema v5 menambah tabel `embeddings` untuk pencarian semantik lokal bertanda mod
 
 ## AI lokal & Pencarian Semantik Hibrida
 
-- **Pemilihan backend berbasis data (`AiPerformance.kt`, `BENCHMARK.md`)**: di Moto G86 Power 5G (`mt6878`), `CPU-4` (`Backend.CPU(threadCount = 4)`) + profil konteks **Hemat (`maxNumTokens = 2048`)** dengan `SpeculativeDecodingMode.ADAPTIVE` per tugas memberikan muat ±1 detik, hemat ±575–680 MB RAM dibanding GPU, serta menyamai/mengungguli GPU di tugas teks harian. Vision/OCR memakai GPU + turunan gambar sementara ≤ 1024 px di `cacheDir` tanpa mengubah gambar asli (`vision-gpu-1024`: ±11,5 dtk, -452 MB RSS). Perangkat lain memulai dari bawaan konservatif CPU-4 lalu dapat menyimpan profil terukur via **Uji kinerja AI** di Pengaturan (`PerformanceProfileStore`).
+- **Pemilihan backend berbasis data (`AiPerformance.kt`, `BENCHMARK.md`)**: di Moto G86 Power 5G (`mt6878`), `CPU-4` (`Backend.CPU(threadCount = 4)`) + profil konteks **Hemat (`maxNumTokens = 2048`)** dengan `SpeculativeDecodingMode.ADAPTIVE` per tugas memberikan muat ±1 detik, hemat ±575–680 MB RAM dibanding GPU, serta menyamai/mengungguli GPU di tugas teks harian. Vision/OCR memakai GPU + turunan gambar sementara ≤ 1024 px di `cacheDir` tanpa mengubah gambar asli (`vision-gpu-1024`: ±11,5 dtk, -452 MB RSS). Perangkat lain memulai dari bawaan konservatif CPU-4 lalu dapat menyimpan profil terukur via **Penyesuaian kecepatan** (`Ukur kecepatan`) di Pengaturan (`PerformanceProfileStore`).
 - **Kebijakan memori adaptif (`MemoryPolicy`)**: menggunakan RAM fisik aktual tanpa swap/RAM Boost, `ActivityManager.MemoryInfo` (`availMem`, `lowMemory`), dan sinyal `onTrimMemory` untuk memilih jendela konteks & idle timeout tanpa pemanggilan `System.gc()` agresif.
 - **Pencarian hibrida (`HybridSearch.kt`)**: menggabungkan skor TF-IDF + trigram (`alpha = 0,65`) dengan kemiripan kosinus embedding lokal (`beta = 0,35`) saat model embedding aktif diimpor (`LocalEmbeddingProvider`), dan jatuh kembali murni ke TF-IDF bila tidak tersedia.
 
@@ -298,9 +286,8 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 | `PerformanceAndMemoryTest` | Pemilihan profil SoC (`mt6878` vs konservatif vs cache), kebijakan MTP per tugas, `MemoryPolicy`, `BenchmarkStats` median/p95, `InputSecurity` |
 | `TimeParseTest` | 40-an frasa waktu, termasuk yang BUKAN waktu ("pace 6:30", "km 24.500"), dan pengulangan |
 | `AgentTest` | Pengurai perintah asisten, penerapan langkah, dan pengaman keluaran model |
-| `UpdaterTest` & `UpdateParserTest` | Pembanding versi semantik, validasi tautan rilis GitHub, penolakan draf/prarilis/tanpa SHA-256 |
 | `ReminderTest` | Alarm, mode tahan penghemat baterai (`setAlarmClock`), pelindung duplikat & `EXTRA_DUE`, perubahan jam/izin exact alarm, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite |
 | `PerfTest` | Pengukuran waktu bangun indeks, pembaruan satu catatan, pencarian, dan catatan terkait |
 | `ShotsLight` / `ShotsDark` / `ShotsTall` | Render layar Compose ke PNG lewat Robolectric + Roborazzi |
 
-Uji Robolectric (`ReminderTest`, `UpdateParserTest`, `Shots*`) berjalan di lingkungan Linux `glibc` (seperti GitHub Actions CI), sedangkan seluruh uji logika JVM murni & `PerfTest` berjalan langsung baik di CI maupun Termux.
+Uji Robolectric (`ReminderTest`, `Shots*`) berjalan di lingkungan Linux `glibc` (seperti GitHub Actions CI), sedangkan seluruh uji logika JVM murni & `PerfTest` berjalan langsung baik di CI maupun Termux.

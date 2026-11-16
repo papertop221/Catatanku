@@ -1,0 +1,3 @@
+• Removed self-updater and REQUEST_INSTALL_PACKAGES permission for full F-Droid compliance
+• Aligned AI & semantic search settings UI/UX with the Paper & Ink philosophy in plain Indonesian
+• Clarified encrypted restore password prompt and light-mode context lock behavior

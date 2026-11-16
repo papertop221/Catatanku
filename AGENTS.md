@@ -14,7 +14,7 @@ pengguna bertentangan dengan aturan di sini, tanyakan dulu; jangan diam-diam mel
 ## Apa itu Catatanku
 
 Aplikasi catatan pribadi Android yang bekerja offline dengan pengingat dan AI lokal (LiteRT-LM, model Gemma 4 E2B)
-yang berjalan sepenuhnya di HP. Didistribusikan lewat APK di GitHub (F-Droid memerlukan build tanpa updater),
+yang berjalan sepenuhnya di HP. Didistribusikan lewat APK di GitHub dan F-Droid,
 bukan Play Store.
 Bahasa antarmuka, komentar kode, dan dokumentasi: Indonesia.
 
@@ -33,10 +33,9 @@ Setiap fitur, perbaikan bug, refactor, maupun optimasi **wajib** memenuhi kelima
    asisten rencana maks 3 langkah), bukan gimmick visual atau chatbot terpisah. Hal presisi/instan (waktu lewat
    `TimeParse`, pencarian lewat `SearchEngine` TF-IDF + trigram) wajib dikerjakan oleh kode deterministik.
 4. **100% Privasi:** Nol akun, nol server, nol analitik/pelacak/iklan, nol laporan crash keluar, `allowBackup` mati,
-   dan 100% pustaka sumber terbuka. Dua akses jaringan opsional: unduhan model yang diminta sadar oleh pengguna lewat
-   `DownloadManager` (dengan SHA-256), dan pemeriksaan/unduhan pembaruan dari GitHub Releases (paling banyak sekali
-   sehari, bisa dimatikan, diverifikasi SHA-256 + sertifikat APK). Tetap berfungsi 100% tanpa izin internet. Updater
-   membuat build tidak memenuhi kebijakan F-Droid yang melarang self-updater; build F-Droid wajib mematikannya.
+   dan 100% pustaka sumber terbuka. Satu-satunya akses jaringan opsional: unduhan model AI yang diminta sadar oleh
+   pengguna lewat `DownloadManager` (dengan verifikasi SHA-256). Tetap berfungsi 100% tanpa izin internet (impor
+   berkas model lokal tetap berjalan), dan tanpa self-updater agar memenuhi kebijakan F-Droid.
 5. **Aman:** Kunci aplikasi ditegakkan di semua pintu masuk (`PendingIntent` bertoken `SecureRandom` + ditunda saat
    terkunci, `FLAG_SECURE` di `ProcessTextActivity`, `EXTRA_IS_SENSITIVE` di clipboard API 33+); semua input luar
    dianggap tak tepercaya (`isSafeExternalUri` hanya `content://` non-internal, batas ukuran & pola lampiran impor,
@@ -74,8 +73,7 @@ Setiap fitur, perbaikan bug, refactor, maupun optimasi **wajib** memenuhi kelima
 - Layar yang berubah: perbarui tangkapan layar di `docs/screenshots/` dan `fastlane/.../phoneScreenshots/`.
 - Rilis: naikkan `versionCode` dan `versionName` di `app/build.gradle.kts`, tulis `CHANGELOG.md` dan
   `fastlane/metadata/android/{id,en-US}/changelogs/<versionCode>.txt`, dan perbarui dokumen yang terdampak.
-  Unggah APK ke GitHub Releases dengan nama **`Catatanku-<versionName>.apk`**; `Updater` hanya menerima aset dengan
-  pola nama itu dan digest SHA-256 (GitHub menambahkannya otomatis untuk aset yang diunggah).
+  Unggah APK ke GitHub Releases dengan nama **`Catatanku-<versionName>.apk`**.
 - Laporkan dengan jujur apa yang sudah dan belum diuji, terutama yang hanya bisa diuji di HP sungguhan atau tertahan
   keterbatasan lingkungan (mis. Termux Bionic vs Robolectric glibc).
 

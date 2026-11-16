@@ -6,9 +6,7 @@ Dokumen ini merangkum kontrol keamanan, batas ancaman (*threat model*), dan inva
 
 - **100% pemrosesan lokal:** Penyimpanan catatan, riwayat versi, pencarian TF-IDF, indeks vektor semantik (`embeddings`), pengingat, lampiran, dan inferensi AI (`litertlm-android`) berjalan di perangkat.
 - **Tanpa SDK tertutup/pelacak:** Tidak ada Google Play Services, Firebase, ML Kit, Ads, Crashlytics, maupun analitik. Diverifikasi otomatis di CI pada graf dependensi `releaseRuntimeClasspath`.
-- **Izin jaringan terbatas:** `network_security_config.xml` menetapkan `cleartextTrafficPermitted="false"` untuk semua koneksi. Jaringan hanya dipakai atas permintaan atau pilihan pengguna:
-  1. Mengunduh model AI dari URL Hugging Face revisi terkunci dengan verifikasi panjang + SHA-256 (`Models.kt`, `LocalAi.kt`).
-  2. Memeriksa/mengunduh pembaruan resmi Catatanku dari `papertop221/Catatanku` di GitHub Releases (`Updater.kt`).
+- **Izin jaringan terbatas:** `network_security_config.xml` menetapkan `cleartextTrafficPermitted="false"` untuk semua koneksi. Jaringan hanya dipakai atas permintaan eksplisit pengguna untuk mengunduh model AI dari URL Hugging Face revisi terkunci dengan verifikasi panjang + SHA-256 (`Models.kt`, `LocalAi.kt`). Aplikasi tidak memeriksa pembaruan sendiri maupun meminta izin `REQUEST_INSTALL_PACKAGES`.
 
 ## 2. Kunci Aplikasi & Permukaan Layar
 
@@ -31,11 +29,10 @@ Dokumen ini merangkum kontrol keamanan, batas ancaman (*threat model*), dan inva
   - Mengenkripsi data per blok streaming 64 KB memakai `AES/GCM/NoPadding` (tag 128-bit) dengan nonce unik per blok dan AAD yang mengikat header, indeks blok, serta penanda blok akhir agar pemotongan atau pengacakan blok gagal autentikasi.
   - Kata sandi diterima sebagai `CharArray` dan di-nol-kan (`fill('\u0000')`) beserta buffer kunci `ByteArray` di blok `finally`; sandi dan kunci tidak pernah disimpan ke preferensi ataupun basis data.
 
-## 4. Validasi URI, Media, & Pembaruan APK
+## 4. Validasi URI & Media
 
 - **URI eksternal (`InputSecurity.kt`, `Attachments.kt`):** Hanya menerima skema `content://` yang bukan otoritas paket Catatanku (`com.catatanku.app`), menolak `file://`, `userInfo`, maupun otoritas bertitik ganda `..`.
 - **Media:** Impor gambar menghapus EXIF via re-encode JPEG; transkode audio membatasi laju sampel (8–192 kHz), kanal (1–8), serta batas waktu 10 detik.
-- **Pembaruan mandiri (`Updater.kt`):** Hanya menerima aset rilis `Catatanku-<versi>.apk` non-draft/non-prerelease dari HTTPS repositori resmi, memeriksa `size` + `sha256` dari Release API, memverifikasi `packageName`, `longVersionCode`, dan SHA-256 sertifikat penanda tangan terhadap build terpasang, lalu melakukan **verifikasi ulang SHA-256, ukuran berkas, dan tanda tangan APK tepat sebelum membuka `PackageInstaller.Session`** untuk menutup celah TOCTOU (*time-of-check to time-of-use*).
 
 ## 5. Batas Prompt & Sanitisasi AI Lokal
 

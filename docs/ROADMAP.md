@@ -6,7 +6,7 @@ Diperbarui 16 November 2026, mencakup penyelesaian seluruh tahap PRD v1.1 pada c
 
 - **Panduan wajib aktif:** seluruh pengembangan mengikuti lima pilar di [FILOSOFI.md](FILOSOFI.md) (**Praktis, Efektif & Efisien, Canggih, 100% Privasi, Aman**) dan [AGENTS.md](../AGENTS.md).
 - **1.7 & 1.7.1:** APK rilis bertanda tangan di `releases/Catatanku-1.7.apk` (beserta pembaruan 1.7.1 dari GitHub Releases).
-- **`prd-1.8`:** Menjalankan benchmark AI lokal langsung di Moto G86 Power 5G (`mt6878` Dimensity 7300, lihat [BENCHMARK.md](BENCHMARK.md)), memperbarui arsitektur menjadi modular (32 berkas Kotlin), menambah cadangan lengkap `catatanku-backup.zip` beserta enkripsi opsional AES-256-GCM, mengoptimalkan profil AI (`CPU-4` + KV 2.048 + MTP per-tugas + GPU vision 1024px) & `MemoryPolicy`, memperkuat keandalan pengingat (`EXTRA_DUE`, perubahan izin exact alarm, perubahan jam), menambah pencarian semantik hibrida (`HybridSearch`), dokumentasi audit [KEAMANAN.md](KEAMANAN.md), serta CI GitHub Actions (`.github/workflows/ci.yml`).
+- **`prd-1.8`:** Menjalankan benchmark AI lokal langsung di Moto G86 Power 5G (`mt6878` Dimensity 7300, lihat [BENCHMARK.md](BENCHMARK.md)), memperbarui arsitektur menjadi modular (31 berkas Kotlin), menambah cadangan lengkap `catatanku-backup.zip` beserta enkripsi opsional AES-256-GCM, mengoptimalkan profil AI (`CPU-4` + KV 2.048 + MTP per-tugas + GPU vision 1024px) & `MemoryPolicy`, memperkuat keandalan pengingat (`EXTRA_DUE`, perubahan izin exact alarm, perubahan jam), menambah pencarian semantik hibrida (`HybridSearch`), dokumentasi audit [KEAMANAN.md](KEAMANAN.md), serta CI GitHub Actions (`.github/workflows/ci.yml`).
 - Pengujian APK interaktif langsung pada HP OEM agresif (Oppo, Vivo, Xiaomi, Huawei, Transsion) untuk alarm latar belakang dan alur sentuh penuh masih perlu diuji pada masing-masing merek perangkat.
 
 ## Status tahapan PRD (`prd-1.8`)
@@ -17,7 +17,7 @@ Diperbarui 16 November 2026, mencakup penyelesaian seluruh tahap PRD v1.1 pada c
 | Tahap 1 & FR-01 | Cadangan lengkap `catatanku-backup.zip` (`manifest.json`, `notes.json` + versi, lampiran gambar/audio, `checksums.json` SHA-256), *staging* atomik + transaksi SQLite, pembatalan aman, anti-traversal/ZIP bomb, kompatibel JSON v1–v3 | Selesai di kode + uji `BackupArchiveTest` |
 | Tahap 2 & FR-03.2–03.5 | Tuning terukur: `CPU-4` default (~1 dtk load, hemat 575–680 MB RAM), GPU + fallback + profil per SoC/SDK/runtime/model, MTP per-tugas via `SpeculativeDecodingMode`, KV cache 2048/3072/4096, `maxOutputToken` per tugas | Selesai & terverifikasi di Moto G86 Power 5G |
 | Tahap 3 & FR-03.6–03.9 | `MemoryPolicy` berbasis RAM fisik (tanpa RAM Boost), lazy vision/audio, turunan OCR ≤ 1024px di `cacheDir` + GPU vision, cek kapabilitas NPU & penanda kapabilitas model (`supportsVision`, `supportsAudio`, `textOnly`) | Selesai (`vision-gpu-1024` & `audio-cpu` terukur di HP) |
-| Tahap 4 & FR-02, FR-04 | Pengingat tahan error (`EXTRA_DUE`, cegah duplikat, redam late pasca ubah jam, `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, fallback kuota OEM), audit keamanan (`docs/KEAMANAN.md`), enkripsi cadangan opsional AES-256-GCM, re-verifikasi TOCTOU `Updater` | Selesai di kode + uji `ReminderTest` / `BackupArchiveTest` |
+| Tahap 4 & FR-02, FR-04 | Pengingat tahan error (`EXTRA_DUE`, cegah duplikat, redam late pasca ubah jam, `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, fallback kuota OEM), audit keamanan (`docs/KEAMANAN.md`), enkripsi cadangan opsional AES-256-GCM | Selesai di kode + uji `ReminderTest` / `BackupArchiveTest` |
 | Tahap 5 & FR-05, FR-06 | Modularisasi ke subpaket `domain`, `data`, `ai`, `reminders`, `security`, `media`, `ui` (komponen Manifest tetap di root `com.catatanku.app`) + GitHub Actions CI/CD | Selesai (`.github/workflows/ci.yml`) |
 | Tahap 6 & FR-07 | Pencarian hibrida lokal (`HybridSearch`: TF-IDF 0,65 + kosinus embedding 0,35), tabel SQLite `embeddings` skema v5 + migrasi v4→v5, pembungkus `EmbeddingEngine` opsional | Selesai di kode + uji `HybridSearchTest` |
 
@@ -66,7 +66,7 @@ Jangan diusulkan ulang tanpa alasan baru.
 | Mesin pencarian sendiri (TF-IDF + trigram), bukan Room/FTS4 | Toleran imbuhan dan salah ketik bahasa Indonesia ("lari" menemukan "berlari") |
 | SQLite lewat `SQLiteOpenHelper`, bukan Room | Tanpa pembangkit kode; skema kecil |
 | Distribusi F-Droid dan GitHub, bukan Play Store | Pilihan pemilik; menuntut semua pustaka sumber terbuka |
-| Pembaruan mandiri dari GitHub Releases (unduh + pasang, cek otomatis sekali sehari yang bisa dimatikan) | Diminta pemilik. APK diverifikasi SHA-256 rilis + sertifikat tanda tangan. Konsekuensinya build ini **tidak memenuhi kebijakan F-Droid** yang melarang self-updater; build F-Droid harus mematikan `Updater` |
+| Pembaruan mandiri (`Updater`) dihapus | Menjaga kesederhanaan sesuai filosofi, memperkecil permukaan izin (`REQUEST_INSTALL_PACKAGES` dihapus), dan mematuhi penuh kebijakan F-Droid; pembaruan dilakukan lewat F-Droid atau APK resmi di GitHub Releases |
 | Repositori publik, lisensi Apache-2.0 | Pilihan pemilik |
 | Satu layar tanpa tab; cari dan tombol baru di bawah | Ramah satu tangan, lebih sedikit layar |
 | Amber = waktu, bukan AI; tanpa ikon ✨, gradasi, emoji, kartu berbayang | Menghindari tampilan AI generik; lihat DESAIN.md |

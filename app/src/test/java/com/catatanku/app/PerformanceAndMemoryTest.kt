@@ -92,6 +92,8 @@ class PerformanceAndMemoryTest {
             assertTrue(it.name, it.maxOutputTokens in 48..512)
         }
         assertEquals(listOf(2048, 3072, 4096), ContextProfile.entries.map { it.maxNumTokens })
+        assertTrue(ContextProfile.entries.all { it.label.isNotBlank() && '(' !in it.label })
+        assertTrue(ProfileSource.entries.all { it.label.isNotBlank() && "benchmark" !in it.label.lowercase() })
     }
 
     @Test fun memoryPolicyUsesPhysicalRamAndSignalsWithoutSwap() {

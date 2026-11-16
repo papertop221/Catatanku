@@ -46,8 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.catatanku.app.UpdateRelease
-import com.catatanku.app.UpdateState
 import com.catatanku.app.ai.engine.AiState
 import com.catatanku.app.ai.engine.Download
 import com.catatanku.app.ai.modelcatalog.ModelCatalog
@@ -117,7 +115,6 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     val revision by vm.ai.revision.collectAsStateWithLifecycle()
     val activeProfile by vm.ai.activeProfile.collectAsStateWithLifecycle()
     val benchRunning by vm.ai.benchmarkRunning.collectAsStateWithLifecycle()
-    val metrics by vm.ai.metrics.collectAsStateWithLifecycle()
     val embInstalled by vm.embeddings.installed.collectAsStateWithLifecycle()
 
     var confirmDelete by remember { mutableStateOf<String?>(null) }
@@ -135,10 +132,6 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     val importFrom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.importFrom(u) } }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(vm::setBackupFolder) }
     val ctx = LocalContext.current
-    val update by vm.updater.state.collectAsStateWithLifecycle()
-    val currentVersion = vm.updater.currentVersion
-    var autoUpdate by remember { mutableStateOf(vm.updater.autoCheck) }
-    var releaseNotes by remember { mutableStateOf<UpdateRelease?>(null) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
     var canNotify by remember { mutableStateOf(Reminders.canNotify(ctx)) }
     var canExact by remember { mutableStateOf(Reminders.canExact(ctx)) }
@@ -223,49 +216,46 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             if (aiState !is AiState.NoModel && aiState !is AiState.Importing) {
                 Section("Kinerja AI")
                 activeProfile?.let { prof ->
-                    val mtpStr = if (prof.enableMtpEngine) "MTP adaptif per tugas" else "MTP mati"
                     Muted(
-                        "Profil aktif: ${prof.backend.label}-${prof.cpuThreads} · ${prof.contextProfile.label} · $mtpStr (${prof.source.label}).",
+                        "Setelan aktif: ${prof.backend.label} · ${prof.contextProfile.label} (${prof.source.label}).",
                         Modifier.padding(horizontal = Gutter, vertical = 4.dp),
                     )
                 }
-                metrics.lastOrNull()?.let { m ->
-                    Muted(
-                        "Permintaan terakhir (${m.taskKey}): %.1f dtk · TTFT %.0f ms · decode %.1f tok/s · puncak %.0f MB."
-                            .format(m.totalMs / 1000.0, m.ttftMs, m.decodeTokPerSec, m.peakRssKb / 1024.0),
-                        Modifier.padding(horizontal = Gutter, vertical = 2.dp),
-                    )
-                }
-                SettingRow("Mode ringan", "Untuk RAM terbatas: konteks Hemat (2.048 token) dan model segera dilepas.") {
+                SettingRow("Mode ringan", "Untuk RAM terbatas: memakai batas bacaan Hemat dan model segera dilepas dari memori.") {
                     Switch(vm.lightAi, vm::updateLightAi, enabled = !busy)
                 }
                 val gpuSelected = activeProfile?.backend == AiBackendKind.GPU
-                SettingRow("Akselerasi GPU teks", "Paksa GPU untuk teks (otomatis jatuh ke CPU bila gagal). Pada Moto G86 Power 5G, CPU-4 lebih hemat RAM.") {
+                SettingRow("Akselerasi GPU", "Memakai GPU untuk teks (otomatis kembali ke CPU bila gagal). CPU umumnya lebih hemat RAM.") {
                     Switch(gpuSelected, { vm.setGpu(it) }, enabled = !busy)
                 }
                 Column(Modifier.padding(horizontal = Gutter, vertical = 6.dp)) {
-                    Text("Batas konteks KV cache", style = MaterialTheme.typography.bodyLarge)
-                    Muted("Lebih besar membaca teks lebih panjang tetapi memakai RAM lebih besar.", Modifier.padding(bottom = 6.dp))
+                    Text("Panjang bacaan AI", style = MaterialTheme.typography.bodyLarge)
+                    Muted(
+                        if (vm.lightAi) "Dikunci ke Hemat selama Mode ringan aktif."
+                        else "Hemat (±2.400 huruf), Seimbang (±4.200), Panjang (±6.000). Makin panjang memakai RAM lebih besar.",
+                        Modifier.padding(bottom = 6.dp),
+                    )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         ContextProfile.entries.forEach { cp ->
                             val selected = activeProfile?.contextProfile == cp
-                            Choice(cp.label, selected = selected) { if (!busy) vm.setContextProfile(cp) }
+                            Choice(cp.label, selected = selected, enabled = !busy && !vm.lightAi) { vm.setContextProfile(cp) }
                         }
                     }
                 }
                 SettingRow(
-                    "Benchmark perangkat",
-                    if (benchRunning) "Sedang mengukur CPU-4 vs GPU di HP ini…" else "Ukur kecepatan dan RAM di HP ini untuk memilih profil terbaik.",
+                    "Penyesuaian kecepatan",
+                    if (benchRunning) "Sedang mengukur kecepatan CPU dan GPU di HP ini…"
+                    else "Ukur kecepatan dan pemakaian RAM di HP ini untuk memilih setelan terbaik.",
                 ) {
-                    SmallButton(if (benchRunning) "Mengukur…" else "Uji kecepatan", enabled = !busy, onClick = vm::runAiBenchmark)
+                    SmallButton(if (benchRunning) "Mengukur…" else "Ukur kecepatan", enabled = !busy, onClick = vm::runAiBenchmark)
                 }
                 val idleLabel = if (vm.lightAi) "30 detik" else "3 menit"
                 SettingRow(
                     "Memori",
                     if (aiState is AiState.Ready) "Model sedang memakai RAM; dilepas sendiri setelah $idleLabel tak dipakai, atau begitu aplikasi ditinggalkan."
-                    else "Model tidak memakai RAM sekarang. Dimuat saat dipakai, lalu dilepas adaptif.",
+                    else "Model tidak memakai RAM sekarang. Dimuat saat dipakai, lalu dilepas otomatis saat tidak dipakai.",
                 ) {
-                    if (aiState is AiState.Ready) SmallButton("Lepas", onClick = vm::unloadModel)
+                    if (aiState is AiState.Ready) SmallButton("Lepas model", onClick = vm::unloadModel)
                     else SmallButton("Uji muat", enabled = !busy, onClick = vm::loadModel)
                 }
                 SettingRow("Isi judul & tag otomatis", "Setelah catatan ditutup, AI mengisi judul dan tag yang masih kosong di latar.") {
@@ -273,18 +263,20 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
             }
 
-            // ---------- Pencarian semantik ----------
-            Section("Pencarian semantik (opsional)")
+            // ---------- Pencarian makna ----------
+            Section("Pencarian makna (opsional)")
             SettingRow(
-                "Model embedding lokal",
-                if (embInstalled) "Aktif: pencarian menggabungkan TF-IDF + kemiripan makna di perangkat."
-                else "Belum dipasang. Pencarian tetap instan memakai TF-IDF + trigram lokal.",
+                "Model pencarian makna",
+                if (embInstalled) "Aktif. Pencarian menggabungkan kecocokan kata dan kemiripan makna di perangkat."
+                else "Belum dipasang. Pencarian kata bawaan tetap instan tanpa model ini.",
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (embInstalled) SmallButton("Hapus", onClick = vm::deleteEmbeddingModel)
-                    SmallButton(if (embInstalled) "Ganti" else "Pilih berkas") { pickEmbModel.launch(arrayOf("*/*")) }
-                }
+                SmallButton(if (embInstalled) "Ganti berkas" else "Pilih berkas") { pickEmbModel.launch(arrayOf("*/*")) }
             }
+            if (embInstalled) TextAction(
+                "Hapus model",
+                Modifier.padding(start = 8.dp),
+                color = MaterialTheme.colorScheme.error,
+            ) { confirmDelete = ModelCatalog.EMBEDDING_IMPORT_ID }
 
             // ---------- Pengingat ----------
             Section("Pengingat")
@@ -386,7 +378,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             }
             SettingRow(
                 "Ekspor dan impor lengkap",
-                "Arsip ZIP membawa semua catatan, Sampah, pengingat, riwayat versi, lampiran gambar/suara, dan checksum SHA-256 (opsional terenkripsi AES-256-GCM). Tetap mendukung berkas JSON lama.",
+                "Arsip ZIP membawa semua catatan, Sampah, pengingat, riwayat versi, serta lampiran gambar dan suara (bisa dilindungi kata sandi). Tetap mendukung berkas JSON lama.",
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SmallButton("Impor", enabled = vm.backupProgress == null) { importFrom.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }
@@ -394,63 +386,17 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
             }
 
-            // ---------- Pembaruan ----------
-            Section("Pembaruan")
-            when (val u = update) {
-                UpdateState.Checking -> {
-                    SettingRow("Memeriksa pembaruan", "Menghubungi GitHub untuk nomor versi terbaru.") {}
-                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Gutter))
-                }
-                is UpdateState.Available -> {
-                    val release = u.release
-                    SettingRow(
-                        "Catatanku ${release.version} tersedia",
-                        when {
-                            u.progress != null -> "${u.progress.percent}%  ·  ${u.progress.note}"
-                            u.ready -> "Sudah terunduh dan diperiksa. Tekan Pasang pembaruan; layar sistem akan meminta persetujuan."
-                            else -> "Versi $currentVersion terpasang  ·  unduhan ${release.sizeLabel} dari GitHub"
-                        },
-                        error = u.error != null,
-                    ) {
-                        when {
-                            u.progress != null -> SmallButton("Batalkan") { vm.updater.cancelDownload() }
-                            u.ready -> SmallButton("Pasang pembaruan", primary = true) { vm.updater.install() }
-                            else -> SmallButton("Unduh dan pasang", primary = true) { vm.updater.download() }
-                        }
-                    }
-                    u.progress?.let { LinearProgressIndicator({ it.percent / 100f }, Modifier.fillMaxWidth().padding(horizontal = Gutter)) }
-                    u.error?.let { Muted(it, Modifier.padding(horizontal = Gutter, vertical = 4.dp)) }
-                    TextAction("Lihat catatan rilis", Modifier.padding(start = 8.dp)) { releaseNotes = release }
-                }
-                is UpdateState.Failed -> SettingRow("Gagal memeriksa pembaruan", u.message, error = true) {
-                    SmallButton("Coba lagi") { vm.updater.check(manual = true) }
-                }
-                else -> SettingRow(
-                    "Versi $currentVersion terpasang",
-                    if (update == UpdateState.UpToDate) {
-                        "Sudah versi terbaru." + if (vm.updater.lastCheck > 0) " Diperiksa ${whenLabel(vm.updater.lastCheck)}." else ""
-                    } else {
-                        "Periksa apakah ada rilis baru di GitHub."
-                    },
-                ) { SmallButton("Periksa pembaruan") { vm.updater.check(manual = true) } }
-            }
-            SettingRow(
-                "Periksa otomatis",
-                "Sekali sehari saat aplikasi dibuka. Tidak ada data yang dikirim; hanya meminta nomor versi terbaru dari GitHub.",
-            ) {
-                Switch(autoUpdate, {
-                    autoUpdate = it
-                    vm.updater.autoCheck = it
-                    if (it) vm.updater.check(manual = false)
-                })
-            }
-
             // ---------- Privasi ----------
             Section("Privasi")
             Muted(
-                "Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Internet hanya dipakai saat kamu menekan Unduh " +
-                    "untuk mengambil model dari huggingface.co, dan saat memeriksa atau mengunduh pembaruan dari github.com.",
+                "Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Internet hanya dipakai saat kamu menekan Unduh, " +
+                    "untuk mengambil berkas model dari huggingface.co.",
                 Modifier.padding(horizontal = Gutter),
+            )
+            Muted(
+                "Catatanku ${vm.appVersion}",
+                Modifier.padding(horizontal = Gutter).padding(top = 8.dp),
+                MaterialTheme.typography.labelSmall,
             )
             Spacer(Modifier.height(32.dp))
         }
@@ -463,7 +409,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             title = { Text("Ekspor cadangan", style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column {
-                    Muted("Kosongkan sandi untuk ekspor ZIP biasa, atau isi sandi untuk mengenkripsi arsip (AES-256-GCM). Sandi tidak disimpan di HP.")
+                    Muted("Kosongkan sandi untuk arsip ZIP biasa, atau isi sandi untuk mengunci arsip. Sandi tidak disimpan di HP; bila lupa, cadangan tidak bisa dibuka.")
                     OutlinedTextField(
                         value = pass,
                         onValueChange = { pass = it },
@@ -496,15 +442,18 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             onDismissRequest = { pass = ""; vm.dismissEncryptedRestorePrompt() },
             title = { Text("Buka cadangan terenkripsi", style = MaterialTheme.typography.titleLarge) },
             text = {
-                OutlinedTextField(
-                    value = pass,
-                    onValueChange = { pass = it },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    placeholder = { Text("Masukkan kata sandi cadangan") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    shape = SmallShape,
-                )
+                Column {
+                    Muted("Arsip ini dilindungi kata sandi. Masukkan sandi yang dipakai saat ekspor.")
+                    OutlinedTextField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        placeholder = { Text("Kata sandi cadangan") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = SmallShape,
+                    )
+                }
             },
             confirmButton = {
                 TextAction("Pulihkan cadangan", enabled = pass.isNotEmpty()) {
@@ -543,28 +492,15 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
         )
     }
     confirmDelete?.let { id ->
-        Confirm("Hapus model ini?", "Catatan tidak terpengaruh. Model bisa dipasang lagi kapan saja.", "Hapus model", destructive = true,
-            onDismiss = { confirmDelete = null }) { vm.deleteModel(id) }
-    }
-    releaseNotes?.let { release ->
-        AlertDialog(
-            onDismissRequest = { releaseNotes = null },
-            title = { Text("Apa yang baru di ${release.version}", style = MaterialTheme.typography.titleLarge) },
-            text = {
-                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                    Text(release.notes.ifBlank { "Rilis ini tidak menyertakan catatan." })
-                }
-            },
-            confirmButton = {
-                TextAction("Buka di GitHub") {
-                    releaseNotes = null
-                    runCatching {
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.page)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                }
-            },
-            dismissButton = { TextAction("Tutup") { releaseNotes = null } },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        )
+        val isEmbedding = id == ModelCatalog.EMBEDDING_IMPORT_ID
+        Confirm(
+            if (isEmbedding) "Hapus model pencarian makna?" else "Hapus model ini?",
+            "Catatan tidak terpengaruh. Model bisa dipasang lagi kapan saja.",
+            "Hapus model",
+            destructive = true,
+            onDismiss = { confirmDelete = null },
+        ) {
+            if (isEmbedding) vm.deleteEmbeddingModel() else vm.deleteModel(id)
+        }
     }
 }

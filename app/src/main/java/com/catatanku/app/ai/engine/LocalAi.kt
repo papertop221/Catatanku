@@ -480,8 +480,8 @@ class LocalAi private constructor(private val context: Context) {
         }
 
         if (!force && !decision.canLoad) {
-            val why = decision.shortageReason ?: "RAM tidak mencukupi."
-            _state.value = AiState.Failed("$why, atau paksa lewat Pengaturan → Model AI → Uji muat.")
+            val why = decision.shortageReason ?: "RAM tidak mencukupi"
+            _state.value = AiState.Failed("$why, atau paksa lewat Pengaturan → Kinerja AI → Uji muat.")
             throw IllegalStateException(why)
         }
 
@@ -626,7 +626,7 @@ class LocalAi private constructor(private val context: Context) {
      * (beserta MTP) lalu menyimpan profil tercepat yang stabil untuk SoC & model ini.
      */
     suspend fun runDeviceBenchmark(): String = lock.withLock {
-        val file = checkNotNull(modelFile) { "Pasang model AI lebih dulu untuk menjalankan benchmark." }
+        val file = checkNotNull(modelFile) { "Pasang model AI lebih dulu untuk mengukur kecepatan." }
         val id = activeId ?: ModelCatalog.all.first().id
         val fp = monitor.fingerprint(id)
         _benchmarkRunning.value = true
@@ -705,9 +705,12 @@ class LocalAi private constructor(private val context: Context) {
                 backendOverride = null
                 applyActive()
                 buildString {
-                    append("Benchmark selesai (${fp.soc}): ")
-                    cpuRes?.let { append("CPU-4+MTP %.1f dtk (%.0f MB)".format(it.first / 1000.0, it.second / 1024.0)) }
-                    gpuRes?.let { append(" · GPU+MTP %.1f dtk (%.0f MB)".format(it.first / 1000.0, it.second / 1024.0)) }
+                    append("Pengukuran selesai: ")
+                    cpuRes?.let { append("CPU %.1f dtk (%.0f MB)".format(it.first / 1000.0, it.second / 1024.0)) }
+                    gpuRes?.let {
+                        if (cpuRes != null) append(" · ")
+                        append("GPU %.1f dtk (%.0f MB)".format(it.first / 1000.0, it.second / 1024.0))
+                    }
                     append(" → Dipilih ${winner.label}.")
                 }
             }

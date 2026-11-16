@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.catatanku.app.Updater
 import com.catatanku.app.ai.engine.AiEvent
 import com.catatanku.app.ai.engine.LocalAi
 import com.catatanku.app.ai.engine.LocalEmbeddingProvider
@@ -64,7 +63,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val ai = LocalAi.get(app)
     val embeddings = LocalEmbeddingProvider.get(app)
-    val updater = Updater.get(app)
+    val appVersion: String by lazy {
+        runCatching { app.packageManager.getPackageInfo(app.packageName, 0)?.versionName.orEmpty() }
+            .getOrDefault("").ifBlank { "?" }
+    }
 
     var screen by mutableStateOf(Screen.List); private set
     var notes by mutableStateOf<List<Note>>(emptyList()); private set
@@ -182,8 +184,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 say(text)
             }
         }
-        viewModelScope.launch { updater.events.collect { say(it) } }
-        updater.check(manual = false)
         viewModelScope.launch {
             reload()
             val purged = withContext(Dispatchers.IO) {
@@ -1259,7 +1259,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val activeCtx = coroutineContext
                     repo.exportZipTo(
                         uri = uri,
-                        appVersion = updater.currentVersion,
+                        appVersion = appVersion,
                         passphrase = passphrase,
                         onCheckCancelled = { activeCtx.ensureActive() },
                         onProgress = { p -> backupProgress = p },
@@ -1339,7 +1339,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         appScope.launch {
             try {
                 dirty = false
-                AutoBackup.write(ctx, repo, Uri.parse(tree), updater.currentVersion)
+                AutoBackup.write(ctx, repo, Uri.parse(tree), appVersion)
                 val now = System.currentTimeMillis()
                 prefs.edit().putBoolean("dirty", dirty).putLong("backup_at", now).remove("backup_error").apply()
                 backupAt = now; backupError = null

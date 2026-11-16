@@ -14,9 +14,9 @@ enum class AiBackendKind(val label: String) {
  * untuk catatan harian, sedangkan 3.072 / 4.096 tersedia untuk konteks panjang bila RAM memadai.
  */
 enum class ContextProfile(val id: String, val label: String, val maxNumTokens: Int, val maxInputChars: Int) {
-    HEMAT("hemat", "Hemat (2.048 token)", 2048, 2400),
-    SEIMBANG("seimbang", "Seimbang (3.072 token)", 3072, 4200),
-    LONG_CONTEXT("long", "Konteks panjang (4.096 token)", 4096, 6000);
+    HEMAT("hemat", "Hemat", 2048, 2400),
+    SEIMBANG("seimbang", "Seimbang", 3072, 4200),
+    LONG_CONTEXT("long", "Panjang", 4096, 6000);
 
     companion object {
         fun byId(id: String?): ContextProfile = entries.firstOrNull { it.id == id } ?: HEMAT
@@ -63,10 +63,10 @@ enum class AiTaskBudget(val taskKey: String, val maxOutputTokens: Int, val useMt
 }
 
 enum class ProfileSource(val label: String) {
-    VERIFIED_BENCHMARK("Profil terukur perangkat"),
-    DEVICE_CACHE("Hasil benchmark perangkat ini"),
-    CONSERVATIVE_DEFAULT("Bawaan konservatif CPU"),
-    USER_OVERRIDE("Pilihan manual pengguna"),
+    VERIFIED_BENCHMARK("disesuaikan untuk HP ini"),
+    DEVICE_CACHE("hasil ukur HP ini"),
+    CONSERVATIVE_DEFAULT("bawaan hemat CPU"),
+    USER_OVERRIDE("pilihan manual"),
 }
 
 data class DeviceFingerprint(

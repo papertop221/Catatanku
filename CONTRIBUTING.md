@@ -19,14 +19,14 @@ Terima kasih sudah mau membantu. Catatanku dibangun di atas lima pilar filosofi:
 ./gradlew testDebugUnitTest --tests '*Shots*' -Pshots=true       # render layar ke app/build/shots/
 ```
 
-Butuh JDK 17+ dan Android SDK 36.
+Butuh JDK 21+ (untuk Robolectric SDK 36; build APK cukup JDK 17+) dan Android SDK 36.
 
 ## Pegangan wajib (5 Pilar)
 
 - **Praktis:** Alur singkat, simpan otomatis tanpa tombol Simpan, dan tindakan menyingkirkan/AI selalu bisa diurungkan.
 - **Efektif & Efisien:** Wajib ringan di HP berspesifikasi rendah; tanpa dependensi berat, tanpa kerja berat di UI thread atau jalur mengetik, dekode media asinkron/subsampled, serta cadangan streaming.
 - **Canggih:** AI lokal yang benar-benar membantu tanpa gimmick atau layar chatbot terpisah; tanggal/waktu (`TimeParse`) dan pencarian (`SearchEngine`) tetap memakai kode deterministik.
-- **100% Privasi:** Tanpa pelacak, iklan, akun, server, atau pustaka tertutup; jaringan hanya dipakai untuk unduhan model yang diminta pengguna dan pemeriksaan/unduhan pembaruan dari GitHub (bisa dimatikan).
+- **100% Privasi:** Tanpa pelacak, iklan, akun, server, atau pustaka tertutup; jaringan hanya dipakai untuk unduhan model yang diminta pengguna lewat `DownloadManager`.
 - **Aman:** Hormati kunci aplikasi di semua pintu masuk, perlakukan semua input eksternal (URI, JSON, teks luar, prompt) sebagai tidak tepercaya dan saring terlebih dahulu.
 - **Kode bersih & teruji:** Logika murni dipisah dari Android agar bisa diuji di JVM; sertakan uji untuk perilaku baru. Teks antarmuka dan komentar kode berbahasa Indonesia, mengikuti [DESAIN.md](docs/DESAIN.md).
 

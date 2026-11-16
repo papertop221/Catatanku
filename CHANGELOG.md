@@ -1,5 +1,13 @@
 # Riwayat perubahan
 
+## 1.8.1
+
+Penghapusan updater & penyelarasan UI/UX
+- Menghapus fitur pembaruan mandiri (`Updater`, `UpdateInstallReceiver`, izin `REQUEST_INSTALL_PACKAGES`, serta pemeriksaan GitHub otomatis saat membuka aplikasi) agar aplikasi tetap offline-first, berizin minimum, dan mematuhi penuh kebijakan F-Droid
+- Menyelaraskan UI/UX Pengaturan dengan filosofi "Kertas & Tinta": menghapus bagian Pembaruan dan telemetri pengembang (`TTFT`, `decode tok/s`, `MTP`, `KV cache`, penyebutan merek HP tertentu) dari *Kinerja AI*, memakai bahasa Indonesia manusiawi (*Panjang bacaan AI*, *Penyesuaian kecepatan*, *Pencarian makna*), serta tombol kata kerja + objek (*Ukur kecepatan*, *Lepas model*, *Hapus model*)
+- Menambahkan keterangan dialog sandi pemulihan cadangan terenkripsi, menonaktifkan pilihan panjang bacaan selain *Hemat* dengan penjelasan saat *Mode ringan* aktif, dan menampilkan versi aplikasi di bawah *Privasi*
+- Memperbaiki alur CI GitHub Actions ke JDK 21 agar uji Robolectric pada SDK 36 berjalan
+
 ## 1.8
 
 Cadangan lengkap & keamanan data

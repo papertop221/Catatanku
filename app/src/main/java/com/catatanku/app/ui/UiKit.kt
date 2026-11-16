@@ -117,13 +117,27 @@ internal fun SmallButton(text: String, primary: Boolean = false, enabled: Boolea
 }
 
 @Composable
-internal fun Choice(text: String, selected: Boolean = false, onClick: () -> Unit) = Box(
+internal fun Choice(text: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) = Box(
     Modifier.heightIn(min = 40.dp).clip(SmallShape)
-        .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
-        .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp),
+        .background(
+            when {
+                selected && enabled -> MaterialTheme.colorScheme.primary
+                selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            }
+        )
+        .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 12.dp),
     Alignment.Center,
 ) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = when {
+            selected -> MaterialTheme.colorScheme.onPrimary
+            enabled -> MaterialTheme.colorScheme.onSurface
+            else -> muted.copy(alpha = 0.5f)
+        },
+    )
 }
 
 @Composable

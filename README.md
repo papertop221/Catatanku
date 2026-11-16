@@ -8,12 +8,12 @@
 
 *An offline-first Android notes app with reminders and an on-device AI assistant. No account, no cloud, no tracking.*
 
-[![Versi](https://img.shields.io/badge/versi-1.8-191918)](CHANGELOG.md)
+[![Versi](https://img.shields.io/badge/versi-1.8.1-191918)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-191918)](#pasang)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
 [![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-### [Unduh Catatanku 1.8 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.8/Catatanku-1.8.apk)
+### [Unduh Catatanku 1.8.1 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.8.1/Catatanku-1.8.1.apk)
 
 Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 
@@ -41,25 +41,24 @@ Catatanku dibangun di atas lima pilar yang menjadi standar wajib setiap perubaha
 - **Praktis:** Buka, tulis, selesai — simpan otomatis tanpa tombol simpan, ketuk langsung kotak centang, selalu bisa diurungkan, dan menyatu dengan menu bagikan, teks terpilih, serta Setelan Cepat Android.
 - **Efektif & Efisien:** Tetap responsif dan hemat RAM bahkan di HP berspesifikasi rendah (dekode gambar asinkron/subsampled, cadangan & audio *streaming*, transaksi SQLite, pembaruan indeks ditunda saat mengetik, tanpa dependensi berat).
 - **Canggih:** AI lokal (teks, gambar, suara) yang benar-benar membantu dan terintegrasi sistem, bukan gimmick visual; waktu dan pencarian instan tetap dikerjakan kode deterministik.
-- **100% Privasi:** Offline-first tanpa akun, server, pelacak, iklan, ataupun SDK tertutup; jaringan hanya untuk model AI dan pembaruan resmi dari GitHub.
+- **100% Privasi:** Offline-first tanpa akun, server, pelacak, iklan, ataupun SDK tertutup; jaringan hanya untuk mengunduh model AI atas permintaan pengguna.
 - **Aman:** Kunci aplikasi ditegakkan hingga ke notifikasi bertoken acak, `FLAG_SECURE`, dan clipboard sensitif; input eksternal (URI, cadangan JSON, prompt AI) disaring ketat dan trafik jaringan tak terenkripsi ditolak.
 
 ## Pasang
 
-1. Unduh [`Catatanku-1.8.apk`](https://github.com/papertop221/Catatanku/releases/download/v1.8/Catatanku-1.8.apk).
+1. Unduh [`Catatanku-1.8.1.apk`](https://github.com/papertop221/Catatanku/releases/download/v1.8.1/Catatanku-1.8.1.apk).
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `7e4c7f1dabf7dd340f7cd17ff08343af8871e0f9bc2902d52ed5f0334d276e0a`
+SHA-256: `4f213685a474101d34ce8cd09d9df0ef4a05300395d732e696d8d4cf0390ec2a`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
-**Memperbarui dari 1.4–1.7.1:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Mulai 1.7.1,
-pembaruan berikutnya bisa dijalankan dari Pengaturan → **Pembaruan**. Sebelum memperbarui, sebaiknya ekspor dulu lewat
-Pengaturan → Cadangan → **Ekspor**.
+**Memperbarui dari 1.4–1.8:** pasang APK baru langsung di atasnya (atau perbarui lewat F-Droid); catatan, pengingat,
+dan model AI tetap. Sebelum memperbarui, sebaiknya ekspor dulu lewat Pengaturan → Cadangan → **Ekspor**.
 
 > [!IMPORTANT]
-> Versi 1.8 lulus 63 uji unit JVM + 1 benchmark `PerfTest` di Termux (dan membawa 27 uji Robolectric yang terkompilasi untuk desktop Linux `glibc` / CI), serta dibenchmark langsung untuk runtime LiteRT-LM pada Moto G86 Power 5G. Bila menemukan masalah,
+> Versi 1.8.1 lulus 59 uji unit JVM + 1 benchmark `PerfTest` di Termux (dan membawa 23 uji Robolectric yang terkompilasi untuk desktop Linux `glibc` / CI), serta dibenchmark langsung untuk runtime LiteRT-LM pada Moto G86 Power 5G. Bila menemukan masalah,
 > [laporkan di sini](https://github.com/papertop221/Catatanku/issues/new/choose) dengan menyebut merek HP dan versi Android.
 
 <details>
@@ -70,7 +69,7 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 
 1. Di versi lama: Pengaturan → **Ekspor**, simpan berkas JSON-nya.
 2. Copot versi lama. Model AI yang sudah diunduh ikut terhapus.
-3. Pasang 1.7.1, lalu Pengaturan → **Impor**.
+3. Pasang 1.8.1, lalu Pengaturan → **Impor**.
 4. Unduh ulang model AI.
 
 </details>
@@ -123,14 +122,9 @@ Hasil AI selalu ditinjau dulu sebelum diterapkan; "Ganti isi" bisa diurungkan, d
 - Mode terang dan gelap (hitam pekat); pilihan warna mengikuti wallpaper di Android 12+
 - Aturan desainnya tertulis di [DESAIN.md](docs/DESAIN.md)
 
-**Pembaruan**
-- Pengaturan → Pembaruan memeriksa GitHub Releases resmi, menampilkan catatan rilis, lalu mengunduh dan memasang APK di dalam aplikasi
-- Pemeriksaan otomatis sekali sehari bisa dimatikan; hanya APK dengan SHA-256 dan sertifikat tanda tangan yang sama dengan aplikasi terpasang yang dapat dipasang
-- Versi lama (sebelum fitur ini ada) perlu diperbarui sekali secara manual; sesudahnya pembaruan berjalan dari dalam aplikasi
-
 **Keamanan dan cadangan**
 - Kunci aplikasi dengan sidik jari atau PIN layar HP (`FLAG_SECURE` juga melindungi layar teks terpilih dan salinan papan klip ditandai sensitif di Android 13+)
-- Validasi ketat intent notifikasi (`EXTRA_TOKEN`), URI eksternal (menolak `file://` dan otoritas internal), perlindungan *path traversal* & *ZIP bomb*, verifikasi SHA-256 tiap entri, re-verifikasi TOCTOU pembaruan APK, serta pembersih token templat prompt AI
+- Validasi ketat intent notifikasi (`EXTRA_TOKEN`), URI eksternal (menolak `file://` dan otoritas internal), perlindungan *path traversal* & *ZIP bomb*, verifikasi SHA-256 tiap entri, serta pembersih token templat prompt AI
 - Ekspor & impor ZIP lengkap (`catatanku-backup.zip`) beserta lampiran gambar/suara dan riwayat versi lewat pemulihan *staging* atomik, kompatibel mundur dengan JSON v1–v3, serta pilihan cadangan terenkripsi AES-256-GCM (PBKDF2WithHmacSHA256)
 - Cadangan otomatis streaming harian (`AutoBackup`) ke folder pilihan pengguna (7 arsip ZIP terakhir)
 
@@ -153,21 +147,19 @@ Sudah punya berkas `.litertlm`? Pakai **Dari berkas** (juga mendukung model embe
 
 ## Privasi
 
-Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Izin internet hanya dipakai untuk mengunduh berkas model saat
-pengguna memintanya, dan untuk memeriksa/mengunduh pembaruan dari GitHub (otomatis paling banyak sekali sehari, bisa
-dimatikan). Tidak ada isi catatan atau data pengguna yang dikirim. Cadangan cloud Android dimatikan.
+Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Izin internet hanya dipakai untuk mengunduh berkas model AI
+lewat `DownloadManager` saat pengguna memintanya. Tidak ada isi catatan atau data pengguna yang dikirim, dan
+tidak ada fitur pembaruan otomatis maupun pelacak di latar belakang. Cadangan cloud Android dimatikan.
 
-Pembaruan mandiri membuat build ini tidak memenuhi kebijakan F-Droid, yang melarang aplikasi memperbarui dirinya
-sendiri; build untuk F-Droid perlu mematikan `Updater`. Untuk varian tanpa izin internet sama sekali, hapus
-`uses-permission INTERNET` di manifest — impor model dari berkas tetap berfungsi dan bagian Pembaruan hanya
-menampilkan pesan galat.
+Aplikasi tetap berfungsi penuh tanpa izin internet (impor berkas model lokal tetap berjalan). Tanpa self-updater
+dan izin `REQUEST_INSTALL_PACKAGES`, build resmi siap memenuhi kebijakan F-Droid.
 
 Izin lain: notifikasi, alarm tepat waktu, dan mulai-saat-boot untuk pengingat; biometrik untuk kunci aplikasi;
-pemasangan aplikasi (`REQUEST_INSTALL_PACKAGES`) untuk memasang pembaruan setelah disetujui pengguna.
+mikrofon saat merekam catatan suara.
 
 ## Build
 
-Butuh JDK 17+ dan Android SDK 36.
+Butuh JDK 21+ (untuk Robolectric SDK 36; build APK cukup JDK 17+) dan Android SDK 36.
 
 ```bash
 ./gradlew assembleRelease      # APK rilis (R8): app/build/outputs/apk/release/
@@ -196,9 +188,9 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Uji unit JVM murni & benchmark pencarian | 63 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `HybridSearchTest` 3, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7, `UpdaterTest` 4) + 1 `PerfTest` berjalan di Termux |
-| Mesin pencarian & semantik hibrida, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten, pembanding versi | Uji unit JVM otomatis |
-| Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite, parser rilis GitHub | 27 uji Robolectric (`ReminderTest` 20, `UpdateParserTest` 4, `Shots*` 3) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
+| Uji unit JVM murni & benchmark pencarian | 59 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `HybridSearchTest` 3, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7) + 1 `PerfTest` berjalan di Termux |
+| Mesin pencarian & semantik hibrida, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten | Uji unit JVM otomatis |
+| Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite | 23 uji Robolectric (`ReminderTest` 20, `Shots*` 3) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
 | Benchmark AI lokal pada perangkat (CPU sweep, GPU, MTP per-tugas, KV cache 2048/3072/4096, vision GPU 1024px, audio CPU, thermal 5-run) | Diukur langsung pada Moto G86 Power 5G (`mt6878`, `gemma-4-E2B-it.litertlm`, `litertlm-android` 0.19.1) — lihat [Benchmark](docs/BENCHMARK.md) |
 | Build debug & rilis R8 (`assembleDebug`, `assembleRelease`), Android Lint, audit graf ketergantungan bebas SDK tertutup | Diverifikasi saat build & CI |
 | Skenario sentuh interaktif APK penuh, transkripsi suara ucapan bahasa Indonesia nyata, serta keandalan alarm latar belakang pada merek OEM agresif (Oppo/Vivo/Xiaomi/Huawei/Transsion) | **Belum diuji langsung di perangkat OEM masing-masing** |
@@ -207,7 +199,7 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 - [Filosofi dan standar pengembangan](docs/FILOSOFI.md) — lima pilar wajib (Praktis, Efektif & Efisien, Canggih, 100% Privasi, Aman)
 - [Benchmark AI Moto G86 Power 5G](docs/BENCHMARK.md) — metodologi & hasil pengukuran CPU thread, GPU, MTP, KV cache, dan multimodal
-- [Audit keamanan & privasi](docs/KEAMANAN.md) — kontrol akses, cadangan terenkripsi, validasi URI/ZIP, dan pembaruan TOCTOU
+- [Audit keamanan & privasi](docs/KEAMANAN.md) — kontrol akses, cadangan terenkripsi, dan validasi URI/ZIP
 - [Arsitektur](docs/ARSITEKTUR.md) — struktur kode modular, alur data, keputusan teknis
 - [Desain](docs/DESAIN.md) — aturan tampilan "Kertas & Tinta"
 - [Riwayat perubahan](CHANGELOG.md)
