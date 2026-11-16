@@ -40,7 +40,7 @@ Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `706a0e13bbc738cc928c2d054d8a226443a6be75c00b858ecb0f9d998932c075`
+SHA-256: `9a0bdb19a6ce9228d1e77dd2d5d95042697dce3ff886ef77a0920d083e148b89`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
@@ -48,7 +48,7 @@ Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini
 sebaiknya ekspor dulu lewat Pengaturan → Cadangan → **Ekspor**.
 
 > [!IMPORTANT]
-> Versi 1.7 lulus 54 uji unit/Robolectric di kode, tetapi belum diuji menyeluruh di HP sungguhan. Bila menemukan masalah,
+> Versi 1.7 lulus 39 uji unit JVM di Termux (dan membawa 20 uji Robolectric untuk desktop Linux), serta telah mulai diuji sebagian di HP. Bila menemukan masalah,
 > [laporkan di sini](https://github.com/papertop221/Catatanku/issues/new/choose) dengan menyebut merek HP dan versi Android.
 
 <details>
@@ -179,9 +179,9 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Semua uji di bawah | 54 uji otomatis (35 uji unit JVM lulus di Termux; 19 uji Robolectric disiapkan untuk desktop Linux glibc) |
-| Mesin pencarian, pengurai keluaran AI, katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
-| Pengingat (alarm, mode tahan penghemat baterai, deteksi terlambat vs HP mati, uji mandiri, notifikasi, tunda, selesai, boot), catatan dari luar, riwayat versi, cadangan, migrasi v2 → v3 | Uji otomatis di Android tiruan (Robolectric) |
+| Semua uji di bawah | 39 uji unit JVM lulus di Termux (`AgentTest` 7, `AiTextTest` 16, `SearchEngineTest` 9, `TimeParseTest` 7); 20 uji Robolectric (`ReminderTest`, `ScreenshotTest`) disiapkan untuk desktop Linux glibc |
+| Mesin pencarian, pengurai keluaran AI, ekstraksi tugas dua langkah (gambar/suara), katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
+| Pengingat (alarm, mode tahan penghemat baterai, deteksi terlambat vs HP mati, uji mandiri, notifikasi, tunda, selesai, boot), catatan dari luar, riwayat versi, cadangan, migrasi v2 → v3 → v4 | Uji otomatis di Android tiruan (Robolectric) |
 | Asisten perintah: rencana, jalankan, urungkan, riwayat versi | Uji otomatis di Android tiruan (Robolectric) |
 | Tampilan 23 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
 | Prompt AI dengan Gemma 4 E2B, Qwen3 1.7B, Qwen2.5 1.5B | Diuji di desktop lewat `litertlm-jvm` |

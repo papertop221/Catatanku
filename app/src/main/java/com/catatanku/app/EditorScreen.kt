@@ -501,7 +501,7 @@ private fun AttachmentImageRow(
         Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Muted("Gambar", Modifier.weight(1f))
             if (hasModel) {
-                TextAction("Baca teks", onClick = onRead)
+                TextAction("Baca gambar", onClick = onRead)
                 TextAction("Ambil tugas", onClick = onTasks)
             }
             IconAction(AppIcons.Close, "Hapus gambar", muted, 18.dp, onClick = onRemove)

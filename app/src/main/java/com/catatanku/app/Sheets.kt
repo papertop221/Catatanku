@@ -316,20 +316,46 @@ internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean,
             else -> {
                 if (job.running) LinearProgressIndicator(Modifier.fillMaxWidth())
                 job.progress?.let { Muted(it, Modifier.padding(top = 8.dp), MaterialTheme.typography.labelMedium) }
-                Column(Modifier.heightIn(min = 80.dp, max = 360.dp).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
+                Column(Modifier.heightIn(min = 80.dp, max = 340.dp).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                     if (job.running && job.text.isEmpty()) Muted(if (loadingModel) "Memuat model ke memori…" else "Menulis…", style = MaterialTheme.typography.bodyMedium)
                     job.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     if (job.text.isNotEmpty()) Text(job.text, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)
                 }
                 if (job.running) SecondaryButton("Hentikan", Modifier.fillMaxWidth(), onClick = vm::stopAi)
                 else if (job.text.isNotBlank()) {
+                    val remindTime = job.suggestedRemindAt?.takeIf { it > System.currentTimeMillis() }
+                    var attachReminder by remember(job.suggestedRemindAt, job.text) { mutableStateOf(remindTime != null && !vm.draft.hasReminder) }
+                    if (remindTime != null) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer)
+                                .clickable { attachReminder = !attachReminder }.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(AppIcons.Bell, null, Modifier.size(16.dp), timeColor)
+                            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                Text("Pasang pengingat · ${whenLabel(remindTime)}", style = MaterialTheme.typography.labelLarge, color = timeColor)
+                                if (vm.draft.hasReminder) Muted("Mengganti pengingat catatan ini saat ini.")
+                            }
+                            Switch(attachReminder, { attachReminder = it })
+                        }
+                    }
                     // Satu aksi utama yang paling wajar untuk jenis hasilnya; sisanya sekunder.
                     val primaryReplaces = job.action.replaces
+                    val selectedRemind = if (attachReminder) remindTime else null
                     PrimaryButton(
-                        if (job.action.forTitle) "Pakai sebagai judul" else if (primaryReplaces) "Ganti isi catatan" else "Tambahkan ke catatan", Modifier.fillMaxWidth(),
-                    ) { vm.applyAi(replace = primaryReplaces) }
+                        when {
+                            job.action.forTitle -> "Pakai sebagai judul"
+                            primaryReplaces && selectedRemind != null -> "Ganti isi & pasang pengingat"
+                            primaryReplaces -> "Ganti isi catatan"
+                            selectedRemind != null -> "Tambahkan & pasang pengingat"
+                            else -> "Tambahkan ke catatan"
+                        },
+                        Modifier.fillMaxWidth(),
+                    ) { vm.applyAi(replace = primaryReplaces, remindAt = selectedRemind) }
                     Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        if (!job.action.forTitle) TextAction(if (primaryReplaces) "Tambahkan saja" else "Ganti isi") { vm.applyAi(replace = !primaryReplaces) }
+                        if (!job.action.forTitle) TextAction(if (primaryReplaces) "Tambahkan saja" else "Ganti isi") {
+                            vm.applyAi(replace = !primaryReplaces, remindAt = selectedRemind)
+                        }
                         TextAction("Salin hasil") { onCopy(job.text) }
                         TextAction("Buang hasil", onClick = vm::dismissAi)
                     }

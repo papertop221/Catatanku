@@ -14,9 +14,13 @@ Catatan, editor, dan daftar (perbaikan fundamental)
   daftar kini punya *Pindahkan ke folder*, *Tandai pengingat selesai*, dan *Hapus permanen* (di Sampah)
 
 Catatan suara, gambar, dan AI multimodal
-- Rekam catatan suara (WAV 16 kHz mono) dan lampirkan gambar di dalam catatan (`Media.kt`, skema basis data v4)
-- AI multimodal lokal (Gemma 4 E2B): baca teks/isi gambar (OCR), ambil daftar tugas dari gambar, serta transkripsikan
-  atau ambil daftar tugas dari rekaman suara sepenuhnya di perangkat
+- Rekam catatan suara (WAV 16 kHz mono) dan lampirkan gambar di dalam catatan (`Media.kt`, skema basis data v4);
+  berkas audio kiriman aplikasi lain (`.m4a`/`.mp3`/`.ogg`) didekode otomatis ke WAV 16 kHz agar terbaca model
+- AI multimodal lokal (Gemma 4 E2B): baca gambar, serta transkripsikan rekaman suara
+- Ekstraksi tugas dua langkah dari gambar & suara (`AiText.imageOcrPrompt`, `audioTranscribePrompt`, `extractDirectTasksAndTime`,
+  `tasksFromTextPrompt`): foto biasa tanpa teks tidak dikarang menjadi tugas, kalimat perintah dipecah menjadi daftar
+  ceklis `☐` yang bersih, dan keterangan waktu ("nanti sore", "sore nanti", "besok jam 10") ditawarkan langsung
+  sebagai pengingat di lembar hasil AI (lengkap dengan Urungkan)
 - Satu kalimat menjadi beberapa objek: "ingatkan saya besok jam 7 malam rapat RT: siapkan laporan, beli konsumsi #rt di
   folder Warga" langsung membuat catatan berjudul, berisi daftar centang `☐`, bertag, berfolder, sekaligus berpengingat
 

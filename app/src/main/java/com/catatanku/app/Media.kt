@@ -6,6 +6,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -13,6 +16,7 @@ import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -61,7 +65,7 @@ object Attachments {
         return name
     }
 
-    /** Menyalin berkas suara yang dibagikan dari aplikasi lain (maks 25 MB). */
+    /** Menyalin berkas suara yang dibagikan dari aplikasi lain (maks 25 MB), dan mengubahnya ke WAV 16kHz mono bila bisa agar dibaca model AI. */
     fun importAudio(ctx: Context, uri: Uri): String {
         val mime = ctx.contentResolver.getType(uri).orEmpty().lowercase()
         val ext = when {
@@ -87,7 +91,119 @@ object Attachments {
             }
         } ?: error("Berkas suara tidak bisa dibuka.")
         if (total < 100) { out.delete(); error("Berkas suara kosong.") }
+        if (ext != "wav") {
+            val wavName = "aud_${System.currentTimeMillis()}_${(100..999).random()}.wav"
+            val wavFile = file(ctx, wavName)
+            if (transcodeToWav16k(out, wavFile)) {
+                out.delete()
+                return wavName
+            }
+            wavFile.delete()
+        }
         return name
+    }
+
+    /** Mendekode berkas audio (m4a, mp3, ogg, aac) ke WAV 16 kHz mono lewat MediaExtractor/MediaCodec bawaan Android. */
+    private fun transcodeToWav16k(src: File, dst: File): Boolean = runCatching {
+        val extractor = MediaExtractor()
+        var codec: MediaCodec? = null
+        try {
+            extractor.setDataSource(src.absolutePath)
+            val trackIdx = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: return false
+            extractor.selectTrack(trackIdx)
+            val fmt = extractor.getTrackFormat(trackIdx)
+            val mime = fmt.getString(MediaFormat.KEY_MIME) ?: return false
+            val srcRate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            val channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+
+            val c = MediaCodec.createDecoderByType(mime)
+            codec = c
+            c.configure(fmt, null, null, 0)
+            c.start()
+
+            val pcmOut = ByteArrayOutputStream()
+            val maxSamples = SAMPLE_RATE * 5 * 60   // batas 5 menit agar hemat RAM/ruang
+            var writtenSamples = 0
+            val info = MediaCodec.BufferInfo()
+            var inputDone = false
+            var outputDone = false
+            var posAcc = 0.0
+            val step = srcRate.toDouble() / SAMPLE_RATE
+
+            while (!outputDone && writtenSamples < maxSamples) {
+                if (!inputDone) {
+                    val inIdx = c.dequeueInputBuffer(10_000)
+                    if (inIdx >= 0) {
+                        val buf = c.getInputBuffer(inIdx)!!
+                        val sampleSize = extractor.readSampleData(buf, 0)
+                        if (sampleSize < 0) {
+                            c.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            c.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
+                    }
+                }
+                val outIdx = c.dequeueOutputBuffer(info, 10_000)
+                if (outIdx >= 0) {
+                    val buf = c.getOutputBuffer(outIdx)
+                    if (buf != null && info.size > 0) {
+                        buf.position(info.offset)
+                        buf.limit(info.offset + info.size)
+                        val shorts = buf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                        val frames = shorts.remaining() / channels
+                        var frameIdx = posAcc.toInt()
+                        while (frameIdx < frames && writtenSamples < maxSamples) {
+                            var sum = 0
+                            for (ch in 0 until channels) sum += shorts.get(frameIdx * channels + ch)
+                            val mono = (sum / channels).toShort()
+                            pcmOut.write(mono.toInt() and 0xFF)
+                            pcmOut.write((mono.toInt() ushr 8) and 0xFF)
+                            writtenSamples++
+                            posAcc += step
+                            frameIdx = posAcc.toInt()
+                        }
+                        posAcc -= frames
+                        if (posAcc < 0) posAcc = 0.0
+                    }
+                    c.releaseOutputBuffer(outIdx, false)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
+                }
+            }
+            val pcm = pcmOut.toByteArray()
+            if (pcm.size < 1600) return false
+            FileOutputStream(dst).use { out ->
+                out.write(wavHeader(pcm.size.toLong()))
+                out.write(pcm)
+            }
+            true
+        } finally {
+            runCatching { codec?.stop() }
+            runCatching { codec?.release() }
+            runCatching { extractor.release() }
+        }
+    }.getOrDefault(false)
+
+    internal fun wavHeader(pcmBytes: Long): ByteArray {
+        val totalDataLen = pcmBytes + 36
+        val byteRate = SAMPLE_RATE * 2
+        return ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray(Charsets.US_ASCII))
+            putInt(totalDataLen.toInt())
+            put("WAVEfmt ".toByteArray(Charsets.US_ASCII))
+            putInt(16)                                  // ukuran sub-chunk PCM
+            putShort(1)                                 // AudioFormat 1 = PCM
+            putShort(1)                                 // 1 kanal (mono)
+            putInt(SAMPLE_RATE)
+            putInt(byteRate)
+            putShort(2)                                 // block align
+            putShort(16)                                // bits per sample
+            put("data".toByteArray(Charsets.US_ASCII))
+            putInt(pcmBytes.toInt())
+        }.array()
     }
 
     /** Perkiraan durasi rekaman suara dalam detik. Untuk WAV 16 kHz mono dihitung langsung dari ukuran berkas. */
@@ -186,23 +302,7 @@ class VoiceRecorder(private val ctx: Context) {
 
     private fun writeWavHeader(file: File, pcmBytes: Long) {
         if (!file.exists()) return
-        val totalDataLen = pcmBytes + 36
-        val byteRate = Attachments.SAMPLE_RATE * 2
-        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
-            put("RIFF".toByteArray(Charsets.US_ASCII))
-            putInt(totalDataLen.toInt())
-            put("WAVEfmt ".toByteArray(Charsets.US_ASCII))
-            putInt(16)                                  // ukuran sub-chunk PCM
-            putShort(1)                                 // AudioFormat 1 = PCM
-            putShort(1)                                 // 1 kanal (mono)
-            putInt(Attachments.SAMPLE_RATE)
-            putInt(byteRate)
-            putShort(2)                                 // block align
-            putShort(16)                                // bits per sample
-            put("data".toByteArray(Charsets.US_ASCII))
-            putInt(pcmBytes.toInt())
-        }.array()
-        RandomAccessFile(file, "rw").use { raf -> raf.seek(0); raf.write(header) }
+        RandomAccessFile(file, "rw").use { raf -> raf.seek(0); raf.write(Attachments.wavHeader(pcmBytes)) }
     }
 }
 

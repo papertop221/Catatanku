@@ -92,6 +92,13 @@ Sebelum 1.6, tiap simpan otomatis membangun indeks dari awal di thread utama (ko
 format secara longgar, dan menolak folder yang tidak ada di daftar pengguna. Bila model hanya mengisi sebagian,
 tag diminta ulang secara terpisah.
 
+**Multimodal dua langkah (gambar & suara).** Untuk "Ambil tugas" dari gambar atau rekaman suara, model tidak diminta
+langsung mengarang tugas dari piksel atau audio mentah. Gambar melewati gerbang OCR ketat (`AiText.imageOcrPrompt` +
+`isNoTextOrSceneDescription`) agar foto biasa tanpa teks tugas tidak dikarang menjadi ceklis; suara ditranskripsikan
+dulu dengan prompt ringkas (`AiText.audioTranscribePrompt` + `cleanTranscript`) agar model kecil tidak memantulkan kata
+instruksi. Sesudahnya waktu dihitung secara deterministik oleh `TimeParse` (lalu ditawarkan langsung sebagai pengingat
+di `AiSheet`), dan daftar ceklis `☐` dipecah dari teks yang bersih.
+
 **Batas masukan** bergantung model (`ModelSpec.inputChars`): 6.000 karakter untuk Gemma 4, 2.800 untuk model kecil,
 dan paling banyak 2.400 dalam Mode ringan.
 

@@ -208,18 +208,32 @@ class ProcessTextActivity : ComponentActivity() {
     private var running by mutableStateOf(false)
     private var label by mutableStateOf("")
     private var error by mutableStateOf<String?>(null)
+    private var detectedRemindAt by mutableStateOf<Long?>(null)
     private var job: Job? = null
     private val ai by lazy { LocalAi.get(this) }
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
 
     private fun run(action: AiAction, text: String) {
-        label = action.label; result = ""; error = null; running = true
+        label = action.label; result = ""; error = null; detectedRemindAt = null; running = true
         job = lifecycleScope.launch {
             try {
-                val out = ai.generate(AiText.prompt(action, "", text)) { result = AiText.cleanBlock(it) }
-                result = AiText.cleanBlock(out)
-                if (result.isNullOrBlank()) error = "Model tidak menghasilkan teks. Coba lagi dengan teks yang lebih pendek."
+                if (action == AiAction.Tasks) {
+                    val foundTime = TimeParse.best(text)
+                    val direct = AiText.extractDirectTasksAndTime(text)
+                    val extracted = direct ?: AiText.parseExtractedTasks(ai.generate(AiText.tasksFromTextPrompt(text)), foundTime)
+                    if (extracted.isEmpty) {
+                        result = ""
+                        error = "Tidak ada tugas nyata yang ditemukan pada teks terpilih."
+                    } else {
+                        result = extracted.text
+                        detectedRemindAt = extracted.remindAt?.toMillis()
+                    }
+                } else {
+                    val out = ai.generate(AiText.prompt(action, "", text)) { result = AiText.cleanBlock(it) }
+                    result = AiText.cleanBlock(out)
+                    if (result.isNullOrBlank()) error = "Model tidak menghasilkan teks. Coba lagi dengan teks yang lebih pendek."
+                }
             } catch (e: CancellationException) {
             } catch (e: Throwable) { error = "AI gagal: ${e.message}" } finally { running = false }
         }
@@ -282,14 +296,19 @@ class ProcessTextActivity : ComponentActivity() {
                             running -> SecondaryButton("Hentikan", Modifier.fillMaxWidth()) { job?.cancel() }
                             out.isBlank() -> SecondaryButton("Kembali ke pilihan", Modifier.fillMaxWidth()) { result = null; error = null }
                             else -> {
+                                val remind = detectedRemindAt?.takeIf { it > System.currentTimeMillis() }
                                 // Aplikasi asal mengizinkan teksnya diganti (kolom yang bisa disunting): itu aksi utamanya.
                                 if (!readOnly) PrimaryButton("Ganti teks terpilih", Modifier.fillMaxWidth()) {
                                     setResult(RESULT_OK, Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, out)); finish()
+                                } else if (remind != null) PrimaryButton("Simpan & ingatkan ${whenLabel(remind)}", Modifier.fillMaxWidth()) {
+                                    save(out, remind)
                                 } else PrimaryButton("Simpan sebagai catatan", Modifier.fillMaxWidth()) { save(out) }
                                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                     TextAction("Salin hasil") { copyText(this@ProcessTextActivity, out); toast("Hasil disalin"); finish() }
-                                    if (!readOnly) TextAction("Simpan sebagai catatan") { save(out) }
-                                    TextAction("Buang hasil") { result = null }
+                                    if (!readOnly && remind != null) TextAction("Simpan + pengingat") { save(out, remind) }
+                                    else if (!readOnly) TextAction("Simpan sebagai catatan") { save(out) }
+                                    else if (remind != null) TextAction("Simpan tanpa pengingat") { save(out) }
+                                    TextAction("Buang hasil") { result = null; detectedRemindAt = null }
                                 }
                             }
                         }

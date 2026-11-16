@@ -331,23 +331,177 @@ object AiText {
         return if (done) out else null
     }
 
-    /** Prompt multimodal untuk membaca teks/isi gambar atau mengambil daftar tugas dari gambar. */
-    fun imagePrompt(extractTasks: Boolean = false): String =
-        if (extractTasks)
-            "Perhatikan gambar ini, lalu tuliskan daftar tugas, kegiatan, atau barang yang perlu dikerjakan/dibeli, " +
-                "satu butir per baris diawali \"☐ \". Jika tidak ada tugas, salin teks penting yang terlihat di gambar. " +
-                "Gunakan bahasa Indonesia, teks polos tanpa tanda * atau #."
-        else
-            "Baca semua teks yang terlihat di gambar ini dengan teliti dan salin secara rapi. Jika gambar memuat struk, " +
-                "jadwal, atau catatan papan tulis, tuliskan per baris. Jika gambar tidak memuat teks, jelaskan isinya secara " +
-                "singkat dalam 2 sampai 3 kalimat. Gunakan bahasa Indonesia, teks polos tanpa tanda * atau #."
+    /** Hasil ekstraksi tugas dari gambar/suara/teks: daftar ceklis `☐ ...` dan waktu pengingat bila disebut. */
+    data class ExtractedTasks(
+        val tasks: List<String>,
+        val remindAt: java.time.LocalDateTime? = null,
+        val timePhrase: String? = null,
+    ) {
+        val text: String get() = tasks.joinToString("\n")
+        val isEmpty: Boolean get() = tasks.isEmpty()
+    }
 
-    /** Prompt multimodal untuk mentranskripsikan rekaman suara atau mengambil daftar tugas darinya. */
-    fun audioPrompt(extractTasks: Boolean = false): String =
-        if (extractTasks)
-            "Dengarkan rekaman suara ini, lalu tuliskan daftar tugas atau hal yang harus dikerjakan satu per baris " +
-                "diawali \"☐ \", diikuti ringkasan singkat isi rekaman. Gunakan bahasa Indonesia, teks polos tanpa tanda * atau #."
-        else
-            "Transkripsikan ucapan dalam rekaman suara ini ke bahasa Indonesia secara lengkap dan rapi. " +
-                "Tulis HANYA hasil transkripsinya sebagai teks polos tanpa tanda * atau #."
+    /** Prompt membaca gambar (salin tulisan bila ada, atau jelaskan foto bila tidak ada teks). */
+    fun imageReadPrompt(): String =
+        "Jika gambar ini memuat tulisan (seperti catatan, struk, daftar, jadwal, atau tangkapan layar pesan), " +
+            "salin semua tulisan tersebut apa adanya dengan rapi.\n" +
+            "Jika gambar tidak memuat tulisan, jelaskan isi gambar secara singkat dalam satu atau dua kalimat.\n" +
+            "Tulis teks polos tanpa tanda * atau #.\n\nHasil:"
+
+    /** Prompt OCR ketat untuk langkah pertama "Ambil tugas" dari gambar: dilarang mendeskripsikan foto. */
+    fun imageOcrPrompt(): String =
+        "Periksa gambar ini. Apakah ada tulisan atau teks yang jelas terbaca " +
+            "(misalnya catatan tangan, daftar belanja, papan tulis, struk, jadwal, atau tangkapan layar pesan)?\n" +
+            "Jika TIDAK ADA tulisan yang terbaca (misalnya hanya foto orang, pemandangan, atau benda tanpa teks tugas), jawab TEPAT: TIDAK ADA TEKS\n" +
+            "Jika ADA tulisan, salin HANYA tulisan yang terlihat di gambar apa adanya. Jangan mendeskripsikan orang, pakaian, atau pemandangan.\n\n" +
+            "Tulisan:"
+
+    /** Prompt transkripsi suara yang singkat dan berakhiran penanda agar model kecil tidak memantulkan instruksi. */
+    fun audioTranscribePrompt(): String =
+        "Tuliskan persis ucapan dalam rekaman suara ini, kata demi kata, tanpa menambah penjelasan.\n\nUcapan:"
+
+    /** Prompt ekstraksi tugas berbasis teks (dipakai sesudah OCR atau transkripsi suara). */
+    fun tasksFromTextPrompt(text: String): String =
+        "Ekstrak HANYA tugas nyata yang harus dikerjakan dari teks berikut.\n" +
+            "Aturan:\n" +
+            "- Satu tugas singkat per baris, diawali \"☐ \".\n" +
+            "- Pecah beberapa tugas dalam satu kalimat menjadi baris terpisah.\n" +
+            "- Buang kata keterangan waktu (besok, nanti sore, jam 7) dari kalimat tugas.\n" +
+            "- Jika teks hanya cerita, deskripsi pemandangan/orang, atau tidak memuat tugas nyata, jawab persis: Tidak ada tugas.\n\n" +
+            "Contoh:\n" +
+            "Teks: nanti sore buat catatan pribadi\n" +
+            "Daftar tugas:\n☐ Buat catatan pribadi\n\n" +
+            "Teks: besok jam 7 malam bayar listrik, beli gas, terus hubungi Pak RT\n" +
+            "Daftar tugas:\n☐ Bayar listrik\n☐ Beli gas\n☐ Hubungi Pak RT\n\n" +
+            "Teks: Seorang wanita berdiri di tepi pantai saat matahari terbenam.\n" +
+            "Daftar tugas:\nTidak ada tugas.\n\n" +
+            "Teks: ${clip(text, 2000)}\nDaftar tugas:"
+
+    private val AUDIO_ECHO_LEAD = Regex("(?i)^(?:transkripsi(?:kan)?|ucapan|kalimat yang diucapkan|tulisan|hasil(?:nya)?)\\s*[:\\-]?\\s*")
+    private val AUDIO_ECHO_TAIL = Regex("(?i)\\s*(?:(?:dengan|dalam)\\s+bahasa\\s+indonesia|tanpa\\s+(?:tambahan\\s+)?(?:kata|penjelasan)\\s*(?:apa\\s+pun)?|kata\\s+demi\\s+kata)\\.?$")
+    private val NO_TEXT_ABSENT = Regex(
+        "(?i)^(?:nihil|tidak ada(?: tulisan| teks| tugas)?|kosong|none|-+)\\.?$|" +
+            "tidak (?:memuat|ada|terdapat|ditemukan|terlihat) (?:tulisan|teks|tugas)"
+    )
+    private val SCENE_DESC = Regex(
+        "(?i)^(?:(?:ini\\s+adalah|terlihat)\\s+)?(?:gambar|foto|potret|ilustrasi|adegan)\\b.*?(?:menampilkan|menunjukkan|memperlihatkan|menggambarkan|berisi|adalah|di\\s+pantai|di\\s+luar)|" +
+            "^(?:di dalam )?(?:gambar|foto) ini[, ]|" +
+            "^(?:terlihat|tampak|ada)\\s+seorang\\s+(?:wanita|perempuan|pria|laki-laki|gadis|anak|orang)|" +
+            "^seorang\\s+(?:wanita|perempuan|pria|laki-laki|gadis|anak|model)\\s+(?:yang\\s+)?(?:sedang|berdiri|duduk|berpose|tersenyum|berada|memakai|mengenakan)|" +
+            "^(?:pemandangan|suasana)\\s+(?:pantai|laut|gunung|alam)"
+    )
+    private val SPOKEN_LEAD = Regex(
+        "(?i)^(?:(?:tolong|coba|mohon|jangan lupa|ingatkan(?: saya| aku| kami| kita)?|ingetin(?: saya| aku)?|" +
+            "pasang pengingat|buat pengingat|setel pengingat|catat(?:kan)?|catet(?:in)?|saya mau|aku mau|saya harus|aku harus|harus|mau|nanti|ntar)\\s+)+"
+    )
+    private val SPOKEN_TAIL = Regex("(?i)\\s+(?:ya|dong|donk|deh|saja|aja)$")
+    private val DANGLING_TIME_PREP = Regex("(?i)\\s+(?:pada|pukul|jam|di|sebelum|sampai)$")
+    private val LEADING_TIME_PREP = Regex("(?i)^(?:pada|di|untuk)\\s+")
+    private val PROSE_MARKERS = Regex("(?i)\\b(?:tadi|kemarin|katanya|bilang|sepertinya|kayaknya|karena|menurut|padahal|kalau|jika|apakah|bagaimana|gimana|kenapa|siapa|berapa|dimana|sedang|tampak|terlihat|foto|gambar)\\b")
+    private val TASK_VERB =
+        "(?:buat(?:kan)?|bikin(?:kan)?|beli(?:kan)?|bayar(?:kan)?|cek|periksa|telepon|hubungi|kabari|kirim(?:kan)?|ambil(?:kan)?|" +
+            "antar(?:kan)?|jemput|siapkan|rapikan|bersihkan|cuci|ganti|isi|tulis|catat|baca|pelajari|kerjakan|selesaikan|" +
+            "transfer|pesan|unduh|cetak|masak|potong|angkat|kunci|matikan|nyalakan|bawa|pakai|minum|datang|pergi|berangkat|" +
+            "kumpul|rapat|meeting|belanja|olahraga|latihan|belajar|kontrol|wawancara|presentasi|ketemu|" +
+            "kembalikan|perbaiki|servis|service|urus|daftar|perpanjang|tagih|konfirmasi|tanyakan|lanjutkan|ingatkan)\\b"
+    private val TASK_SPLIT = Regex(
+        "(?i)(?:\\s*[,;\\n]\\s*(?:(?:dan|sama|serta|lalu|kemudian|terus|habis itu|setelah itu)\\s+)?|" +
+            "\\s+(?:lalu|kemudian|terus|habis itu|setelah itu)\\s+|" +
+            "\\s+(?:dan|sama|serta)\\s+(?=$TASK_VERB))"
+    )
+    private val LEADING_CONJ = Regex("(?i)^(?:dan|sama|serta|lalu|kemudian|terus)\\s+")
+    private val TASK_LINE_PREFIX = Regex("^(?:\\d+[.)]|[-*•☐☑])\\s*")
+    private val NON_TASK_CHAT = Regex("(?i)^(?:halo|hai|tes|test|cek satu dua|apa kabar|terima kasih|oke|ok|siap)\\b")
+
+    /** Membersihkan pantulan instruksi prompt dan kutip dari hasil transkripsi model suara. */
+    fun cleanTranscript(raw: String): String {
+        var s = cleanBlock(raw).trim().trim('"', '“', '”', '\'')
+        repeat(3) {
+            val prev = s
+            s = AUDIO_ECHO_LEAD.replace(s, "").trim()
+            s = AUDIO_ECHO_TAIL.replace(s, "").trim()
+            s = s.trim('"', '“', '”', '\'')
+            if (s == prev) return s
+        }
+        return s
+    }
+
+    /** True bila keluaran OCR menyatakan tidak ada teks di gambar atau model justru mendeskripsikan foto biasa. */
+    fun isNoTextOrSceneDescription(raw: String): Boolean {
+        val s = cleanBlock(raw).trim()
+        if (s.length < 2) return true
+        return NO_TEXT_ABSENT.containsMatchIn(s) || SCENE_DESC.containsMatchIn(s)
+    }
+
+    /** True bila keluaran ekstraksi tugas menyatakan tidak ada tugas. */
+    fun isNoTasks(raw: String): Boolean {
+        val s = cleanBlock(raw).trim()
+        if (s.isEmpty()) return true
+        val lines = s.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        return lines.isEmpty() || lines.all { line ->
+            val bare = line.removePrefix("☐").removePrefix("•").trim()
+            bare.length < 2 || NO_TEXT_ABSENT.containsMatchIn(bare) || SCENE_DESC.containsMatchIn(bare)
+        }
+    }
+
+    /** Menghapus frasa waktu [phrase] dari satu kalimat atau baris tugas beserta kata depan yang menggantung. */
+    private fun stripTimePhrase(text: String, phrase: String?): String {
+        if (phrase.isNullOrBlank()) return text
+        val escaped = Regex.escape(phrase.trim())
+        var s = text.replace(Regex("(?i)\\b$escaped\\b"), " ")
+        if (s == text) s = text.replace(phrase.trim(), " ", ignoreCase = true)
+        s = s.replace(Regex("\\s+"), " ").trim()
+        s = DANGLING_TIME_PREP.replace(s, "").trim()
+        s = LEADING_TIME_PREP.replace(s, "").trim()
+        return s.trim(',', ';', '-', ':', ' ')
+    }
+
+    /**
+     * Ekstraksi cepat tanpa LLM tambahan untuk ucapan atau perintah langsung (mis. "nanti sore buat catatan pribadi"
+     * atau "besok jam 7 malam bayar listrik dan beli token"). Mengembalikan null untuk teks naratif/panjang
+     * agar ditangani oleh LLM teks.
+     */
+    fun extractDirectTasksAndTime(raw: String, now: java.time.LocalDateTime = java.time.LocalDateTime.now()): ExtractedTasks? {
+        val cleaned = cleanTranscript(raw)
+        if (cleaned.isEmpty() || isNoTextOrSceneDescription(cleaned) || NON_TASK_CHAT.containsMatchIn(cleaned)) return null
+        val found = TimeParse.best(cleaned, now)
+        var rest = stripTimePhrase(cleaned, found?.phrase)
+        rest = SPOKEN_TAIL.replace(SPOKEN_LEAD.replace(rest, ""), "").trim()
+        // "ingatkan buat bayar listrik" -> buang "buat/untuk" hanya jika diikuti kata kerja tugas lain ("bayar"),
+        // sedangkan "buat catatan pribadi" tetap mempertahankan "buat".
+        rest = rest.replace(Regex("(?i)^(?:untuk|buat)\\s+(?=$TASK_VERB)"), "")
+        if (rest.isBlank()) return null
+
+        val wordCount = wordCount(rest)
+        if (wordCount > 14 || PROSE_MARKERS.containsMatchIn(rest)) return null
+        val startsWithAction = Regex("(?i)^$TASK_VERB").containsMatchIn(rest)
+        if (!startsWithAction) return null
+
+        val items = rest.split(TASK_SPLIT)
+            .map { TASK_LINE_PREFIX.replace(it.trim(), "") }
+            .map { LEADING_CONJ.replace(it.trim(), "") }
+            .map { SPOKEN_TAIL.replace(SPOKEN_LEAD.replace(it.trim(',', ';', '.', '-', ' '), ""), "").trim() }
+            .filter { it.length >= 2 && !NO_TEXT_ABSENT.containsMatchIn(it) }
+            .map { "☐ " + it.replaceFirstChar { ch -> ch.uppercase() } }
+            .distinct()
+        return if (items.isEmpty()) null else ExtractedTasks(items, found?.at, found?.phrase)
+    }
+
+    /**
+     * Membersihkan keluaran LLM dari [tasksFromTextPrompt] dan memasangkannya dengan waktu dari [foundTime].
+     */
+    fun parseExtractedTasks(raw: String, foundTime: TimeParse.Found? = null): ExtractedTasks {
+        val cleaned = cleanBlock(raw)
+        if (isNoTasks(cleaned)) return ExtractedTasks(emptyList(), foundTime?.at, foundTime?.phrase)
+        val items = cleaned.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.equals("Daftar tugas:", ignoreCase = true) }
+            .map { TASK_LINE_PREFIX.replace(it, "").trim() }
+            .map { stripTimePhrase(it, foundTime?.phrase) }
+            .map { AUDIO_ECHO_TAIL.replace(it, "").trim() }
+            .filter { it.length >= 2 && !NO_TEXT_ABSENT.containsMatchIn(it) && !SCENE_DESC.containsMatchIn(it) }
+            .map { "☐ " + it.replaceFirstChar { ch -> ch.uppercase() } }
+            .distinct()
+        return ExtractedTasks(items, foundTime?.at, foundTime?.phrase)
+    }
 }

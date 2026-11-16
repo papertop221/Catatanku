@@ -24,6 +24,13 @@ class TimeParseTest {
         assertEquals(dt(11, 15, 20, 30), at("2 jam lagi minum obat"))
         assertEquals(dt(11, 15, 19), at("nanti malam telepon bapak"))
         assertEquals(dt(11, 15, 21), at("malam ini jam 9 rapat daring"))
+        assertEquals(dt(11, 15, 19), TimeParse.best("malam nanti telepon ibu", now)?.at)
+        assertEquals(dt(11, 15, 20, 15), TimeParse.best("malam nanti telepon ibu", LocalDateTime.of(2026, 11, 15, 19, 15))?.at)
+        val morning = LocalDateTime.of(2026, 11, 15, 10, 0)
+        assertEquals(dt(11, 15, 16), TimeParse.best("nanti sore buat catatan pribadi", morning)?.at)
+        assertEquals(dt(11, 15, 16), TimeParse.best("sore nanti buat catatan pribadi", morning)?.at)
+        val lateAfternoon = LocalDateTime.of(2026, 11, 15, 16, 15)
+        assertEquals(dt(11, 15, 17, 15), TimeParse.best("nanti sore bayar tagihan", lateAfternoon)?.at)
     }
 
     @Test fun explicitDates() {

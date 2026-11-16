@@ -202,7 +202,43 @@ class AiTextTest {
         assertEquals("Judul bagian\n☑ Beli beras\n  ☑ Cuci motor\nBiasa", toggled)
         assertEquals(src, AiText.setTaskChecked(toggled, "☐ Beli beras", checked = false))
 
-        assertTrue(AiText.imagePrompt(true).contains("☐"))
-        assertTrue(AiText.audioPrompt(false).contains("Transkripsikan"))
+        assertTrue(AiText.imageOcrPrompt().contains("TIDAK ADA TEKS"))
+        assertTrue(AiText.audioTranscribePrompt().contains("Ucapan:"))
+        assertTrue(AiText.tasksFromTextPrompt("x").contains("Tidak ada tugas."))
+    }
+
+    @Test fun audioAndImageTaskExtractionRejectsNoiseAndSeparatesTime() {
+        val morning = java.time.LocalDateTime.of(2026, 11, 15, 10, 0)
+        // Kasus nyata pengguna: rekaman suara "nanti sore buat catatan pribadi" (termasuk pantulan prompt).
+        assertEquals(
+            "nanti sore buat catatan pribadi",
+            AiText.cleanTranscript("Ucapan: \"nanti sore buat catatan pribadi dengan bahasa indonesia\""),
+        )
+        val direct1 = AiText.extractDirectTasksAndTime("nanti sore buat catatan pribadi", morning)!!
+        assertEquals(listOf("☐ Buat catatan pribadi"), direct1.tasks)
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 15, 16, 0), direct1.remindAt)
+
+        // Meski terbalik "sore nanti ...", tetap terpecah menjadi tugas + pengingat.
+        val direct2 = AiText.extractDirectTasksAndTime("Ucapan: sore nanti buat catatan pribadi dengan bahasa indonesia", morning)!!
+        assertEquals(listOf("☐ Buat catatan pribadi"), direct2.tasks)
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 15, 16, 0), direct2.remindAt)
+
+        // Beberapa tugas dalam satu ucapan terpecah menjadi daftar centang.
+        val direct3 = AiText.extractDirectTasksAndTime("nanti sore tolong ingatkan buat bayar listrik, beli beras, sama hubungi Pak RT", morning)!!
+        assertEquals(listOf("☐ Bayar listrik", "☐ Beli beras", "☐ Hubungi Pak RT"), direct3.tasks)
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 15, 16, 0), direct3.remindAt)
+
+        // Foto tanpa teks tugas (mis. cewek di pantai) ditolak oleh gerbang OCR dan ekstraktor tugas.
+        assertTrue(AiText.isNoTextOrSceneDescription("TIDAK ADA TEKS"))
+        assertTrue(AiText.isNoTextOrSceneDescription("Gambar ini menampilkan seorang wanita di tepi pantai."))
+        assertTrue(AiText.isNoTextOrSceneDescription("Seorang perempuan berpose di pantai sambil tersenyum."))
+        assertEquals(null, AiText.extractDirectTasksAndTime("Seorang wanita berdiri di tepi pantai.", morning))
+        assertTrue(AiText.parseExtractedTasks("Tidak ada tugas.").isEmpty)
+
+        // Teks hasil OCR dengan keterangan waktu tetap membuang frasa waktu dari butir tugas.
+        val found = TimeParse.best("Besok jam 10 pagi kirim laporan ke Pak Budi", morning)
+        val parsed = AiText.parseExtractedTasks("☐ Besok jam 10 pagi kirim laporan ke Pak Budi\n☐ Beli tinta printer", found)
+        assertEquals(listOf("☐ Kirim laporan ke Pak Budi", "☐ Beli tinta printer"), parsed.tasks)
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 16, 10, 0), parsed.remindAt)
     }
 }

@@ -42,6 +42,7 @@ data class AiJob(
     val action: AiAction, val text: String = "", val running: Boolean = true, val error: String? = null,
     val progress: String? = null,       // mis. "Bagian 2 dari 4" untuk catatan panjang
     val customTitle: String? = null,    // mis. "Baca gambar" atau "Transkripsikan suara"
+    val suggestedRemindAt: Long? = null, // waktu pengingat yang terdeteksi dari gambar/suara/teks
 )
 
 /** Satu langkah rencana asisten: catatan sasaran yang ditemukan, pilihan lain, dan alasan bila belum bisa dijalankan. */
@@ -155,7 +156,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var suggestedTags by mutableStateOf<List<String>>(emptyList()); private set
     var suggestedByAi by mutableStateOf(false); private set
     var aiJob by mutableStateOf<AiJob?>(null); private set
-    private var undoAi by mutableStateOf<Pair<String, String>?>(null)     // (judul, isi) sebelum hasil AI diterapkan
+    private data class UndoAiSnap(
+        val title: String, val body: String,
+        val remindAt: Long, val remindRepeat: Repeat, val remindAlarm: Boolean, val remindFired: Boolean,
+    )
+    private var undoAi by mutableStateOf<UndoAiSnap?>(null)     // keadaan sebelum hasil AI diterapkan
     val canUndoAi get() = undoAi != null
     var aiSheet by mutableStateOf(false)                                  // lembar bantu tulis di editor
     var versions by mutableStateOf<List<Version>?>(null); private set     // null = lembar riwayat tertutup
@@ -503,7 +508,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Menjalankan AI multimodal (Gemma 4 E2B) atas berkas gambar atau rekaman suara di catatan. */
+    /**
+     * Menjalankan AI multimodal (Gemma 4 E2B) atas berkas gambar atau rekaman suara di catatan.
+     * Untuk "Ambil tugas", dipakai alur dua langkah (OCR ketat/transkripsi -> ekstraksi tugas nyata + TimeParse)
+     * supaya gambar biasa tanpa teks tugas tidak dikarang menjadi tugas dan waktu dipisahkan ke pengingat.
+     */
     fun runMediaAi(name: String, extractTasks: Boolean = false) {
         if (aiJob?.running == true) return
         val file = Attachments.file(ctx, name)
@@ -511,25 +520,73 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val isImg = Attachments.isImage(name)
         val label = when {
             isImg && extractTasks -> "Ambil tugas dari gambar"
-            isImg -> "Baca isi gambar"
+            isImg -> "Baca gambar"
             extractTasks -> "Ambil tugas dari suara"
             else -> "Transkripsikan suara"
         }
-        val prompt = if (isImg) AiText.imagePrompt(extractTasks) else AiText.audioPrompt(extractTasks)
-        aiJob = AiJob(if (extractTasks) AiAction.Tasks else AiAction.Summarize, customTitle = label)
+        aiJob = AiJob(
+            if (extractTasks) AiAction.Tasks else AiAction.Summarize,
+            customTitle = label,
+            progress = if (isImg) (if (extractTasks) "Membaca tulisan di gambar…" else "Membaca gambar…") else "Mendengarkan rekaman…",
+        )
         running = viewModelScope.launch {
             try {
-                val out = ai.generate(
-                    prompt,
+                if (!extractTasks) {
+                    val prompt = if (isImg) AiText.imageReadPrompt() else AiText.audioTranscribePrompt()
+                    val out = ai.generate(
+                        prompt,
+                        imageFile = if (isImg) file else null,
+                        audioFile = if (!isImg) file else null,
+                    ) { partial ->
+                        val cleaned = if (isImg) AiText.cleanBlock(partial) else AiText.cleanTranscript(partial)
+                        aiJob = aiJob?.copy(text = cleaned)
+                    }
+                    val finalClean = if (isImg) AiText.cleanBlock(out) else AiText.cleanTranscript(out)
+                    val detectedTime = if (!isImg) TimeParse.best(finalClean)?.at?.toMillis() else null
+                    aiJob = aiJob?.copy(
+                        text = finalClean, running = false, progress = null, suggestedRemindAt = detectedTime,
+                        error = if (finalClean.isBlank()) "Model tidak menghasilkan teks." else null,
+                    )
+                    return@launch
+                }
+
+                val step1Prompt = if (isImg) AiText.imageOcrPrompt() else AiText.audioTranscribePrompt()
+                val raw1 = ai.generate(
+                    step1Prompt,
                     imageFile = if (isImg) file else null,
                     audioFile = if (!isImg) file else null,
-                ) { partial -> aiJob = aiJob?.copy(text = AiText.cleanBlock(partial)) }
-                val clean = AiText.cleanBlock(out)
-                aiJob = aiJob?.copy(text = clean, running = false, error = if (clean.isBlank()) "Model tidak menghasilkan teks." else null)
+                )
+                val step1Text = if (isImg) AiText.cleanBlock(raw1) else AiText.cleanTranscript(raw1)
+                if (step1Text.isBlank() || (isImg && AiText.isNoTextOrSceneDescription(step1Text))) {
+                    aiJob = aiJob?.copy(
+                        text = "", running = false, progress = null,
+                        error = if (isImg) "Gambar ini tidak memuat tulisan atau konteks tugas." else "Rekaman tidak memuat ucapan yang jelas.",
+                    )
+                    return@launch
+                }
+
+                aiJob = aiJob?.copy(progress = "Memilah tugas dan waktu…")
+                val foundTime = TimeParse.best(step1Text)
+                val direct = AiText.extractDirectTasksAndTime(step1Text)
+                val extracted = direct ?: AiText.parseExtractedTasks(ai.generate(AiText.tasksFromTextPrompt(step1Text)), foundTime)
+                if (extracted.isEmpty) {
+                    aiJob = aiJob?.copy(
+                        text = "", running = false, progress = null,
+                        error = (if (isImg) "Tidak ada tugas yang ditemukan pada gambar ini." else "Tidak ada tugas yang ditemukan dalam rekaman ini.") +
+                            (if (!isImg) "\n\nUcapan: “$step1Text”" else ""),
+                    )
+                } else {
+                    aiJob = aiJob?.copy(
+                        text = extracted.text,
+                        running = false,
+                        progress = null,
+                        suggestedRemindAt = extracted.remindAt?.toMillis(),
+                    )
+                }
             } catch (e: CancellationException) {
-                aiJob = aiJob?.copy(running = false)
+                aiJob = aiJob?.copy(running = false, progress = null)
             } catch (e: Throwable) {
-                aiJob = aiJob?.copy(running = false, error = "AI gagal: ${e.message}")
+                aiJob = aiJob?.copy(running = false, progress = null, error = "AI gagal: ${e.message}")
             }
         }
     }
@@ -674,13 +731,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         aiJob = AiJob(action)
         running = viewModelScope.launch {
             try {
-                val clean = if (action.wholeNote && d.body.length > AiText.maxInput) runInParts(action, d) else {
-                    val out = ai.generate(AiText.prompt(action, d.title, d.body, custom)) { partial ->
-                        aiJob = aiJob?.copy(text = AiText.cleanBlock(partial))
+                var suggestedTime: Long? = null
+                val clean = when {
+                    action == AiAction.Tasks && d.body.length <= AiText.maxInput -> {
+                        val foundTime = TimeParse.best(d.body)
+                        val direct = AiText.extractDirectTasksAndTime(d.body)
+                        val extracted = direct ?: AiText.parseExtractedTasks(ai.generate(AiText.tasksFromTextPrompt(d.body)), foundTime)
+                        suggestedTime = extracted.remindAt?.toMillis()
+                        if (extracted.isEmpty) "Tidak ada tugas." else extracted.text
                     }
-                    if (action.forTitle) AiText.cleanLine(AiText.strip(out)) else AiText.cleanBlock(out)
+                    action.wholeNote && d.body.length > AiText.maxInput -> runInParts(action, d)
+                    else -> {
+                        val out = ai.generate(AiText.prompt(action, d.title, d.body, custom)) { partial ->
+                            aiJob = aiJob?.copy(text = AiText.cleanBlock(partial))
+                        }
+                        if (action.forTitle) AiText.cleanLine(AiText.strip(out)) else AiText.cleanBlock(out)
+                    }
                 }
-                aiJob = aiJob?.copy(text = clean, running = false, progress = null, error = if (clean.isBlank()) "Model tidak menghasilkan teks." else null)
+                aiJob = aiJob?.copy(
+                    text = clean, running = false, progress = null, suggestedRemindAt = suggestedTime,
+                    error = if (clean.isBlank()) "Model tidak menghasilkan teks." else null,
+                )
             } catch (e: CancellationException) {
                 aiJob = aiJob?.copy(running = false, progress = null)       // dihentikan pengguna: teks parsial tetap bisa dipakai
             } catch (e: Throwable) {
@@ -728,21 +799,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissAi() { stopAi(); aiJob = null; aiSheet = false }
 
     /** Menerapkan hasil AI atas pilihan pengguna. Apa pun yang diterapkan bisa diurungkan satu langkah. */
-    fun applyAi(replace: Boolean) {
+    fun applyAi(replace: Boolean, remindAt: Long? = null) {
         val j = aiJob ?: return
         val text = j.text.trim()
         if (text.isEmpty()) return
-        undoAi = draft.title to draft.body
-        draft = when {
+        undoAi = UndoAiSnap(draft.title, draft.body, draft.remindAt, draft.remindRepeat, draft.remindAlarm, draft.remindFired)
+        var next = when {
             j.action.forTitle -> draft.copy(title = AiText.cleanLine(text).take(120))
-            replace -> draft.copy(body = text)
+            replace || draft.body.isBlank() -> draft.copy(body = text)
             j.action == AiAction.Continue -> draft.copy(body = draft.body.trimEnd() + " " + text)
             else -> draft.copy(body = draft.body.trimEnd() + "\n\n" + text)
+        }
+        val validRemind = remindAt?.takeIf { it > System.currentTimeMillis() }
+        if (validRemind != null) {
+            next = next.copy(remindAt = validRemind, remindRepeat = Repeat.None, remindAlarm = false, remindFired = false)
+        }
+        draft = next
+        if (validRemind != null) {
+            saveDraft()
+            say(
+                "Pengingat: ${whenLabel(validRemind)}" + when {
+                    !Reminders.canNotify(ctx) -> ". Notifikasi Catatanku dimatikan; aktifkan di pengaturan HP."
+                    !Reminders.canExact(ctx) -> ". Bisa terlambat beberapa menit karena izin alarm tepat waktu dimatikan."
+                    else -> ""
+                }
+            )
         }
         aiJob = null; aiSheet = false
     }
 
-    fun undoAiChange() { undoAi?.let { (title, body) -> draft = draft.copy(title = title, body = body) }; undoAi = null }
+    fun undoAiChange() {
+        undoAi?.let { s ->
+            val remChanged = draft.remindAt != s.remindAt || draft.remindRepeat != s.remindRepeat || draft.remindAlarm != s.remindAlarm || draft.remindFired != s.remindFired
+            draft = draft.copy(
+                title = s.title, body = s.body,
+                remindAt = s.remindAt, remindRepeat = s.remindRepeat, remindAlarm = s.remindAlarm, remindFired = s.remindFired,
+            )
+            if (remChanged) saveDraft()
+        }
+        undoAi = null
+    }
 
     /** Rapikan satu catatan: isi judul, folder, dan tag yang masih kosong. Tidak menimpa isian pengguna. */
     fun organizeDraft() {

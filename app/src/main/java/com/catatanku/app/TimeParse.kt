@@ -53,7 +53,7 @@ object TimeParse {
     )
     private const val PART = "pagi|siang|sore|petang|malam"
 
-    private class DateHit(val range: IntRange, val date: LocalDate, val part: String? = null, val exact: LocalDateTime? = null)
+    private class DateHit(val range: IntRange, val date: LocalDate, val part: String? = null, val exact: LocalDateTime? = null, val todayRel: Boolean = false)
     private class TimeHit(val range: IntRange, val time: LocalTime, val keyword: Boolean, val withPart: (String) -> LocalTime?)
 
     private fun re(p: String) = Regex(p, RegexOption.IGNORE_CASE)
@@ -62,7 +62,7 @@ object TimeParse {
     private val R_TGL = re("\\b(?:tanggal|tgl)\\.?\\s*(\\d{1,2})(?![\\d/.-]|\\s+(?:$MONTH_RE)\\b)")
     private val R_NUM = re("(?<![\\d.,/-])(\\d{1,2})[/-](\\d{1,2})(?:[/-](\\d{4}|\\d{2}))?(?![\\d/-])")
     private val R_PERIOD = re("\\b(awal|pertengahan|akhir)\\s+(?:bulan\\s+)?($MONTH_RE)\\b")
-    private val R_TODAY = re("\\b(?:hari ini|(?:nanti|ntar)\\s+($PART)|($PART)\\s+ini|(?:nanti|ntar)(?=\\s+(?:jam|pukul)))")
+    private val R_TODAY = re("\\b(?:hari ini|(?:nanti|ntar)\\s+($PART)|($PART)\\s+(?:ini|nanti|ntar)|(?:nanti|ntar)(?=\\s+(?:jam|pukul)))")
     private val R_TOMORROW = re("\\b(besok lusa|lusa|besok|bsk|esok)(?:\\s+($PART))?")
     private val R_NEXT = re("\\b(minggu|pekan|bulan)\\s+depan\\b")
     private val R_IN = re("\\b(\\d{1,3})\\s+(menit|jam|hari|minggu|pekan|bulan)\\s+lagi\\b")
@@ -143,7 +143,9 @@ object TimeParse {
             out += DateHit(m.range, ym.atDay(day))
         }
         R_TODAY.findAll(s).forEach { m ->
-            out += DateHit(m.range, today, m.groupValues[1].ifEmpty { m.groupValues[2] }.ifEmpty { null })
+            val part = m.groupValues[1].ifEmpty { m.groupValues[2] }.ifEmpty { null }
+            val hasNanti = m.value.contains("nanti", ignoreCase = true) || m.value.contains("ntar", ignoreCase = true)
+            out += DateHit(m.range, today, part, todayRel = hasNanti)
         }
         R_TOMORROW.findAll(s).forEach { m ->
             val plus = if (m.groupValues[1].lowercase().contains("lusa")) 2L else 1L
@@ -232,6 +234,11 @@ object TimeParse {
                 } else {
                     if (d.date == now.toLocalDate() && d.part == null) continue      // "hari ini" tanpa jam: tak ada yang bisa diingatkan
                     at = d.date.atTime(defaultTime(d.part))
+                    // "nanti sore" saat masih sore (mis. pukul 16.15): geser 1 jam agar tetap menjadi pengingat hari ini.
+                    if (!at.isAfter(now) && d.todayRel && d.date == now.toLocalDate() && d.part != null) {
+                        val endHour = when (d.part.lowercase()) { "pagi" -> 11; "siang" -> 15; "sore", "petang" -> 18; else -> 23 }
+                        if (now.hour < endHour) at = now.plusHours(1).withSecond(0).withNano(0)
+                    }
                 }
                 val phrase = line.substring(minOf(d.range.first, t?.range?.first ?: d.range.first), maxOf(d.range.last, t?.range?.last ?: d.range.last) + 1).trim()
                 if (at.isAfter(now)) result += (offset + d.range.first) to Found(at, phrase, t != null)
