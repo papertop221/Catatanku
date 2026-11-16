@@ -189,7 +189,9 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 - [Arsitektur](docs/ARSITEKTUR.md) — struktur kode, alur data, keputusan teknis
 - [Desain](docs/DESAIN.md) — aturan tampilan "Kertas & Tinta"
 - [Riwayat perubahan](CHANGELOG.md)
+- [Peta jalan dan keputusan](docs/ROADMAP.md)
 - [Berkontribusi](CONTRIBUTING.md)
+- [Panduan untuk asisten AI](AGENTS.md)
 
 ## Lisensi
 

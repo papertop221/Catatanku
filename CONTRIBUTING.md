@@ -5,6 +5,8 @@ Terima kasih sudah mau membantu. Catatanku sengaja kecil dan mudah dibaca; perub
 ## Sebelum mulai
 
 - Baca [Arsitektur](docs/ARSITEKTUR.md) untuk struktur kode dan [Desain](docs/DESAIN.md) untuk aturan tampilan.
+- Lihat [Peta jalan](docs/ROADMAP.md) untuk pekerjaan berikutnya dan keputusan yang sudah diambil.
+- Memakai asisten AI? Arahkan ke [AGENTS.md](AGENTS.md).
 - Untuk perubahan besar, buka issue dulu supaya arahnya bisa disepakati.
 
 ## Menjalankan
