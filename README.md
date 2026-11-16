@@ -8,12 +8,12 @@
 
 *An offline-first Android notes app with reminders and an on-device AI assistant. No account, no cloud, no tracking.*
 
-[![Versi](https://img.shields.io/badge/versi-1.7.1-191918)](CHANGELOG.md)
+[![Versi](https://img.shields.io/badge/versi-1.8-191918)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-191918)](#pasang)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
 [![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-### [Unduh Catatanku 1.7.1 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.7.1/Catatanku-1.7.1.apk)
+### [Unduh Catatanku 1.8 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.8/Catatanku-1.8.apk)
 
 Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 
@@ -46,20 +46,20 @@ Catatanku dibangun di atas lima pilar yang menjadi standar wajib setiap perubaha
 
 ## Pasang
 
-1. Unduh [`Catatanku-1.7.1.apk`](https://github.com/papertop221/Catatanku/releases/download/v1.7.1/Catatanku-1.7.1.apk).
+1. Unduh [`Catatanku-1.8.apk`](https://github.com/papertop221/Catatanku/releases/download/v1.8/Catatanku-1.8.apk).
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `f5c14673e1efe198a528ca3c0107a18275ce6a6f37c655c4f7a80fa2b5fe0a0d`
+SHA-256: `7e4c7f1dabf7dd340f7cd17ff08343af8871e0f9bc2902d52ed5f0334d276e0a`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
-**Memperbarui dari 1.4–1.7:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Mulai 1.7.1,
+**Memperbarui dari 1.4–1.7.1:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Mulai 1.7.1,
 pembaruan berikutnya bisa dijalankan dari Pengaturan → **Pembaruan**. Sebelum memperbarui, sebaiknya ekspor dulu lewat
 Pengaturan → Cadangan → **Ekspor**.
 
 > [!IMPORTANT]
-> Versi 1.7.1 lulus 44 uji unit JVM + 1 benchmark `PerfTest` di Termux (dan membawa 23 uji Robolectric yang terkompilasi untuk desktop Linux glibc), serta telah mulai diuji sebagian di HP. Bila menemukan masalah,
+> Versi 1.8 lulus 63 uji unit JVM + 1 benchmark `PerfTest` di Termux (dan membawa 27 uji Robolectric yang terkompilasi untuk desktop Linux `glibc` / CI), serta dibenchmark langsung untuk runtime LiteRT-LM pada Moto G86 Power 5G. Bila menemukan masalah,
 > [laporkan di sini](https://github.com/papertop221/Catatanku/issues/new/choose) dengan menyebut merek HP dan versi Android.
 
 <details>
@@ -130,9 +130,9 @@ Hasil AI selalu ditinjau dulu sebelum diterapkan; "Ganti isi" bisa diurungkan, d
 
 **Keamanan dan cadangan**
 - Kunci aplikasi dengan sidik jari atau PIN layar HP (`FLAG_SECURE` juga melindungi layar teks terpilih dan salinan papan klip ditandai sensitif di Android 13+)
-- Validasi ketat intent notifikasi (`EXTRA_TOKEN`), URI eksternal (menolak `file://` dan otoritas internal), batas baca impor JSON 32 MB, dan pembersih token templat prompt AI
-- Cadangan otomatis streaming (`JsonWriter`) ke folder pilihan (7 berkas terakhir), ditambah ekspor/impor JSON manual
-- Cadangan memuat semua catatan, Sampah, dan pengingat. Berkasnya tidak dienkripsi.
+- Validasi ketat intent notifikasi (`EXTRA_TOKEN`), URI eksternal (menolak `file://` dan otoritas internal), perlindungan *path traversal* & *ZIP bomb*, verifikasi SHA-256 tiap entri, re-verifikasi TOCTOU pembaruan APK, serta pembersih token templat prompt AI
+- Ekspor & impor ZIP lengkap (`catatanku-backup.zip`) beserta lampiran gambar/suara dan riwayat versi lewat pemulihan *staging* atomik, kompatibel mundur dengan JSON v1–v3, serta pilihan cadangan terenkripsi AES-256-GCM (PBKDF2WithHmacSHA256)
+- Cadangan otomatis streaming harian (`AutoBackup`) ke folder pilihan pengguna (7 arsip ZIP terakhir)
 
 ## Model AI
 
@@ -140,21 +140,16 @@ Pengaturan → Model AI → **Unduh**. Unduhan berjalan di latar, lanjut otomati
 
 | Model | Unduhan | RAM saat dipakai* | Catatan |
 |---|---|---|---|
-| Gemma 4 E2B | 2,6 GB | ±1,8 GB | Pilihan utama untuk semua HP: tercepat dan paling hemat RAM; semua fitur diuji dengan model ini |
-| Qwen3 1.7B | 1,0 GB | ±2,0–2,8 GB | Unduhan terkecil; tag dan perbaikan ejaan kurang andal, lebih lambat |
+| Gemma 4 E2B | 2,6 GB | ±1,45–1,75 GB (`CPU-4`) / ±2,24–2,37 GB (`GPU`) | Pilihan utama untuk semua HP: tercepat, paling hemat RAM, dan mendukung teks, gambar (`GPU vision` ±11,5 dtk), serta suara (`CPU-4`) |
+| Qwen3 1.7B | 1,0 GB | ±2,0–2,8 GB | Unduhan terkecil (khusus teks, tanpa baca gambar/suara); tag dan perbaikan ejaan kurang andal |
 | Gemma 4 E4B | 3,7 GB | belum diukur | Paling berat; belum diuji |
 
-\* Puncak memori proses di desktop Linux (CPU), 15 Nov 2026. Belum diukur di HP. Rinciannya ada di [Arsitektur](docs/ARSITEKTUR.md).
+\* Pengukuran `gemma-4-E2B-it.litertlm` di Moto G86 Power 5G (`mt6878` Dimensity 7300, Android 16) dengan `CPU-4` + profil konteks **Hemat (2.048 token)** & MTP per-tugas; model pembanding Qwen3 1.7B berasal dari pengukuran desktop Linux (CPU). Rinciannya ada di [Benchmark](docs/BENCHMARK.md) dan [Arsitektur](docs/ARSITEKTUR.md).
 
-Model berukuran berkas lebih kecil belum tentu lebih ringan: pada pengukuran, Gemma 4 E2B memakai RAM paling sedikit.
-Untuk HP dengan RAM terbatas, nyalakan **Mode ringan** (aktif otomatis bila RAM di bawah 7 GB): jendela konteks lebih
-kecil dan model langsung dilepas dari memori, dengan konsekuensi AI membaca teks lebih pendek.
-
-Model hanya dimuat saat fitur AI dipakai. Ia dilepas dari RAM setelah menganggur, begitu aplikasi ditinggalkan, atau saat
-sistem kekurangan memori; bila RAM yang tersedia tidak cukup, model tidak dimuat dan aplikasi memberi tahu alasannya.
+Untuk HP dengan RAM terbatas (< 7 GB fisik, tidak menghitung swap/RAM Boost), profil **Hemat** (jendela konteks 2.048 token) aktif secara bawaan, dan `MemoryPolicy` melepas model secara adaptif tanpa memicu `System.gc()`.
 
 Semua berlisensi Apache-2.0 dari [litert-community](https://huggingface.co/litert-community) dan bisa diunduh tanpa login.
-Sudah punya berkas `.litertlm`? Pakai **Dari berkas**.
+Sudah punya berkas `.litertlm`? Pakai **Dari berkas** (juga mendukung model embedding lokal untuk pencarian semantik hibrida opsional).
 
 ## Privasi
 
@@ -201,20 +196,19 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Semua uji di bawah | 44 uji unit JVM + 1 benchmark `PerfTest` lulus di Termux (`AgentTest` 7, `AiTextTest` 17, `SearchEngineTest` 9, `TimeParseTest` 7, `UpdaterTest` 4, `PerfTest` 1); 23 uji Robolectric (`ReminderTest` 16, `UpdateParserTest` 4, `Shots*` 3) terkompilasi dan disiapkan untuk desktop Linux glibc |
-| Mesin pencarian, pengurai keluaran AI, pengaman prompt, ekstraksi tugas dua langkah (gambar/suara), katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
-| Pengingat (alarm, mode tahan penghemat baterai, deteksi terlambat vs HP mati, uji mandiri, token intent, notifikasi, tunda, selesai, boot), catatan dari luar, riwayat versi, cadangan streaming & sanitasi lampiran/URI, migrasi v2 → v3 → v4 | Uji otomatis di Android tiruan (Robolectric) |
-| Asisten perintah: rencana, jalankan, urungkan, riwayat versi | Uji otomatis di Android tiruan (Robolectric) |
-| Tampilan 23 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
-| Prompt AI dengan Gemma 4 E2B, Qwen3 1.7B, Qwen2.5 1.5B | Diuji di desktop lewat `litertlm-jvm` |
-| Prompt asisten perintah | Diuji di desktop dengan Gemma 4 E2B saja: 15 dari 19 kalimat bebas benar |
-| Build rilis 1.7.1 yang disusutkan R8 | Tanda tangan sama dengan 1.4–1.7 (`CN=Catatanku, O=papertop221`); belum dijalankan di HP |
-| Aplikasi di HP sungguhan (sentuhan, geser baris, bunyi alarm, sidik jari, unduhan, kecepatan, RAM, menu teks terpilih, mulai otomatis OEM) | **Belum diuji** |
+| Uji unit JVM murni & benchmark pencarian | 63 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `HybridSearchTest` 3, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7, `UpdaterTest` 4) + 1 `PerfTest` berjalan di Termux |
+| Mesin pencarian & semantik hibrida, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten, pembanding versi | Uji unit JVM otomatis |
+| Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite, parser rilis GitHub | 27 uji Robolectric (`ReminderTest` 20, `UpdateParserTest` 4, `Shots*` 3) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
+| Benchmark AI lokal pada perangkat (CPU sweep, GPU, MTP per-tugas, KV cache 2048/3072/4096, vision GPU 1024px, audio CPU, thermal 5-run) | Diukur langsung pada Moto G86 Power 5G (`mt6878`, `gemma-4-E2B-it.litertlm`, `litertlm-android` 0.19.1) — lihat [Benchmark](docs/BENCHMARK.md) |
+| Build debug & rilis R8 (`assembleDebug`, `assembleRelease`), Android Lint, audit graf ketergantungan bebas SDK tertutup | Diverifikasi saat build & CI |
+| Skenario sentuh interaktif APK penuh, transkripsi suara ucapan bahasa Indonesia nyata, serta keandalan alarm latar belakang pada merek OEM agresif (Oppo/Vivo/Xiaomi/Huawei/Transsion) | **Belum diuji langsung di perangkat OEM masing-masing** |
 
 ## Dokumentasi
 
 - [Filosofi dan standar pengembangan](docs/FILOSOFI.md) — lima pilar wajib (Praktis, Efektif & Efisien, Canggih, 100% Privasi, Aman)
-- [Arsitektur](docs/ARSITEKTUR.md) — struktur kode, alur data, keputusan teknis
+- [Benchmark AI Moto G86 Power 5G](docs/BENCHMARK.md) — metodologi & hasil pengukuran CPU thread, GPU, MTP, KV cache, dan multimodal
+- [Audit keamanan & privasi](docs/KEAMANAN.md) — kontrol akses, cadangan terenkripsi, validasi URI/ZIP, dan pembaruan TOCTOU
+- [Arsitektur](docs/ARSITEKTUR.md) — struktur kode modular, alur data, keputusan teknis
 - [Desain](docs/DESAIN.md) — aturan tampilan "Kertas & Tinta"
 - [Riwayat perubahan](CHANGELOG.md)
 - [Peta jalan dan keputusan](docs/ROADMAP.md)

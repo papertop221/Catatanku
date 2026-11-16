@@ -14,8 +14,8 @@ android {
         applicationId = "com.catatanku.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.7.1"
+        versionCode = 10
+        versionName = "1.8"
         // Hanya arm64: hampir semua HP Android modern. Hapus baris ini bila perlu emulator x86_64.
         ndk { abiFilters += "arm64-v8a" }
     }

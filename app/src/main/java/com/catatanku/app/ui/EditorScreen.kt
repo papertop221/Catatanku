@@ -1,4 +1,4 @@
-package com.catatanku.app
+package com.catatanku.app.ui
 
 import android.Manifest
 import android.content.Intent
@@ -75,13 +75,19 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.catatanku.app.ai.engine.AiState
+import com.catatanku.app.ai.inference.AiText
+import com.catatanku.app.domain.model.Note
+import com.catatanku.app.domain.usecase.TimeParse
+import com.catatanku.app.media.Attachments
+import com.catatanku.app.media.AudioPlayer
+import com.catatanku.app.media.VoiceRecorder
+import com.catatanku.app.reminders.toMillis
+import com.catatanku.app.reminders.whenLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-// Editor: isi catatan di depan. Tidak ada tombol simpan; alat menempel di atas papan ketik dengan ikon berlabel.
-
-/** Alat di bilah bawah editor: ikon selalu ditemani kata. */
 @Composable
 private fun Tool(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) = Row(
     Modifier.clip(SmallShape).clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 9.dp),
@@ -91,10 +97,6 @@ private fun Tool(icon: ImageVector, label: String, tint: Color = MaterialTheme.c
     Text(label, Modifier.padding(start = 5.dp), style = MaterialTheme.typography.labelLarge, color = tint)
 }
 
-/**
- * Baris daftar centang yang sudah selesai (☑) ditampilkan redup dan dicoret, tanpa mengubah panjang teks
- * sehingga posisi kursor tetap 1:1.
- */
 private fun checklistStyle(mutedColor: Color) = VisualTransformation { src ->
     val s = src.text
     if ('☑' !in s) return@VisualTransformation TransformedText(src, OffsetMapping.Identity)
@@ -122,12 +124,13 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
     val ctx = LocalContext.current
     val aiState by vm.ai.state.collectAsStateWithLifecycle()
     val hasModel = aiState !is AiState.NoModel
+    val canMultimodal = hasModel && vm.ai.activeSupportsMultimodal
     var menu by remember { mutableStateOf(false) }
     var confirmForever by remember { mutableStateOf(false) }
     var folderDialog by remember { mutableStateOf(false) }
     var tagInput by rememberSaveable { mutableStateOf("") }
     var related by remember { mutableStateOf<List<Note>>(emptyList()) }
-    var hint by remember { mutableStateOf<TimeParse.Found?>(null) }        // waktu yang dikenali di isi catatan
+    var hint by remember { mutableStateOf<TimeParse.Found?>(null) }
     var hintDismissed by remember(d.id) { mutableStateOf(false) }
     var previewImage by remember { mutableStateOf<String?>(null) }
 
@@ -144,7 +147,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         } else vm.say("Izin mikrofon diperlukan untuk merekam catatan suara.")
     }
 
-    // Riwayat Urungkan / Ulangi untuk ketikan selama sesi menyunting catatan ini.
     val undoStack = remember(d.id) { mutableStateListOf<Pair<String, String>>() }
     val redoStack = remember(d.id) { mutableStateListOf<Pair<String, String>>() }
     var lastSnap by remember(d.id) { mutableStateOf(d.title to d.body) }
@@ -158,13 +160,11 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         redoStack.clear()
     }
 
-    // Isi disimpan sebagai TextFieldValue agar posisi kursor diketahui (untuk tombol centang/poin & ketuk kotak ☐/☑).
     var stored by remember(d.id) { mutableStateOf(TextFieldValue(d.body)) }
     val bodyField = if (stored.text == d.body) stored
-    else TextFieldValue(d.body, TextRange(d.body.length)).also { stored = it }     // diubah dari luar (mis. AI / Undo)
+    else TextFieldValue(d.body, TextRange(d.body.length)).also { stored = it }
 
     fun setBody(v: TextFieldValue) {
-        // 1. Bila pengguna hanya mengetuk tepat pada kotak ☐ atau ☑ di awal baris, langsung ubah ☐ ↔ ☑.
         if (v.text == stored.text && v.selection.collapsed && v.selection != stored.selection) {
             AiText.toggleCheckAt(v.text, v.selection.start)?.let { (flipped, nextCursor) ->
                 pushUndo(d.title to d.body)
@@ -174,7 +174,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 return
             }
         }
-        // 2. Bila pengguna menekan Enter pada baris daftar (☐ / ☑ / •), lanjutkan daftar otomatis atau keluar bila kosong.
         val next = AiText.continueListOnEnter(stored.text, v.text, v.selection.start)?.let { (txt, cur) ->
             TextFieldValue(txt, TextRange(cur))
         } ?: v
@@ -224,7 +223,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
 
     BackHandler { closeWithFlush() }
 
-    // Saat membuka catatan baru yang kosong, buka fokus di kolom isi; saat berpindah catatan, gulir kembali ke atas.
     var prevNoteId by remember { mutableStateOf(d.id) }
     LaunchedEffect(d.id) {
         if (d.id != prevNoteId) {
@@ -236,7 +234,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         }
     }
 
-    // Rekam snapshot Undo setiap jeda singkat mengetik.
     LaunchedEffect(d.title, d.body) {
         if (applyingUndo) { applyingUndo = false; return@LaunchedEffect }
         val cur = d.title to d.body
@@ -246,10 +243,8 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         lastSnap = cur
     }
 
-    // Simpan otomatis: setelah jeda mengetik, dan saat aplikasi ditinggalkan.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { flushPendingTag(); vm.saveDraft() }
     LaunchedEffect(d) { delay(700); vm.saveDraft() }
-    // Catatan terkait dan pengenal waktu dihitung di thread latar, setelah jeda mengetik.
     LaunchedEffect(d.title, d.body, d.tags, vm.index) { delay(500); related = withContext(Dispatchers.Default) { vm.relatedTo(d) } }
     LaunchedEffect(d.title, d.body, d.remindAt) { delay(700); hint = withContext(Dispatchers.Default) { vm.reminderHint(d) } }
 
@@ -259,7 +254,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
     Scaffold(
         modifier = Modifier.imePadding(),
         snackbarHost = { Notices(snack) },
-        // Alat selalu menempel di atas papan ketik, jadi terjangkau tanpa menggulir.
         bottomBar = {
             Column(Modifier.background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
                 if (recorder.recording) {
@@ -308,10 +302,8 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(scroll)) {
-            // ---- Bilah atas ----
             Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconAction(AppIcons.Back, "Kembali ke daftar", onClick = ::closeWithFlush)
-                // Penanda simpan otomatis: pengguna tidak perlu menebak apakah tulisannya sudah aman.
                 Muted(
                     when { d.isBlank && d.id == 0L -> ""; vm.draftSaved -> "Tersimpan"; else -> "Menyimpan…" },
                     Modifier.weight(1f).padding(start = 4.dp), MaterialTheme.typography.labelMedium,
@@ -356,7 +348,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     Modifier.fillMaxWidth(), style = NoteType.title, ime = ImeAction.Next,
                     onIme = { runCatching { bodyFocus.requestFocus() } },
                 )
-                // Satu baris meta: folder · waktu ubah · jumlah kata
                 Muted(
                     listOfNotNull(
                         d.folder.ifBlank { null }, if (d.id != 0L) "Diubah ${shortDate(d.updated)}" else "Catatan baru",
@@ -364,7 +355,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     ).joinToString("  ·  "),
                     Modifier.padding(top = 4.dp, bottom = 6.dp), MaterialTheme.typography.labelSmall,
                 )
-                // ---- Pengingat: yang sudah disetel, atau tawaran dari waktu yang disebut di catatan. Satu baris teks biasa. ----
                 if (d.hasReminder && !d.inTrash) Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(
                         Modifier.weight(1f, fill = false).clip(SmallShape).clickable(role = Role.Button) { vm.openReminder() }.heightIn(min = 44.dp),
@@ -384,17 +374,31 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                 }
 
-                // ---- Lampiran gambar & catatan suara ----
                 if (d.attachments.isNotEmpty()) {
                     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         d.attachments.forEach { name ->
+                            val exists = name in vm.existingAttachments
                             if (Attachments.isImage(name)) {
-                                AttachmentImageRow(name, hasModel, onOpen = { previewImage = name }, onRead = { vm.runMediaAi(name, false) },
-                                    onTasks = { vm.runMediaAi(name, true) }, onRemove = { vm.removeAttachment(name) })
+                                AttachmentImageRow(
+                                    name = name,
+                                    exists = exists,
+                                    hasModel = canMultimodal,
+                                    onOpen = { previewImage = name },
+                                    onRead = { vm.runMediaAi(name, false) },
+                                    onTasks = { vm.runMediaAi(name, true) },
+                                    onRemove = { vm.removeAttachment(name) },
+                                )
                             } else if (Attachments.isAudio(name)) {
-                                AttachmentAudioRow(name, player.playing == name, hasModel, onToggle = { player.toggle(ctx, name) },
-                                    onTranscribe = { vm.runMediaAi(name, false) }, onTasks = { vm.runMediaAi(name, true) },
-                                    onRemove = { if (player.playing == name) player.stop(); vm.removeAttachment(name) })
+                                AttachmentAudioRow(
+                                    name = name,
+                                    exists = exists,
+                                    playing = player.playing == name,
+                                    hasModel = canMultimodal,
+                                    onToggle = { player.toggle(ctx, name) },
+                                    onTranscribe = { vm.runMediaAi(name, false) },
+                                    onTasks = { vm.runMediaAi(name, true) },
+                                    onRemove = { if (player.playing == name) player.stop(); vm.removeAttachment(name) },
+                                )
                             }
                         }
                     }
@@ -415,7 +419,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     Modifier.padding(top = 8.dp),
                 )
 
-                // ---- Tag ----
                 Hairline(Modifier.padding(top = 20.dp))
                 FlowRow(
                     Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically,
@@ -497,11 +500,11 @@ private fun rememberAttachmentBitmap(name: String, maxPx: Int): Pair<Boolean, Im
 
 @Composable
 private fun AttachmentImageRow(
-    name: String, hasModel: Boolean, onOpen: () -> Unit, onRead: () -> Unit, onTasks: () -> Unit, onRemove: () -> Unit,
+    name: String, exists: Boolean, hasModel: Boolean, onOpen: () -> Unit, onRead: () -> Unit, onTasks: () -> Unit, onRemove: () -> Unit,
 ) {
-    val (_, bmp) = rememberAttachmentBitmap(name, 720)
+    val (done, bmp) = rememberAttachmentBitmap(name, 720)
     Column(Modifier.fillMaxWidth().clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer)) {
-        if (bmp != null) {
+        if (exists && bmp != null) {
             Image(
                 bmp, "Gambar lampiran",
                 Modifier.fillMaxWidth().heightIn(max = 220.dp).clickable(role = Role.Button, onClickLabel = "Lihat gambar penuh", onClick = onOpen),
@@ -509,36 +512,46 @@ private fun AttachmentImageRow(
             )
         }
         Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Muted("Gambar", Modifier.weight(1f))
-            if (hasModel) {
-                TextAction("Baca gambar", onClick = onRead)
-                TextAction("Ambil tugas", onClick = onTasks)
+            if (!exists || (done && bmp == null)) {
+                Text("Lampiran gambar hilang ($name)", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextAction("Hapus rujukan", color = MaterialTheme.colorScheme.error, onClick = onRemove)
+            } else {
+                Muted("Gambar", Modifier.weight(1f))
+                if (hasModel) {
+                    TextAction("Baca gambar", onClick = onRead)
+                    TextAction("Ambil tugas", onClick = onTasks)
+                }
+                IconAction(AppIcons.Close, "Hapus gambar", muted, 18.dp, onClick = onRemove)
             }
-            IconAction(AppIcons.Close, "Hapus gambar", muted, 18.dp, onClick = onRemove)
         }
     }
 }
 
 @Composable
 private fun AttachmentAudioRow(
-    name: String, playing: Boolean, hasModel: Boolean, onToggle: () -> Unit, onTranscribe: () -> Unit, onTasks: () -> Unit, onRemove: () -> Unit,
+    name: String, exists: Boolean, playing: Boolean, hasModel: Boolean, onToggle: () -> Unit, onTranscribe: () -> Unit, onTasks: () -> Unit, onRemove: () -> Unit,
 ) {
     val ctx = LocalContext.current
-    val dur by produceState(0, name) {
-        value = withContext(Dispatchers.IO) { Attachments.audioDurationSec(ctx, name) }
+    val dur by produceState(0, name, exists) {
+        value = if (!exists) 0 else withContext(Dispatchers.IO) { Attachments.audioDurationSec(ctx, name) }
     }
     Column(Modifier.fillMaxWidth().clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconAction(if (playing) AppIcons.Stop else AppIcons.Play, if (playing) "Hentikan putar" else "Putar rekaman", onClick = onToggle)
-            Column(Modifier.weight(1f)) {
-                Text(if (playing) "Memutar rekaman…" else "Catatan suara", style = MaterialTheme.typography.bodyMedium)
-                Muted("Durasi ${Attachments.formatDuration(dur)}")
+            if (!exists) {
+                Text("Lampiran suara hilang ($name)", Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextAction("Hapus rujukan", color = MaterialTheme.colorScheme.error, onClick = onRemove)
+            } else {
+                IconAction(if (playing) AppIcons.Stop else AppIcons.Play, if (playing) "Hentikan putar" else "Putar rekaman", onClick = onToggle)
+                Column(Modifier.weight(1f)) {
+                    Text(if (playing) "Memutar rekaman…" else "Catatan suara", style = MaterialTheme.typography.bodyMedium)
+                    Muted("Durasi ${Attachments.formatDuration(dur)}")
+                }
+                if (hasModel) {
+                    TextAction("Transkripsikan", onClick = onTranscribe)
+                    TextAction("Ambil tugas", onClick = onTasks)
+                }
+                IconAction(AppIcons.Close, "Hapus rekaman", muted, 18.dp, onClick = onRemove)
             }
-            if (hasModel) {
-                TextAction("Transkripsikan", onClick = onTranscribe)
-                TextAction("Ambil tugas", onClick = onTasks)
-            }
-            IconAction(AppIcons.Close, "Hapus rekaman", muted, 18.dp, onClick = onRemove)
         }
     }
 }

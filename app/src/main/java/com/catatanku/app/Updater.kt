@@ -434,6 +434,10 @@ class Updater private constructor(private val context: Context) {
 
     private suspend fun commit(file: File, release: UpdateRelease) = withContext(Dispatchers.IO) {
         try {
+            if (!file.exists() || file.length() != release.bytes || sha256(file) != release.sha256) {
+                throw IOException("verifikasi ulang berkas pembaruan gagal")
+            }
+            verifyApk(file, release)
             val installer = context.packageManager.packageInstaller
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
                 setAppPackageName(context.packageName)

@@ -9,6 +9,19 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
+import com.catatanku.app.data.backup.BackupCodec
+import com.catatanku.app.data.database.NoteDb
+import com.catatanku.app.domain.model.BackupNoteRecord
+import com.catatanku.app.domain.model.BackupVersionEntry
+import com.catatanku.app.domain.model.Note
+import com.catatanku.app.domain.model.Repeat
+import com.catatanku.app.domain.usecase.EmbeddingCodec
+import com.catatanku.app.domain.usecase.StoredEmbedding
+import com.catatanku.app.media.Attachments
+import com.catatanku.app.reminders.Reminders
+import com.catatanku.app.reminders.saveFromOutside
+import com.catatanku.app.reminders.toMillis
+import com.catatanku.app.reminders.whenLabel
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -200,10 +213,10 @@ class ReminderTest {
             Note(title = "Aktif", body = "a", tags = listOf("x", "y"), pinned = true, folder = "Kerja", remindAt = 123456L, remindRepeat = Repeat.Weekly, remindAlarm = true, attachments = listOf("img_1.jpg", "aud_2.wav")),
             Note(title = "Dibuang", body = "b", deletedAt = 99L, archived = true),
         )
-        val back = Backup.fromJson(Backup.toJson(src))
+        val back = BackupCodec.fromJson(BackupCodec.toJson(src))
         assertEquals(src.map { it.copy(id = 0) }, back)
         // Cadangan dari versi lama (tanpa kolom baru) tetap terbaca.
-        val old = Backup.fromJson("""{"app":"Catatanku","version":2,"notes":[{"title":"Lama","body":"z","tags":["t"],"pinned":false,"folder":"","archived":false,"created":1,"updated":2}]}""").single()
+        val old = BackupCodec.fromJson("""{"app":"Catatanku","version":2,"notes":[{"title":"Lama","body":"z","tags":["t"],"pinned":false,"folder":"","archived":false,"created":1,"updated":2}]}""").single()
         assertEquals("Lama", old.title); assertFalse(old.hasReminder); assertFalse(old.inTrash); assertTrue(old.attachments.isEmpty())
     }
 
@@ -255,8 +268,8 @@ class ReminderTest {
             Note(title = "Streaming", body = "Baris\nKedua", tags = listOf("a"), attachments = listOf("img_ok.jpg", "../catatan.db", "aud_1.wav")),
         )
         val stream = java.io.ByteArrayOutputStream()
-        Backup.writeJson(src, stream, pretty = false)
-        val back = Backup.fromJson(stream.toByteArray().decodeToString()).single()
+        BackupCodec.writeJson(src, stream, pretty = false)
+        val back = BackupCodec.fromJson(stream.toByteArray().decodeToString()).single()
         assertEquals("Streaming", back.title)
         assertEquals(listOf("img_ok.jpg", "aud_1.wav"), back.attachments)
 
@@ -272,5 +285,96 @@ class ReminderTest {
         assertFalse(Reminders.isValidOpenToken(app, null))
         assertFalse(Reminders.isValidOpenToken(app, ""))
         assertFalse(Reminders.isValidOpenToken(app, "0".repeat(valid.length)))
+    }
+
+    @Test fun duplicateFireAndStaleDueAreIgnored() {
+        val due = System.currentTimeMillis() - 10_000L
+        val n = note(due)
+        ReminderReceiver().onReceive(
+            app,
+            Intent(Reminders.ACT_FIRE).putExtra(Reminders.EXTRA_ID, n.id).putExtra(Reminders.EXTRA_DUE, due - 5_000L),
+        )
+        assertEquals(0, nm.activeNotifications.size)
+        assertFalse(db.get(n.id)!!.remindFired)
+
+        ReminderReceiver().onReceive(
+            app,
+            Intent(Reminders.ACT_FIRE).putExtra(Reminders.EXTRA_ID, n.id).putExtra(Reminders.EXTRA_DUE, due),
+        )
+        assertEquals(1, nm.activeNotifications.size)
+        assertTrue(db.get(n.id)!!.remindFired)
+
+        nm.cancelAll()
+        ReminderReceiver().onReceive(
+            app,
+            Intent(Reminders.ACT_FIRE).putExtra(Reminders.EXTRA_ID, n.id).putExtra(Reminders.EXTRA_DUE, due),
+        )
+        assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test fun clockChangeSuppressesFalseLatenessAndReschedules() {
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofHours(2))
+        val futureAt = System.currentTimeMillis() + hour
+        val upcoming = note(futureAt)
+        ReminderReceiver().onReceive(app, Intent(Intent.ACTION_TIME_CHANGED))
+        assertTrue(alarms.scheduledAlarms.any { it.triggerAtMs == futureAt })
+
+        val justAdjusted = note(System.currentTimeMillis() - 10 * 60_000L)
+        receive(Reminders.ACT_FIRE, justAdjusted.id)
+        assertEquals(0L, Reminders.lastLate(app).first)
+        Reminders.clear(app, upcoming.id)
+    }
+
+    @Test fun exactAlarmPermissionStateChangeReschedules() {
+        val at = System.currentTimeMillis() + hour
+        val n = note(at)
+        assertEquals(0, alarms.scheduledAlarms.size)
+        ReminderReceiver().onReceive(app, Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED))
+        assertEquals(at, alarms.scheduledAlarms.single().triggerAtMs)
+        Reminders.clear(app, n.id)
+    }
+
+    @Test fun upgradeFromVersion4AddsEmbeddingsAndTransactionRollsBack() {
+        NoteDb.resetForTest()
+        val path = app.getDatabasePath("catatan.db").apply { parentFile!!.mkdirs(); delete() }
+        SQLiteDatabase.openOrCreateDatabase(path, null).use { old ->
+            old.execSQL(
+                "CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT NOT NULL, " +
+                    "tags TEXT NOT NULL, pinned INTEGER NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, " +
+                    "folder TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, " +
+                    "remind_at INTEGER NOT NULL DEFAULT 0, remind_repeat INTEGER NOT NULL DEFAULT 0, " +
+                    "remind_alarm INTEGER NOT NULL DEFAULT 0, remind_fired INTEGER NOT NULL DEFAULT 0, " +
+                    "attachments TEXT NOT NULL DEFAULT '')"
+            )
+            old.execSQL("INSERT INTO notes(title,body,tags,pinned,created,updated) VALUES('Versi4','isi v4','',0,10,20)")
+            old.version = 4
+        }
+        val n = db.all().single()
+        assertEquals("Versi4", n.title)
+        assertTrue(db.embeddings("gemma-emb").isEmpty())
+        db.upsertEmbedding(
+            StoredEmbedding(
+                noteId = n.id,
+                contentHash = EmbeddingCodec.contentHash(n.title, n.body, n.tags),
+                modelId = "gemma-emb",
+                vector = floatArrayOf(1f, 0f, 0f),
+            ),
+        )
+        assertEquals(1, db.embeddings("gemma-emb").size)
+
+        db.writableDatabase.execSQL(
+            "CREATE TEMP TRIGGER abort_fail_ver BEFORE INSERT ON versions WHEN NEW.title='__ABORT__' " +
+                "BEGIN SELECT RAISE(ABORT, 'simulated error'); END"
+        )
+        val attempt = runCatching {
+            db.importInTransaction(
+                listOf(
+                    BackupNoteRecord(Note(title = "Calon1", body = "ok"), listOf(BackupVersionEntry("V1", "b", 10L))),
+                    BackupNoteRecord(Note(title = "Calon2", body = "gagal"), listOf(BackupVersionEntry("__ABORT__", "x", 11L))),
+                ),
+            )
+        }
+        assertTrue(attempt.isFailure)
+        assertEquals(listOf("Versi4"), db.all().map { it.title })
     }
 }

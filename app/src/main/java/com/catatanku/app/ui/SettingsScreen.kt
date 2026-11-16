@@ -1,4 +1,4 @@
-package com.catatanku.app
+package com.catatanku.app.ui
 
 import android.Manifest
 import android.content.Context
@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -38,22 +41,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.catatanku.app.UpdateRelease
+import com.catatanku.app.UpdateState
+import com.catatanku.app.ai.engine.AiState
+import com.catatanku.app.ai.engine.Download
+import com.catatanku.app.ai.modelcatalog.ModelCatalog
+import com.catatanku.app.ai.modelcatalog.ModelSpec
+import com.catatanku.app.ai.performance.AiBackendKind
+import com.catatanku.app.ai.performance.ContextProfile
+import com.catatanku.app.data.repository.AutoBackup
+import com.catatanku.app.domain.model.Screen
+import com.catatanku.app.reminders.Oem
+import com.catatanku.app.reminders.Reminders
+import com.catatanku.app.reminders.whenLabel
 import kotlinx.coroutines.delay
 
-// Pengaturan: bagian-bagian datar dipisah garis tipis. Tiap baris = judul, keterangan, dan satu kontrol.
-
-/** Kepala bagian, dengan garis tipis di atasnya sebagai pemisah. */
 @Composable
 private fun Section(title: String) {
     Hairline(Modifier.padding(top = 12.dp))
     SectionLabel(title, Modifier.padding(start = Gutter, top = 16.dp, bottom = 4.dp))
 }
 
-/** Satu baris pengaturan: judul, keterangan kecil, dan satu kontrol di kanan. */
 @Composable
 private fun SettingRow(title: String, note: String, error: Boolean = false, control: @Composable () -> Unit) = Row(
     Modifier.heightIn(min = 56.dp).padding(start = Gutter, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically,
@@ -71,7 +84,6 @@ private fun openAppNotificationSettings(ctx: Context) {
     }
 }
 
-/** Satu model di daftar: nama, ukuran, dan satu aksi. Rincian muncul saat barisnya diketuk. */
 @Composable
 private fun ModelRow(
     name: String, badge: String?, meta: String, open: Boolean, onToggle: () -> Unit, progress: Download?, detail: String,
@@ -97,25 +109,37 @@ private fun ModelRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     val aiState by vm.ai.state.collectAsStateWithLifecycle()
     val download by vm.ai.download.collectAsStateWithLifecycle()
-    val revision by vm.ai.revision.collectAsStateWithLifecycle()      // memicu gambar ulang saat model berubah
-    var gpu by remember { mutableStateOf(vm.ai.useGpu) }
+    val revision by vm.ai.revision.collectAsStateWithLifecycle()
+    val activeProfile by vm.ai.activeProfile.collectAsStateWithLifecycle()
+    val benchRunning by vm.ai.benchmarkRunning.collectAsStateWithLifecycle()
+    val metrics by vm.ai.metrics.collectAsStateWithLifecycle()
+    val embInstalled by vm.embeddings.installed.collectAsStateWithLifecycle()
+
     var confirmDelete by remember { mutableStateOf<String?>(null) }
     var confirmDownload by remember { mutableStateOf<ModelSpec?>(null) }
+    var askExportPass by remember { mutableStateOf(false) }
+    var pendingExportPass by remember { mutableStateOf<CharArray?>(null) }
+
     val pickModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::importModel) }
-    val exportTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { it?.let(vm::exportTo) }
-    val importFrom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::importFrom) }
+    val pickEmbModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::importEmbeddingModel) }
+    val exportTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        val pass = pendingExportPass
+        pendingExportPass = null
+        if (uri != null) vm.exportTo(uri, pass) else pass?.fill('\u0000')
+    }
+    val importFrom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.importFrom(u) } }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(vm::setBackupFolder) }
     val ctx = LocalContext.current
     val update by vm.updater.state.collectAsStateWithLifecycle()
     val currentVersion = vm.updater.currentVersion
     var autoUpdate by remember { mutableStateOf(vm.updater.autoCheck) }
     var releaseNotes by remember { mutableStateOf<UpdateRelease?>(null) }
-    var expanded by rememberSaveable { mutableStateOf<String?>(null) }     // model yang rinciannya sedang dibuka
-    // Izin bisa berubah di pengaturan sistem; periksa lagi tiap kali layar ini kembali tampil.
+    var expanded by rememberSaveable { mutableStateOf<String?>(null) }
     var canNotify by remember { mutableStateOf(Reminders.canNotify(ctx)) }
     var canExact by remember { mutableStateOf(Reminders.canExact(ctx)) }
     var battery by remember { mutableStateOf(Oem.batteryUnrestricted(ctx)) }
@@ -127,16 +151,15 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
         canNotify = Reminders.canNotify(ctx); canExact = Reminders.canExact(ctx); battery = Oem.batteryUnrestricted(ctx)
         test = Reminders.testState(ctx); late = Reminders.lastLate(ctx); now = System.currentTimeMillis()
     }
-    // Hasil uji pengingat tiba selagi layar ini terbuka.
     LaunchedEffect(Unit) { Reminders.changed.collect { test = Reminders.testState(ctx); now = System.currentTimeMillis() } }
     LaunchedEffect(test) { while (test.first > 0 && test.second == null && now < test.first + 5 * 60_000L) { delay(15_000); now = System.currentTimeMillis() } }
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         canNotify = Reminders.canNotify(ctx)
-        if (!granted) openAppNotificationSettings(ctx)      // sudah pernah ditolak: sistem tidak menampilkan dialog lagi
+        if (!granted) openAppNotificationSettings(ctx)
     }
     val ram = vm.ai.deviceRamGb
     val recommended = ModelCatalog.recommended(ram)
-    val busy = aiState is AiState.Importing || aiState is AiState.Loading
+    val busy = aiState is AiState.Importing || aiState is AiState.Loading || benchRunning
     val active = revision.let { vm.ai.activeId }
 
     Scaffold(snackbarHost = { Notices(snack) }) { pad ->
@@ -146,7 +169,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 Text("Pengaturan", Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleLarge)
             }
 
-            // ---------- Model AI: satu baris per model; ketuk untuk rincian ----------
+            // ---------- Model AI ----------
             SectionLabel("Model AI", Modifier.padding(start = Gutter, top = 12.dp, bottom = 4.dp))
             val status = when (val st = aiState) {
                 AiState.NoModel -> "Belum ada model. Unduh sekali; sesudahnya AI berjalan tanpa internet."
@@ -157,12 +180,12 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 is AiState.Failed -> st.message
             }
             Text(
-                status + if (ram > 0) "  RAM HP ini ±$ram GB." else "",
+                status + if (ram > 0) "  RAM fisik HP ±$ram GB." else "",
                 Modifier.padding(horizontal = Gutter).padding(bottom = 4.dp), style = MaterialTheme.typography.bodySmall,
                 color = if (aiState is AiState.Failed) MaterialTheme.colorScheme.error else muted,
             )
             (aiState as? AiState.Importing)?.let { LinearProgressIndicator({ it.percent / 100f }, Modifier.fillMaxWidth().padding(horizontal = Gutter)) }
-            if (aiState is AiState.Loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Gutter))
+            if (aiState is AiState.Loading || benchRunning) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Gutter))
 
             ModelCatalog.all.forEach { spec ->
                 val installed = revision.let { vm.ai.isInstalled(spec.id) }
@@ -185,7 +208,6 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                 }
             }
-            // Model dari berkas .litertlm milik pengguna
             val importInstalled = revision.let { vm.ai.isInstalled(ModelCatalog.IMPORT_ID) }
             val importActive = active == ModelCatalog.IMPORT_ID
             ModelRow(
@@ -200,21 +222,67 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
 
             if (aiState !is AiState.NoModel && aiState !is AiState.Importing) {
                 Section("Kinerja AI")
-                SettingRow("Mode ringan", "Untuk RAM terbatas: memori lebih hemat dan model langsung dilepas, tetapi AI membaca teks lebih pendek.") {
+                activeProfile?.let { prof ->
+                    val mtpStr = if (prof.enableMtpEngine) "MTP adaptif per tugas" else "MTP mati"
+                    Muted(
+                        "Profil aktif: ${prof.backend.label}-${prof.cpuThreads} · ${prof.contextProfile.label} · $mtpStr (${prof.source.label}).",
+                        Modifier.padding(horizontal = Gutter, vertical = 4.dp),
+                    )
+                }
+                metrics.lastOrNull()?.let { m ->
+                    Muted(
+                        "Permintaan terakhir (${m.taskKey}): %.1f dtk · TTFT %.0f ms · decode %.1f tok/s · puncak %.0f MB."
+                            .format(m.totalMs / 1000.0, m.ttftMs, m.decodeTokPerSec, m.peakRssKb / 1024.0),
+                        Modifier.padding(horizontal = Gutter, vertical = 2.dp),
+                    )
+                }
+                SettingRow("Mode ringan", "Untuk RAM terbatas: konteks Hemat (2.048 token) dan model segera dilepas.") {
                     Switch(vm.lightAi, vm::updateLightAi, enabled = !busy)
                 }
-                SettingRow("Akselerasi GPU", "Matikan bila model gagal dimuat.") { Switch(gpu, { gpu = it; vm.setGpu(it) }, enabled = !busy) }
-                val idle = if (vm.lightAi) "20 detik" else "3 menit"
+                val gpuSelected = activeProfile?.backend == AiBackendKind.GPU
+                SettingRow("Akselerasi GPU teks", "Paksa GPU untuk teks (otomatis jatuh ke CPU bila gagal). Pada Moto G86 Power 5G, CPU-4 lebih hemat RAM.") {
+                    Switch(gpuSelected, { vm.setGpu(it) }, enabled = !busy)
+                }
+                Column(Modifier.padding(horizontal = Gutter, vertical = 6.dp)) {
+                    Text("Batas konteks KV cache", style = MaterialTheme.typography.bodyLarge)
+                    Muted("Lebih besar membaca teks lebih panjang tetapi memakai RAM lebih besar.", Modifier.padding(bottom = 6.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ContextProfile.entries.forEach { cp ->
+                            val selected = activeProfile?.contextProfile == cp
+                            Choice(cp.label, selected = selected) { if (!busy) vm.setContextProfile(cp) }
+                        }
+                    }
+                }
+                SettingRow(
+                    "Benchmark perangkat",
+                    if (benchRunning) "Sedang mengukur CPU-4 vs GPU di HP ini…" else "Ukur kecepatan dan RAM di HP ini untuk memilih profil terbaik.",
+                ) {
+                    SmallButton(if (benchRunning) "Mengukur…" else "Uji kecepatan", enabled = !busy, onClick = vm::runAiBenchmark)
+                }
+                val idleLabel = if (vm.lightAi) "30 detik" else "3 menit"
                 SettingRow(
                     "Memori",
-                    if (aiState is AiState.Ready) "Model sedang memakai RAM; dilepas sendiri setelah $idle tak dipakai, atau begitu aplikasi ditinggalkan."
-                    else "Model tidak memakai RAM sekarang. Dimuat saat dipakai, lalu dilepas setelah $idle menganggur.",
+                    if (aiState is AiState.Ready) "Model sedang memakai RAM; dilepas sendiri setelah $idleLabel tak dipakai, atau begitu aplikasi ditinggalkan."
+                    else "Model tidak memakai RAM sekarang. Dimuat saat dipakai, lalu dilepas adaptif.",
                 ) {
                     if (aiState is AiState.Ready) SmallButton("Lepas", onClick = vm::unloadModel)
                     else SmallButton("Uji muat", enabled = !busy, onClick = vm::loadModel)
                 }
                 SettingRow("Isi judul & tag otomatis", "Setelah catatan ditutup, AI mengisi judul dan tag yang masih kosong di latar.") {
                     Switch(vm.autoOrganize, vm::updateAutoOrganize)
+                }
+            }
+
+            // ---------- Pencarian semantik ----------
+            Section("Pencarian semantik (opsional)")
+            SettingRow(
+                "Model embedding lokal",
+                if (embInstalled) "Aktif: pencarian menggabungkan TF-IDF + kemiripan makna di perangkat."
+                else "Belum dipasang. Pencarian tetap instan memakai TF-IDF + trigram lokal.",
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (embInstalled) SmallButton("Hapus", onClick = vm::deleteEmbeddingModel)
+                    SmallButton(if (embInstalled) "Ganti" else "Pilih berkas") { pickEmbModel.launch(arrayOf("*/*")) }
                 }
             }
 
@@ -236,7 +304,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 "Pengingat aktif", "${vm.reminderCount} catatan punya pengingat. Tetap berbunyi saat aplikasi ditutup dan setelah HP dinyalakan ulang.",
             ) { SmallButton("Atur bunyi") { openAppNotificationSettings(ctx) } }
 
-            // ---------- Keandalan: penghemat baterai pabrikan ----------
+            // ---------- Keandalan ----------
             Section(if (Oem.aggressive) "Agar pengingat tidak ditahan HP ${Oem.brand}" else "Agar pengingat tidak ditahan HP")
             if (late.first > 0) SettingRow(
                 "Pengingat terakhir terlambat ${late.first / 60_000} menit", "Terjadi ${whenLabel(late.second)}. HP menahan Catatanku di latar; kerjakan langkah di bawah, lalu uji lagi.", error = true,
@@ -296,7 +364,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             SettingRow(
                 "Cadangan otomatis",
                 when {
-                    folder == null -> "Pilih folder; cadangan ditulis tiap ada perubahan, ${AutoBackup.KEEP} berkas terakhir disimpan."
+                    folder == null -> "Pilih folder; cadangan ZIP (termasuk lampiran) ditulis tiap ada perubahan, ${AutoBackup.KEEP} berkas terakhir disimpan."
                     vm.backupError != null -> "Gagal menulis ke $folder: ${vm.backupError}. Pilih ulang foldernya."
                     vm.backupAt > 0 -> "$folder  ·  terakhir ${whenLabel(vm.backupAt)}"
                     else -> folder
@@ -306,10 +374,23 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 if (folder == null || vm.backupError != null) SmallButton("Pilih folder", primary = true) { pickFolder.launch(null) }
                 else SmallButton("Matikan") { vm.setBackupFolder(null) }
             }
-            SettingRow("Ekspor dan impor", "Satu berkas JSON berisi semua catatan, Sampah, dan pengingat. Tidak dienkripsi.") {
+            vm.backupProgress?.let { bp ->
+                Column(Modifier.padding(horizontal = Gutter, vertical = 6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Muted(bp.detail.ifBlank { bp.phase.label }, Modifier.weight(1f))
+                        TextAction("Batalkan", onClick = vm::cancelBackupJob)
+                    }
+                    if (bp.total > 0) LinearProgressIndicator({ bp.fraction }, Modifier.fillMaxWidth().padding(top = 4.dp))
+                    else LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
+                }
+            }
+            SettingRow(
+                "Ekspor dan impor lengkap",
+                "Arsip ZIP membawa semua catatan, Sampah, pengingat, riwayat versi, lampiran gambar/suara, dan checksum SHA-256 (opsional terenkripsi AES-256-GCM). Tetap mendukung berkas JSON lama.",
+            ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallButton("Impor") { importFrom.launch(arrayOf("application/json", "*/*")) }
-                    SmallButton("Ekspor") { exportTo.launch("catatanku-cadangan.json") }
+                    SmallButton("Impor", enabled = vm.backupProgress == null) { importFrom.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }
+                    SmallButton("Ekspor", enabled = vm.backupProgress == null) { askExportPass = true }
                 }
             }
 
@@ -374,6 +455,70 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             Spacer(Modifier.height(32.dp))
         }
     }
+
+    if (askExportPass) {
+        var pass by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { askExportPass = false },
+            title = { Text("Ekspor cadangan", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Muted("Kosongkan sandi untuk ekspor ZIP biasa, atau isi sandi untuk mengenkripsi arsip (AES-256-GCM). Sandi tidak disimpan di HP.")
+                    OutlinedTextField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        placeholder = { Text("Sandi enkripsi (opsional)") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = SmallShape,
+                    )
+                }
+            },
+            confirmButton = {
+                TextAction("Ekspor berkas") {
+                    askExportPass = false
+                    val chars = pass.takeIf { it.isNotEmpty() }?.toCharArray()
+                    pendingExportPass = chars
+                    val defName = if (chars != null) "catatanku-cadangan.enc.zip" else "catatanku-cadangan.zip"
+                    pass = ""
+                    exportTo.launch(defName)
+                }
+            },
+            dismissButton = { TextAction("Batal") { pass = ""; askExportPass = false } },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        )
+    }
+
+    vm.pendingEncryptedRestoreUri?.let { uri ->
+        var pass by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { pass = ""; vm.dismissEncryptedRestorePrompt() },
+            title = { Text("Buka cadangan terenkripsi", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                OutlinedTextField(
+                    value = pass,
+                    onValueChange = { pass = it },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    placeholder = { Text("Masukkan kata sandi cadangan") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = SmallShape,
+                )
+            },
+            confirmButton = {
+                TextAction("Pulihkan cadangan", enabled = pass.isNotEmpty()) {
+                    val chars = pass.toCharArray()
+                    pass = ""
+                    vm.dismissEncryptedRestorePrompt()
+                    vm.importFrom(uri, chars)
+                }
+            },
+            dismissButton = { TextAction("Batal") { pass = ""; vm.dismissEncryptedRestorePrompt() } },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        )
+    }
+
     confirmDownload?.let { spec ->
         val enough = vm.ai.freeSpaceFor(spec)
         AlertDialog(

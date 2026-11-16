@@ -1,4 +1,4 @@
-package com.catatanku.app
+package com.catatanku.app.ui
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -26,16 +26,7 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-/*
- * Identitas "Kertas & Tinta". Aturannya tertulis di docs/DESAIN.md; berkas ini adalah wujud kodenya.
- *
- *  - Permukaan netral: kertas (terang) atau hitam pekat (gelap; piksel mati di layar AMOLED).
- *  - Tinta sebagai warna utama: teks, ikon, tombol utama.
- *  - SATU aksen, amber, dan artinya selalu WAKTU: pengingat, tenggat, blok "Hari ini".
- *  - Merah hanya untuk yang terlewat dan tindakan yang menghapus.
- *  - Tidak ada gradasi, bayangan, atau warna khusus untuk AI: AI adalah cara kerja, bukan maskot.
- */
+import com.catatanku.app.R
 
 private val Light = lightColorScheme(
     primary = Color(0xFF191918), onPrimary = Color(0xFFFBFBFA),
@@ -77,7 +68,6 @@ private val Dark = darkColorScheme(
     surfaceTint = Color.Transparent, scrim = Color.Black,
 )
 
-/** Warna wallpaper (Android 12+) bila pengguna memilihnya; mode gelap tetap berlatar hitam pekat. */
 @Composable
 private fun scheme(dynamic: Boolean): ColorScheme {
     val dark = isSystemInDarkTheme()
@@ -87,17 +77,12 @@ private fun scheme(dynamic: Boolean): ColorScheme {
     else dynamicLightColorScheme(ctx)
 }
 
-/**
- * Isi catatan memakai Atkinson Hyperlegible Next (OFL): dirancang agar huruf yang mirip mudah dibedakan.
- * Satu berkas variabel untuk semua ketebalan. Antarmuka selebihnya memakai font sistem.
- */
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 private fun noteFont(weight: FontWeight) = Font(
     R.font.atkinson_hyperlegible_next, weight, variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
 )
 val NoteFont = FontFamily(noteFont(FontWeight.Normal), noteFont(FontWeight.Medium), noteFont(FontWeight.SemiBold))
 
-/** Gaya teks untuk isi catatan. Label, tombol, dan keterangan memakai `MaterialTheme.typography`. */
 object NoteType {
     val title = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp)
     val body = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 26.sp)
@@ -117,7 +102,6 @@ private val Type = Typography().run {
     )
 }
 
-/** Dua radius saja: 8dp untuk elemen kecil (tombol, kolom, chip), 16dp untuk lembar bawah dan dialog. */
 val SmallShape = RoundedCornerShape(8.dp)
 
 @Composable
@@ -131,10 +115,6 @@ fun CatatankuTheme(dynamic: Boolean = false, content: @Composable () -> Unit) = 
     content = content,
 )
 
-/**
- * Satu set ikon garis (24dp, tebal 1,75, ujung membulat) yang digambar sendiri: gayanya seragam dan aplikasi
- * tidak perlu membawa pustaka ikon. Ikon selalu ditemani kata, atau diberi keterangan untuk pembaca layar.
- */
 object AppIcons {
     private fun icon(name: String, vararg strokes: String, fills: List<String> = emptyList()) =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {

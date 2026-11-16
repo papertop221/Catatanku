@@ -1,4 +1,4 @@
-package com.catatanku.app
+package com.catatanku.app.domain.usecase
 
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -7,29 +7,6 @@ import java.time.LocalTime
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
-
-/** Pengulangan pengingat. Urutan dipakai sebagai nilai di basis data; jangan diubah. */
-enum class Repeat(val label: String) {
-    None("Sekali"), Daily("Setiap hari"), Weekly("Setiap minggu"), Monthly("Setiap bulan");
-
-    /** Jadwal berikutnya setelah [now] untuk pengingat yang semula jatuh pada [at]. */
-    fun next(at: LocalDateTime, now: LocalDateTime): LocalDateTime? {
-        if (this == None) return null
-        var t = at
-        var i = 0L
-        while (!t.isAfter(now)) {
-            i++
-            t = when (this) {
-                Daily -> at.plusDays(i)
-                Weekly -> at.plusWeeks(i)
-                else -> at.plusMonths(i)      // dihitung dari tanggal asal agar tanggal 31 tidak bergeser permanen
-            }
-        }
-        return t
-    }
-
-    companion object { fun of(i: Int) = entries.getOrElse(i) { None } }
-}
 
 /**
  * Mengenali waktu dalam catatan berbahasa Indonesia, mis. "besok jam 7 malam", "tanggal 24 jam 10 pagi",
@@ -71,7 +48,6 @@ object TimeParse {
     private val R_TIME_KW = re("\\b(?:jam|pukul|pkl|jm)\\.?\\s*(setengah\\s+)?(\\d{1,2})(?:[.:](\\d{2}))?(?!\\d)(?:\\s*(?:wib|wita|wit)\\b)?(?:\\s*($PART))?")
     private val R_TIME_BARE = re("(?<![\\d.:,])(\\d{1,2})(?::(\\d{2})(?![\\d:])|\\.(\\d{2})(?=\\s*(?:wib|wita|wit)\\b))(?:\\s*(?:wib|wita|wit)\\b)?(?:\\s*($PART))?")
 
-    // Waktu salat sebagai penanda jam yang lazim di catatan sehari-hari ("lusa habis magrib"). Jamnya perkiraan.
     private val PRAYER = mapOf(
         "subuh" to LocalTime.of(4, 30), "zuhur" to LocalTime.of(12, 0), "dzuhur" to LocalTime.of(12, 0), "dhuhur" to LocalTime.of(12, 0),
         "lohor" to LocalTime.of(12, 0), "asar" to LocalTime.of(15, 30), "ashar" to LocalTime.of(15, 30),
@@ -87,7 +63,6 @@ object TimeParse {
             "siang" -> if (h in 1..5) h += 12
             "sore", "petang" -> if (h in 1..11) h += 12
             "malam" -> if (h in 6..11) h += 12 else if (h == 12) return LocalTime.of(23, 59)
-            // "jam 3" tanpa keterangan hampir selalu berarti sore, bukan dini hari.
             null -> if (plain && h in 1..6) h += 12
         }
         if (h == 24) return LocalTime.of(23, 59)
@@ -105,7 +80,6 @@ object TimeParse {
     private fun safeDate(y: Int, m: Int, d: Int): LocalDate? =
         if (m in 1..12 && d in 1..YearMonth.of(y, m).lengthOfMonth()) LocalDate.of(y, m, d) else null
 
-    /** Tanggal tanpa tahun: yang baru saja lewat dianggap masa lalu, yang sudah lama lewat berarti tahun depan. */
     private fun resolveYear(m: Int, d: Int, today: LocalDate): LocalDate? {
         val thisYear = safeDate(today.year, m, d) ?: return null
         return when {
@@ -171,7 +145,6 @@ object TimeParse {
         R_SUNDAY.findAll(s).forEach { m ->
             out += DateHit(m.range, today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)), m.groupValues[1].ifEmpty { null })
         }
-        // Buang yang tumpang-tindih; yang lebih panjang (lebih spesifik) menang.
         val kept = ArrayList<DateHit>()
         out.sortedByDescending { it.range.last - it.range.first }.forEach { h ->
             if (kept.none { it.range.first <= h.range.last && h.range.first <= it.range.last }) kept += h
@@ -196,7 +169,6 @@ object TimeParse {
                 out += TimeHit(m.range, t, false) { part -> if (g[4].isEmpty()) clock(h, min, part, false, false) else t }
             }
         }
-        // Hanya berlaku bila menempel pada tanggal ("besok habis isya"); sendirian terlalu sering bukan janji.
         R_PRAYER.findAll(s).forEach { m ->
             val t = PRAYER.getValue(m.groupValues[2].lowercase()).plusMinutes(if (m.groupValues[1].isEmpty()) 0 else 30)
             out += TimeHit(m.range, t, false) { t }
@@ -204,7 +176,6 @@ object TimeParse {
         return out
     }
 
-    /** Semua waktu mendatang yang dikenali, yang punya jam lebih dulu, lalu urut kemunculan. */
     fun find(text: String, now: LocalDateTime = LocalDateTime.now()): List<Found> {
         val result = ArrayList<Pair<Int, Found>>()
         var offset = 0
@@ -217,7 +188,6 @@ object TimeParse {
                     result += (offset + d.range.first) to Found(d.exact.withSecond(0).withNano(0), line.substring(d.range).trim(), true)
                     continue
                 }
-                // Jam terdekat di baris yang sama: sesudah tanggal (≤ 40 huruf) atau tepat sebelumnya (≤ 20 huruf).
                 val t = ts.filter {
                     val gapAfter = it.range.first - d.range.last
                     val gapBefore = d.range.first - it.range.last
@@ -226,15 +196,12 @@ object TimeParse {
                 var at: LocalDateTime
                 if (t != null) {
                     usedTimes += t
-                    // "besok malam jam 8": keterangan waktu menempel pada tanggalnya, bukan pada jamnya.
                     val time = d.part?.let(t.withPart) ?: t.time
                     at = d.date.atTime(time)
-                    // Nama hari yang jatuh hari ini tetapi jamnya sudah lewat berarti minggu depan.
                     if (!at.isAfter(now) && d.date == now.toLocalDate() && line.substring(d.range).lowercase().let { p -> DAYS.keys.any { it in p } }) at = at.plusWeeks(1)
                 } else {
-                    if (d.date == now.toLocalDate() && d.part == null) continue      // "hari ini" tanpa jam: tak ada yang bisa diingatkan
+                    if (d.date == now.toLocalDate() && d.part == null) continue
                     at = d.date.atTime(defaultTime(d.part))
-                    // "nanti sore" saat masih sore (mis. pukul 16.15): geser 1 jam agar tetap menjadi pengingat hari ini.
                     if (!at.isAfter(now) && d.todayRel && d.date == now.toLocalDate() && d.part != null) {
                         val endHour = when (d.part.lowercase()) { "pagi" -> 11; "siang" -> 15; "sore", "petang" -> 18; else -> 23 }
                         if (now.hour < endHour) at = now.plusHours(1).withSecond(0).withNano(0)
@@ -243,7 +210,6 @@ object TimeParse {
                 val phrase = line.substring(minOf(d.range.first, t?.range?.first ?: d.range.first), maxOf(d.range.last, t?.range?.last ?: d.range.last) + 1).trim()
                 if (at.isAfter(now)) result += (offset + d.range.first) to Found(at, phrase, t != null)
             }
-            // Jam tanpa tanggal ("jam 7 malam") hanya dihitung bila memakai kata jam/pukul: hari ini, atau besok bila sudah lewat.
             for (t in ts) {
                 if (!t.keyword || t in usedTimes) continue
                 var at = now.toLocalDate().atTime(t.time)

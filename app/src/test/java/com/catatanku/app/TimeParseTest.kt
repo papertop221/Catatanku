@@ -1,5 +1,7 @@
 package com.catatanku.app
 
+import com.catatanku.app.domain.model.Repeat
+import com.catatanku.app.domain.usecase.TimeParse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

@@ -1,40 +1,17 @@
-package com.catatanku.app
+package com.catatanku.app.ai.inference
 
+import com.catatanku.app.domain.model.AgentStep
+import com.catatanku.app.domain.model.Repeat
+import com.catatanku.app.domain.usecase.TextTools
+import com.catatanku.app.domain.usecase.TimeParse
 import java.time.LocalDateTime
-
-/** Satu langkah yang bisa dikerjakan asisten atas perintah pengguna. */
-sealed interface AgentStep {
-    /** Kata kunci catatan sasaran; [Agent.PREV] = catatan dari langkah sebelumnya; null = tanpa sasaran. */
-    val target: String? get() = null
-
-    data class Create(
-        val title: String, val body: String = "", val tags: List<String> = emptyList(), val folder: String = "",
-        val at: LocalDateTime? = null, val repeat: Repeat = Repeat.None, val alarm: Boolean = false,
-        /** Perintahnya meminta pengingat ("ingatkan …"), jadi [at] wajib dikenali. */
-        val wantsReminder: Boolean = false,
-    ) : AgentStep
-    data class Remind(override val target: String, val at: LocalDateTime?, val repeat: Repeat = Repeat.None, val alarm: Boolean = false) : AgentStep
-    data class Unremind(override val target: String) : AgentStep
-    data class Append(override val target: String, val text: String, val task: Boolean) : AgentStep
-    data class Check(override val target: String, val text: String) : AgentStep
-    data class Tag(override val target: String, val tags: List<String>) : AgentStep
-    data class Move(override val target: String, val folder: String) : AgentStep
-    data class Pin(override val target: String, val on: Boolean) : AgentStep
-    data class Archive(override val target: String) : AgentStep
-    data class Trash(override val target: String) : AgentStep
-}
 
 /**
  * Asisten perintah ("agen ringan"): kalimat seperti "ingatkan saya bayar listrik besok jam 7 malam" diubah menjadi
  * paling banyak [MAX_STEPS] langkah yang ditinjau pengguna sebelum dijalankan.
- *
- * Perintah berpola umum dikenali dengan aturan: instan, deterministik, dan tetap jalan tanpa model. Hanya bila aturan
- * gagal, LLM diminta MERUMUSKAN ULANG perintah ke bentuk baku ([plannerPrompt]) yang lalu diurai aturan yang sama.
- * Model tidak pernah menjalankan apa pun dan tidak menghitung tanggal; itu tugas kode ini dan [TimeParse].
- * Murni Kotlin agar bisa diuji tanpa perangkat.
  */
 object Agent {
-    const val PREV = "\u0001"
+    const val PREV = AgentStep.PREV_TARGET
     const val MAX_STEPS = 3
 
     private fun re(p: String) = Regex(p, RegexOption.IGNORE_CASE)
@@ -44,7 +21,6 @@ object Agent {
         "(?:catat(?:kan|in)?|catet(?:in)?|tulis(?:kan|in)?|(?:buat(?:kan)?|bikin(?:kan)?|pasang|setel)\\s+(?:catatan|alarm|pengingat)|" +
             "ingatkan|ingetin|ingatin|tambah(?:kan|in)?|masukkan|masukin|sisipkan|centang|ceklis|selesaikan|(?:beri|kasih|pasang)\\s+tag|" +
             "tandai|pindah(?:kan|in)?|sematkan|lepas(?:kan)?\\s+sematan|arsipkan|hapus|buang|batalkan|matikan)\\b"
-    /** Sambungan antarperintah: hanya dihitung bila diikuti kata kerja perintah, agar "beli susu dan roti" tetap utuh. */
     private val JOIN = re("(?:\\s*[,;]\\s*(?:(?:dan|lalu|kemudian|terus)\\s+)?|\\s+(?:dan|lalu|kemudian|terus)\\s+)(?=$VERB)")
     private val POLITE = re("^(?:(?:tolong|coba|mohon|please|plis|ayo)\\s+)+")
     private val POLITE_END = re("(?:\\s+(?:ya|dong|donk|deh|please|plis))+$")
@@ -72,7 +48,6 @@ object Agent {
     private val R_TAGS = re("[,;]?\\s+(?:(?:dengan|pakai|beri|kasih)\\s+)?tag\\s+(.+)$")
     private val R_HASHTAG = re("(?:^|\\s)#([\\p{L}\\p{N}_-]{2,28})")
     private val R_HEAD = Regex("^([^:\\n]{2,40}):\\s*(.+)$", RegexOption.DOT_MATCHES_ALL)
-    private val R_LISTY = re("\\b(?:daftar|belanja|tugas|todo|to-do|checklist|bawaan|perlengkapan)\\b")
     private val R_LEAD = re("^(?:untuk|buat|agar|supaya|tentang|soal|bahwa)\\s+")
     private val R_TAIL = re("\\s+(?:pada|di|untuk|buat|jam|pukul|tiap|setiap|nanti)$")
     private val R_TARGET_LEAD = re("^(?:(?:aja|saja|yang|tentang|soal|berjudul|judul|catatan)\\s+)+")
@@ -101,7 +76,6 @@ object Agent {
     private fun items(text: String): List<String> =
         text.split(Regex("\\s*(?:,|;|\\n|\\sdan\\s)\\s*")).map { it.trim().trim('.') }.filter { it.isNotEmpty() }
 
-    /** Memisahkan pengulangan ("tiap hari", "setiap Senin", "bulanan") dari kalimat. */
     private fun takeRepeat(text: String): Pair<Repeat, String> {
         R_REP_UNIT.find(text)?.let { m ->
             val unit = (m.groupValues[1].ifEmpty { m.groupValues[2] }).lowercase()
@@ -113,7 +87,6 @@ object Agent {
         return Repeat.None to text
     }
 
-    /** Teks pendek menjadi judul; "Judul: butir 1, butir 2" atau daftar koma menjadi judul + daftar centang; teks panjang menjadi isi. */
     private fun noteOf(text: String): Pair<String, String> {
         val c = text.trim()
         R_HEAD.matchEntire(c)?.let { m ->
@@ -131,7 +104,6 @@ object Agent {
         return if (c.length <= 60 && '\n' !in c) cap(c) to "" else "" to cap(c)
     }
 
-    /** Memisahkan #hashtag, "di folder X", dan "tag X" dari ujung kalimat perintah. */
     private fun takeMeta(raw: String): Triple<String, List<String>, String> {
         var c = raw.trim()
         val found = ArrayList<String>()
@@ -148,7 +120,7 @@ object Agent {
     }
 
     private fun remindLike(rest: String, alarmAsked: Boolean, hasPrev: Boolean, now: LocalDateTime): AgentStep? {
-        val ( withoutMeta, foundTags, folder) = takeMeta(rest)
+        val (withoutMeta, foundTags, folder) = takeMeta(rest)
         val (repeat, r) = takeRepeat(withoutMeta)
         val alarm = alarmAsked || R_ALARM_WORD.containsMatchIn(r)
         val text = R_ALARM_WORD.replace(r, "")
@@ -168,12 +140,11 @@ object Agent {
         return AgentStep.Create(title, body, foundTags, folder)
     }
 
-    /** Sasaran "itu" atau tanpa sasaran ("lalu sematkan") hanya sah bila ada langkah sebelumnya. */
     private fun one(raw: String, hasPrev: Boolean, now: LocalDateTime): AgentStep? =
         match(raw, hasPrev, now)?.takeIf { it.target != PREV || hasPrev }
 
     private fun match(raw: String, hasPrev: Boolean, now: LocalDateTime): AgentStep? {
-        if (raw.trim().endsWith("?")) return null       // pertanyaan bukan perintah
+        if (raw.trim().endsWith("?")) return null
         val s = POLITE_END.replace(POLITE.replace(raw.trim().trim('.', '!', ' '), ""), "").trim()
         fun m(r: Regex) = r.matchEntire(s)?.groupValues
         m(R_ALARM)?.let { return remindLike(it[2], it[1].equals("alarm", ignoreCase = true), hasPrev, now) }
@@ -192,7 +163,6 @@ object Agent {
         return null
     }
 
-    /** Mengurai perintah dengan aturan. null = bukan perintah yang dikenali (mungkin pencarian atau pertanyaan). */
     fun parse(command: String, now: LocalDateTime = LocalDateTime.now()): List<AgentStep>? {
         val text = command.trim().replace(Regex("\\s*\\n\\s*"), ", ")
         if (text.length !in 4..600) return null
@@ -206,9 +176,9 @@ object Agent {
             val step = one(p, steps.isNotEmpty(), now)
             when {
                 step != null && steps.size < MAX_STEPS -> { steps += step; raw = p }
-                step != null -> return null                                      // terlalu banyak langkah
+                step != null -> return null
                 steps.isEmpty() -> return null
-                else -> {                                                        // bukan perintah baru: bagian dari isi langkah sebelumnya
+                else -> {
                     raw += seps[i - 1] + p
                     steps[steps.lastIndex] = one(raw, steps.size > 1, now) ?: return null
                 }
@@ -217,12 +187,6 @@ object Agent {
         return steps.takeIf { it.isNotEmpty() }
     }
 
-    // ---------- Jalur LLM: model hanya merumuskan ulang ----------
-
-    /**
-     * Bentuk baku ditulis dengan huruf besar sebagai tempat isian dan disertai contoh: pada pengujian dengan Gemma 4 E2B,
-     * tanpa contoh model menghilangkan kata "tanggal", menyalin tempat isian apa adanya, dan melewatkan langkah kedua.
-     */
     fun plannerPrompt(command: String): String =
         "Ubah permintaan pengguna aplikasi catatan menjadi perintah baku. Satu perintah per baris, paling banyak $MAX_STEPS baris, " +
             "tanpa penjelasan. Bentuk yang boleh dipakai:\n" +
@@ -256,27 +220,20 @@ object Agent {
             "Permintaan: ${AiText.sanitizeInput(command).take(300)}\nPerintah:"
 
     private val R_PLACEHOLDER = Regex("[<>]|\\b(?:KATA KUNCI|WAKTU|BUTIR|JUDUL|TUGAS|TEKS|ISI|HAL|TAG|NAMA)\\b")
-
     private val R_QUESTION = re("^(?:apa|apakah|kapan|siapa|berapa|bagaimana|gimana|kenapa|mengapa|di\\s*mana|mana|adakah)\\b|\\?\\s*$")
-    private val R_SAVE_WORD = re("catat|catet|tulis|simpan|buat|bikin|daftar|tambah|\\bnote")       // juga "dicatat", "membuat"
+    private val R_SAVE_WORD = re("catat|catet|tulis|simpan|buat|bikin|daftar|tambah|\\bnote")
 
-    /**
-     * Mengurai jawaban [plannerPrompt] untuk [command]; baris yang tidak sesuai bentuk baku diabaikan. Kosong = bukan perintah.
-     * Model kecil cenderung mengubah kalimat apa pun menjadi "catat …", jadi catatan baru hanya diterima bila
-     * permintaannya memang menyebut mencatat/menyimpan, dan pertanyaan tidak pernah dianggap perintah.
-     */
     fun parseModel(raw: String, command: String, now: LocalDateTime = LocalDateTime.now()): List<AgentStep> {
         if (R_QUESTION.containsMatchIn(command.trim())) return emptyList()
         val mayCreate = R_SAVE_WORD.containsMatchIn(command)
         val steps = ArrayList<AgentStep>()
         AiText.strip(raw).lines()
             .map { it.trim().replace(Regex("^(?:\\d+[.)]|[-*•])\\s*"), "").trim('`', '"', '*', ' ') }
-            .filter { it.length >= 4 && !R_PLACEHOLDER.containsMatchIn(it) }       // tempat isian yang tersalin apa adanya
+            .filter { it.length >= 4 && !R_PLACEHOLDER.containsMatchIn(it) }
             .forEach { line ->
                 if (steps.size >= MAX_STEPS) return@forEach
                 var step = one(line, steps.isNotEmpty(), now) ?: return@forEach
                 if (step is AgentStep.Create && !step.wantsReminder && !mayCreate) return@forEach
-                // "catat X" lalu "ingatkan X besok": yang dimaksud satu catatan berpengingat, bukan dua catatan.
                 val prev = steps.lastOrNull()
                 if (step is AgentStep.Create && step.wantsReminder && prev is AgentStep.Create && prev.at == null) {
                     val had = TextTools.tokenize(prev.title + " " + prev.body).toSet()
@@ -288,14 +245,11 @@ object Agent {
         return steps
     }
 
-    // ---------- Penerapan pada isi catatan ----------
-
     fun append(body: String, text: String, task: Boolean): String {
         val line = (if (task) "☐ " else "") + cap(text)
         return if (body.isBlank()) line else body.trimEnd() + "\n" + line
     }
 
-    /** Butir daftar centang yang belum selesai dan paling cocok dengan [text]; null bila tidak ada. */
     fun findTask(body: String, text: String): String? {
         val words = TextTools.tokenize(text).toSet()
         val needle = text.trim().lowercase()
@@ -305,7 +259,6 @@ object Agent {
         }.filter { it.second > 0 }.maxByOrNull { it.second }?.first
     }
 
-    /** Mencentang butir yang cocok; null bila tidak ada butir yang cocok. */
     fun check(body: String, text: String): String? {
         val task = findTask(body, text) ?: return null
         var done = false

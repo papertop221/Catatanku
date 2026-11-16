@@ -1,5 +1,6 @@
 package com.catatanku.app
 
+import com.catatanku.app.domain.usecase.SearchIndex
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.util.Random

@@ -2,15 +2,10 @@ package com.catatanku.app
 
 import android.app.PendingIntent
 import android.content.ComponentCallbacks2
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.CalendarContract
-import android.provider.Settings
 import android.service.quicksettings.TileService
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -39,12 +34,33 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.catatanku.app.ai.engine.AiState
+import com.catatanku.app.ai.engine.LocalAi
+import com.catatanku.app.ai.inference.AiText
+import com.catatanku.app.ai.performance.AiTaskBudget
+import com.catatanku.app.domain.model.AiAction
+import com.catatanku.app.domain.model.Note
+import com.catatanku.app.domain.usecase.TimeParse
+import com.catatanku.app.reminders.saveFromOutside
+import com.catatanku.app.reminders.toMillis
+import com.catatanku.app.reminders.whenLabel
+import com.catatanku.app.ui.CatatankuTheme
+import com.catatanku.app.ui.Hairline
+import com.catatanku.app.ui.Muted
+import com.catatanku.app.ui.NoteType
+import com.catatanku.app.ui.PrimaryButton
+import com.catatanku.app.ui.SecondaryButton
+import com.catatanku.app.ui.Sheet
+import com.catatanku.app.ui.SmallShape
+import com.catatanku.app.ui.TextAction
+import com.catatanku.app.ui.copyText
+import com.catatanku.app.ui.muted
+import com.catatanku.app.ui.timeColor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-// Pintu masuk dari luar aplikasi: menu teks terpilih di aplikasi lain, tile Setelan Cepat, pintasan ikon,
-// kalender sistem, dan pengaturan baterai khas pabrikan.
+// Pintu masuk dari luar aplikasi: menu teks terpilih di aplikasi lain, tile Setelan Cepat, dan pintasan ikon.
 
 /** Aksi yang dipahami [MainActivity] dari tile, pintasan ikon, dan aplikasi otomasi (mis. Tasker). */
 object Actions {
@@ -52,119 +68,6 @@ object Actions {
     const val SHOW_REMINDERS = "com.catatanku.app.SHOW_REMINDERS"
     const val SHOW_TASKS = "com.catatanku.app.SHOW_TASKS"
 }
-
-/**
- * Pembatasan latar belakang khas pabrikan. Di luar Android baku, sebagian HP menghentikan aplikasi yang tidak
- * tampil dan ikut membuang alarmnya, sehingga pengingat terlambat atau tidak berbunyi. Aplikasi tidak bisa
- * mematikan pembatasan itu sendiri; yang bisa dilakukan adalah memakai jenis alarm yang paling jarang ditahan,
- * mengantar pengguna ke setelan yang tepat, dan mengukur apakah pengingat benar-benar tepat waktu.
- */
-object Oem {
-    private val maker = Build.MANUFACTURER.orEmpty().lowercase()
-
-    /** Kelompok antarmuka pabrikan; null = tidak dikenal sebagai pembatas agresif. */
-    val family: String? = when (maker) {
-        "oppo", "realme", "oneplus" -> "oppo"
-        "vivo", "iqoo" -> "vivo"
-        "xiaomi", "redmi", "poco" -> "xiaomi"
-        "huawei", "honor" -> "huawei"
-        "tecno", "infinix", "itel" -> "transsion"
-        else -> null
-    }
-    val aggressive get() = family != null
-    val brand: String get() = Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercase() }
-
-    /** Langkah di setelan HP. Nama menu berbeda-beda antarversi; ini yang paling umum. */
-    val steps: List<String> = when (family) {
-        "oppo" -> listOf(
-            "Setelan → Aplikasi → Luncurkan otomatis: nyalakan Catatanku.",
-            "Setelan → Aplikasi → Catatanku → Penggunaan baterai: izinkan aktivitas latar belakang.",
-            "Di layar aplikasi terbaru, kunci Catatanku (ikon gembok) agar tidak ikut dibersihkan.",
-        )
-        "vivo" -> listOf(
-            "Setelan → Baterai → Manajemen konsumsi daya latar belakang → Catatanku: jangan batasi.",
-            "Setelan → Aplikasi → Akses aplikasi khusus → Mulai otomatis: izinkan Catatanku.",
-            "Di layar aplikasi terbaru, kunci Catatanku (ikon gembok) agar tidak ikut dibersihkan.",
-        )
-        "xiaomi" -> listOf(
-            "Setelan → Aplikasi → Kelola aplikasi → Catatanku → Mulai otomatis: nyalakan.",
-            "Di halaman yang sama → Penghemat baterai: Tanpa pembatasan.",
-            "Di layar aplikasi terbaru, kunci Catatanku (ikon gembok).",
-        )
-        "huawei" -> listOf(
-            "Setelan → Baterai → Peluncuran aplikasi → Catatanku: kelola manual, lalu nyalakan ketiga pilihannya.",
-            "Di layar aplikasi terbaru, kunci Catatanku (ikon gembok).",
-        )
-        "transsion" -> listOf(
-            "Phone Master → Kelola mulai otomatis: izinkan Catatanku.",
-            "Setelan → Baterai: keluarkan Catatanku dari pembatasan latar belakang.",
-        )
-        else -> emptyList()
-    }
-
-    /** Halaman "mulai otomatis" yang dikenal. Namanya berasal dari daftar komunitas dan bisa berubah antarversi, jadi dicoba satu per satu. */
-    private val pages: List<Pair<String, String>> = when (family) {
-        "oppo" -> listOf(
-            "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
-            "com.coloros.safecenter" to "com.coloros.safecenter.startupapp.StartupAppListActivity",
-            "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
-            "com.oneplus.security" to "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity",
-        )
-        "vivo" -> listOf(
-            "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
-            "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager",
-            "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity",
-        )
-        "xiaomi" -> listOf("com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity")
-        "huawei" -> listOf(
-            "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
-            "com.huawei.systemmanager" to "com.huawei.systemmanager.optimize.process.ProtectActivity",
-        )
-        "transsion" -> listOf("com.transsion.phonemaster" to "com.itel.autobootmanager.activity.AutoBootMgrActivity")
-        else -> emptyList()
-    }
-
-    /** Membuka halaman mulai otomatis pabrikan; bila tidak ada yang bisa dibuka, halaman info aplikasi. True = halaman pabrikan terbuka. */
-    fun openAutostart(ctx: Context): Boolean {
-        for ((pkg, cls) in pages) {
-            val ok = runCatching { ctx.startActivity(Intent().setComponent(ComponentName(pkg, cls)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
-            if (ok) return true
-        }
-        runCatching {
-            ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-        return false
-    }
-
-    /** Aplikasi sudah dikecualikan dari pengoptimalan baterai Android (Doze dan App Standby). */
-    fun batteryUnrestricted(ctx: Context): Boolean =
-        ctx.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(ctx.packageName) != false
-
-    /** Meminta pengecualian lewat dialog sistem; bila dialognya tidak ada, membuka daftar pengoptimalan baterai. */
-    fun requestBatteryUnrestricted(ctx: Context) {
-        val direct = runCatching {
-            @Suppress("BatteryLife")
-            ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }.isSuccess
-        if (!direct) runCatching { ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
-}
-
-/**
- * Menyalin pengingat ke aplikasi kalender HP lewat layar "acara baru" (tanpa izin kalender; pengguna yang menyimpan).
- * Kalender bawaan biasanya tidak dibatasi penghemat baterai, jadi ini cadangan untuk pengingat yang tidak boleh terlewat.
- */
-fun addToCalendar(ctx: Context, title: String, body: String, at: Long, repeat: Repeat): Boolean = runCatching {
-    val i = Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
-        .putExtra(CalendarContract.Events.TITLE, title.take(120))
-        .putExtra(CalendarContract.Events.DESCRIPTION, body.take(1000))
-        .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, at)
-        .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, at + 30 * 60_000L)
-    when (repeat) {
-        Repeat.Daily -> "FREQ=DAILY"; Repeat.Weekly -> "FREQ=WEEKLY"; Repeat.Monthly -> "FREQ=MONTHLY"; Repeat.None -> null
-    }?.let { i.putExtra(CalendarContract.Events.RRULE, it) }
-    ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-}.isSuccess
 
 /** Pintasan di ikon aplikasi (tekan lama ikon Catatanku). Didaftarkan dari kode agar berlaku juga untuk build uji yang id-nya berbeda. */
 fun publishShortcuts(ctx: Context) = runCatching {
@@ -176,15 +79,6 @@ fun publishShortcuts(ctx: Context) = runCatching {
         item("pengingat", "Pengingat", Actions.SHOW_REMINDERS, R.drawable.ic_bell_dark),
         item("tugas", "Tugas belum selesai", Actions.SHOW_TASKS, R.drawable.ic_tasks),
     )
-}
-
-/** Catatan yang dibuat di luar layar utama (menu teks terpilih): simpan, setel alarmnya, dan beri tahu layar bila sedang terbuka. */
-fun saveFromOutside(ctx: Context, note: Note): Long {
-    val id = NoteDb.get(ctx).upsert(note)
-    if (note.hasReminder) Reminders.sync(ctx, note.copy(id = id))
-    ctx.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().putBoolean("dirty", true).apply()      // ikut cadangan otomatis berikutnya
-    Reminders.changed.tryEmit(id)
-    return id
 }
 
 /** Tile Setelan Cepat "Catatan baru": menulis catatan dari mana saja tanpa mencari ikon aplikasi. */
@@ -221,7 +115,10 @@ class ProcessTextActivity : ComponentActivity() {
                 if (action == AiAction.Tasks) {
                     val foundTime = TimeParse.best(text)
                     val direct = AiText.extractDirectTasksAndTime(text)
-                    val extracted = direct ?: AiText.parseExtractedTasks(ai.generate(AiText.tasksFromTextPrompt(text)), foundTime)
+                    val extracted = direct ?: AiText.parseExtractedTasks(
+                        ai.generate(AiText.tasksFromTextPrompt(text), task = AiTaskBudget.TASKS),
+                        foundTime,
+                    )
                     if (extracted.isEmpty) {
                         result = ""
                         error = "Tidak ada tugas nyata yang ditemukan pada teks terpilih."
@@ -230,7 +127,9 @@ class ProcessTextActivity : ComponentActivity() {
                         detectedRemindAt = extracted.remindAt?.toMillis()
                     }
                 } else {
-                    val out = ai.generate(AiText.prompt(action, "", text)) { result = AiText.cleanBlock(it) }
+                    val out = ai.generate(AiText.prompt(action, "", text), task = AiTaskBudget.forAction(action)) {
+                        result = AiText.cleanBlock(it)
+                    }
                     result = AiText.cleanBlock(out)
                     if (result.isNullOrBlank()) error = "Model tidak menghasilkan teks. Coba lagi dengan teks yang lebih pendek."
                 }
@@ -248,7 +147,7 @@ class ProcessTextActivity : ComponentActivity() {
     override fun onDestroy() {
         job?.cancel()
         // Model tidak perlu menahan RAM setelah lembar ini ditutup.
-        @Suppress("DEPRECATION") ai.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
+        ai.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
         super.onDestroy()
     }
 

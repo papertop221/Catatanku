@@ -1,0 +1,5 @@
+• Full ZIP backup/restore (notes, version history, image/audio attachments) with SHA-256 & atomic SQLite restore
+• Optional AES-256-GCM encrypted backups & pre-install update TOCTOU re-verification
+• Benchmark-tuned local AI: CPU-4, 2048-token context, per-task MTP, GPU vision (1024px), adaptive MemoryPolicy
+• Optional local hybrid search (TF-IDF + semantic embeddings)
+• Hardened reminder dedup, clock-change & exact-alarm handling

@@ -1,7 +1,6 @@
-package com.catatanku.app
+package com.catatanku.app.media
 
 import android.annotation.SuppressLint
-import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -19,6 +18,8 @@ import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.catatanku.app.domain.model.Note
+import com.catatanku.app.security.InputSecurity
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -36,6 +37,7 @@ import kotlin.math.roundToInt
  */
 object Attachments {
     const val MAX_IMAGE_PX = 1600
+    const val OCR_DERIVATIVE_PX = 1024
     const val SAMPLE_RATE = 16_000
     private const val BYTES_PER_SEC = SAMPLE_RATE * 2   // 16-bit mono
 
@@ -44,18 +46,25 @@ object Attachments {
     fun isImage(name: String): Boolean = name.startsWith("img_")
     fun isAudio(name: String): Boolean = name.startsWith("aud_")
 
+    fun existingNames(ctx: Context): Set<String> =
+        dir(ctx).list()?.toHashSet() ?: emptySet()
+
+    fun exists(ctx: Context, name: String): Boolean = file(ctx, name).isFile
+
     /**
      * Hanya menerima URI `content://` dari penyedia sistem/aplikasi lain; menolak `file://` maupun URI
      * yang menunjuk otoritas paket ini sendiri agar tidak membaca berkas internal sandbox.
      */
-    fun isSafeExternalUri(ctx: Context, uri: Uri): Boolean {
-        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
-        val auth = uri.authority?.lowercase().orEmpty()
-        val pkg = ctx.packageName.lowercase()
-        return auth != pkg && !auth.startsWith("$pkg.")
-    }
+    fun isSafeExternalUri(ctx: Context, uri: Uri): Boolean =
+        InputSecurity.isSafeExternalContentUri(
+            scheme = uri.scheme,
+            authority = uri.authority,
+            userInfo = uri.userInfo,
+            host = uri.host,
+            appPackageName = ctx.packageName,
+        )
 
-    /** Menyalin dan mengecilkan gambar dari [uri] ke penyimpanan internal (sekaligus menghapus metadata EXIF); mengembalikan nama berkasnya. */
+    /** Menyalin dan mengecilkan gambar dari [uri] ke penyimpanan internal (sekaligus menghapus metadata EXIF). */
     fun importImage(ctx: Context, uri: Uri): String {
         if (!isSafeExternalUri(ctx, uri)) error("Sumber gambar tidak diizinkan.")
         val bmp = if (Build.VERSION.SDK_INT >= 28) {
@@ -101,7 +110,40 @@ object Attachments {
         return name
     }
 
-    /** Mendekode gambar secara hemat RAM (target ≤ [maxPx]) untuk pratinjau di daftar/editor tanpa membebani heap. */
+    /**
+     * Membuat berkas gambar turunan beresolusi ≤ [maxPx] di `cacheDir` khusus untuk OCR/AI tanpa
+     * mengubah berkas lampiran asli. Pemanggil wajib menghapus berkas hasil setelah selesai.
+     */
+    fun createOcrDerivative(ctx: Context, name: String, maxPx: Int = OCR_DERIVATIVE_PX): File? {
+        val src = file(ctx, name)
+        if (!src.isFile) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(src.absolutePath, bounds)
+        val longest = max(bounds.outWidth, bounds.outHeight)
+        if (longest <= 0 || longest <= maxPx) return null
+        var sample = 1
+        while (longest / (sample * 2) >= maxPx) sample *= 2
+        val decoded = BitmapFactory.decodeFile(src.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return null
+        val curLongest = max(decoded.width, decoded.height)
+        val scaled = if (curLongest > maxPx) {
+            val ratio = maxPx.toFloat() / curLongest
+            val w = (decoded.width * ratio).roundToInt().coerceAtLeast(1)
+            val h = (decoded.height * ratio).roundToInt().coerceAtLeast(1)
+            try { Bitmap.createScaledBitmap(decoded, w, h, true) } finally { decoded.recycle() }
+        } else decoded
+        val tmp = File(ctx.cacheDir, "ocr_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
+        return try {
+            BufferedOutputStream(FileOutputStream(tmp), 16 * 1024).use { scaled.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+            tmp
+        } catch (_: Throwable) {
+            tmp.delete()
+            null
+        } finally {
+            scaled.recycle()
+        }
+    }
+
     fun decodeSampled(ctx: Context, name: String, maxPx: Int): Bitmap? {
         val f = file(ctx, name)
         if (!f.exists()) return null
@@ -117,7 +159,6 @@ object Attachments {
         return BitmapFactory.decodeFile(f.absolutePath, opts)
     }
 
-    /** Menyalin berkas suara yang dibagikan dari aplikasi lain (maks 25 MB), dan mengubahnya ke WAV 16kHz mono bila bisa agar dibaca model AI. */
     fun importAudio(ctx: Context, uri: Uri): String {
         if (!isSafeExternalUri(ctx, uri)) error("Sumber audio tidak diizinkan.")
         val mime = ctx.contentResolver.getType(uri).orEmpty().lowercase()
@@ -156,7 +197,6 @@ object Attachments {
         return name
     }
 
-    /** Mendekode berkas audio (m4a, mp3, ogg, aac) ke WAV 16 kHz mono secara streaming (hemat RAM) lewat MediaExtractor/MediaCodec. */
     private fun transcodeToWav16k(src: File, dst: File): Boolean = runCatching {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
@@ -177,7 +217,7 @@ object Attachments {
             c.configure(fmt, null, null, 0)
             c.start()
 
-            val maxSamples = SAMPLE_RATE * 5 * 60   // batas 5 menit agar hemat ruang
+            val maxSamples = SAMPLE_RATE * 5 * 60
             val deadlineNs = System.nanoTime() + 10_000_000_000L
             var writtenSamples = 0L
             val info = MediaCodec.BufferInfo()
@@ -187,7 +227,7 @@ object Attachments {
             val step = srcRate.toDouble() / SAMPLE_RATE
 
             BufferedOutputStream(FileOutputStream(dst), 16 * 1024).use { out ->
-                out.write(ByteArray(44))    // tempat untuk kepala WAV
+                out.write(ByteArray(44))
                 while (!outputDone && writtenSamples < maxSamples && System.nanoTime() < deadlineNs) {
                     if (!inputDone) {
                         val inIdx = c.dequeueInputBuffer(10_000)
@@ -248,19 +288,18 @@ object Attachments {
             put("RIFF".toByteArray(Charsets.US_ASCII))
             putInt(totalDataLen.toInt())
             put("WAVEfmt ".toByteArray(Charsets.US_ASCII))
-            putInt(16)                                  // ukuran sub-chunk PCM
-            putShort(1)                                 // AudioFormat 1 = PCM
-            putShort(1)                                 // 1 kanal (mono)
+            putInt(16)
+            putShort(1)
+            putShort(1)
             putInt(SAMPLE_RATE)
             putInt(byteRate)
-            putShort(2)                                 // block align
-            putShort(16)                                // bits per sample
+            putShort(2)
+            putShort(16)
             put("data".toByteArray(Charsets.US_ASCII))
             putInt(pcmBytes.toInt())
         }.array()
     }
 
-    /** Perkiraan durasi rekaman suara dalam detik. Untuk WAV 16 kHz mono dihitung langsung dari ukuran berkas. */
     fun audioDurationSec(ctx: Context, name: String): Int {
         val f = file(ctx, name)
         if (!f.exists()) return 0
@@ -276,17 +315,12 @@ object Attachments {
 
     fun formatDuration(sec: Int): String = "%d.%02d".format(sec / 60, sec % 60)
 
-    /** Membuang berkas lampiran yang tidak lagi dipakai oleh catatan mana pun (termasuk yang masih di Sampah). */
     fun cleanup(ctx: Context, notes: List<Note>) {
         val keep = notes.flatMapTo(HashSet()) { it.attachments }
         dir(ctx).listFiles()?.forEach { f -> if (f.name !in keep) f.delete() }
     }
 }
 
-/**
- * Perekam catatan suara ke berkas WAV 16 kHz 16-bit mono. Format ini ringan (±1,9 MB per menit),
- * bisa diputar di semua versi Android, dan langsung diterima oleh `Content.AudioFile` pada LiteRT-LM.
- */
 class VoiceRecorder(private val ctx: Context) {
     var recording by mutableStateOf(false); private set
     var seconds by mutableStateOf(0); private set
@@ -315,7 +349,7 @@ class VoiceRecorder(private val ctx: Context) {
             var pcmBytes = 0L
             try {
                 BufferedOutputStream(FileOutputStream(target), 16 * 1024).use { out ->
-                    out.write(ByteArray(44))    // tempat untuk kepala WAV
+                    out.write(ByteArray(44))
                     val buf = ByteArray(4096)
                     while (recording) {
                         val n = ar.read(buf, 0, buf.size)
@@ -337,7 +371,6 @@ class VoiceRecorder(private val ctx: Context) {
         return true
     }
 
-    /** Menghentikan rekaman dan mengembalikan nama berkas WAV-nya (atau null bila terlalu pendek/gagal). */
     fun stop(): String? {
         if (!recording) return null
         recording = false
@@ -360,7 +393,6 @@ class VoiceRecorder(private val ctx: Context) {
     }
 }
 
-/** Pemutar catatan suara di dalam editor. */
 class AudioPlayer {
     var playing by mutableStateOf<String?>(null); private set
     private var player: MediaPlayer? = null

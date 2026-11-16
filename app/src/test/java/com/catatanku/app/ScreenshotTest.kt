@@ -1,6 +1,16 @@
 package com.catatanku.app
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import com.catatanku.app.ai.modelcatalog.ModelCatalog
+import com.catatanku.app.data.database.NoteDb
+import com.catatanku.app.domain.model.AiAction
+import com.catatanku.app.domain.model.AiJob
+import com.catatanku.app.domain.model.Note
+import com.catatanku.app.domain.model.NoteView
+import com.catatanku.app.domain.model.Repeat
+import com.catatanku.app.domain.model.Screen
+import com.catatanku.app.reminders.toLocal
+import com.catatanku.app.reminders.toMillis
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Rule
 import org.junit.Test

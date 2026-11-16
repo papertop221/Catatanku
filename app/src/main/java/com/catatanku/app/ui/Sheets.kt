@@ -1,4 +1,4 @@
-package com.catatanku.app
+package com.catatanku.app.ui
 
 import android.Manifest
 import android.os.Build
@@ -50,6 +50,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.catatanku.app.ai.inference.Agent
+import com.catatanku.app.ai.inference.AiText
+import com.catatanku.app.data.database.NoteDb
+import com.catatanku.app.domain.model.AgentItem
+import com.catatanku.app.domain.model.AgentStep
+import com.catatanku.app.domain.model.AiAction
+import com.catatanku.app.domain.model.Repeat
+import com.catatanku.app.domain.model.Screen
+import com.catatanku.app.domain.model.Version
+import com.catatanku.app.reminders.Reminders
+import com.catatanku.app.reminders.addToCalendar
+import com.catatanku.app.reminders.toLocal
+import com.catatanku.app.reminders.toMillis
+import com.catatanku.app.reminders.whenLabel
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -58,10 +72,6 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.temporal.TemporalAdjusters
 import java.util.Date
-
-// Lembar bawah dan dialog: kunci, pengingat, bantu tulis, rencana asisten, riwayat versi, folder.
-
-// ============================== KUNCI ==============================
 
 @Composable
 fun LockScreen(onUnlock: () -> Unit) {
@@ -75,9 +85,6 @@ fun LockScreen(onUnlock: () -> Unit) {
     }
 }
 
-// ============================== PENGINGAT ==============================
-
-/** Lembar pengingat: pilihan cepat, tanggal & jam, pengulangan, dan gaya alarm. Dipakai dari daftar maupun editor. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ReminderSheet(vm: AppViewModel) {
@@ -92,7 +99,7 @@ fun ReminderSheet(vm: AppViewModel) {
             "Besok 07.00" to tomorrow.atTime(7, 0),
             "Besok 19.00" to tomorrow.atTime(19, 0),
             "Senin 07.00" to now.toLocalDate().with(TemporalAdjusters.next(DayOfWeek.MONDAY)).atTime(7, 0),
-        ).distinctBy { it.second }      // besok bisa saja hari Senin
+        ).distinctBy { it.second }
     }
     val suggested = vm.reminderSeed
     var at by remember(note.id) {
@@ -104,7 +111,6 @@ fun ReminderSheet(vm: AppViewModel) {
     var pickTime by remember { mutableStateOf(false) }
     val valid = at.isAfter(LocalDateTime.now())
     fun save() = vm.saveReminder(at.toMillis(), repeat, alarm)
-    // Android 13+: notifikasi butuh izin. Pengingat tetap disimpan apa pun jawabannya; pesan sesudahnya menjelaskan.
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { save() }
 
     Sheet("Pengingat", vm::closeReminder, AppIcons.Bell, timeColor) {
@@ -140,7 +146,6 @@ fun ReminderSheet(vm: AppViewModel) {
         PrimaryButton("Simpan pengingat", Modifier.fillMaxWidth().padding(top = 16.dp), enabled = valid) {
             if (Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS) else save()
         }
-        // Cadangan untuk yang tidak boleh terlewat: kalender bawaan HP biasanya tidak dibatasi penghemat baterai.
         TextAction("Salin juga ke Kalender HP", Modifier.fillMaxWidth().padding(top = 4.dp), enabled = valid) {
             if (!addToCalendar(ctx, note.heading.ifBlank { "Pengingat catatan" }, note.body, at.toMillis(), repeat)) vm.say("Tidak ada aplikasi kalender di HP ini.")
         }
@@ -176,9 +181,6 @@ fun ReminderSheet(vm: AppViewModel) {
     }
 }
 
-// ============================== ASISTEN PERINTAH ==============================
-
-/** Uraian satu langkah rencana: (apa yang dikerjakan, rinciannya). */
 private fun agentLabel(item: AgentItem): Pair<String, String?> {
     val s = item.step
     val name = if (s.target == Agent.PREV) "catatan yang sama" else item.target?.let { "“${it.heading.take(48)}”" } ?: "“${s.target.orEmpty()}”"
@@ -204,7 +206,6 @@ private fun agentLabel(item: AgentItem): Pair<String, String?> {
     }
 }
 
-/** Lembar asisten: rencana ditampilkan dulu, dijalankan hanya setelah disetujui, dan hasilnya bisa diurungkan. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AgentSheet(vm: AppViewModel) {
@@ -252,7 +253,6 @@ fun AgentSheet(vm: AppViewModel) {
                             Text(label, style = MaterialTheme.typography.bodyLarge)
                             if (item.problem != null) Text(item.problem, Modifier.padding(top = 2.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             else detail?.let { Muted(it, Modifier.padding(top = 2.dp)) }
-                            // Beberapa catatan cocok: pengguna yang menentukan sasarannya, bukan tebakan.
                             if (item.options.size > 1) {
                                 Muted("Bukan itu? Pilih catatannya:", Modifier.padding(top = 8.dp, bottom = 4.dp), MaterialTheme.typography.labelSmall)
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -272,8 +272,6 @@ fun AgentSheet(vm: AppViewModel) {
     }
 }
 
-// ============================== BANTU TULIS ==============================
-
 @Composable
 private fun ActionRow(label: String, hint: String, enabled: Boolean, onClick: () -> Unit) {
     Row(
@@ -285,7 +283,6 @@ private fun ActionRow(label: String, hint: String, enabled: Boolean, onClick: ()
     }
 }
 
-/** Satu lembar untuk seluruh alur bantu tulis: pilih aksi → lihat hasil → putuskan. Hasil tak pernah diterapkan otomatis. */
 @Composable
 internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean, onCopy: (String) -> Unit) {
     val job = vm.aiJob
@@ -339,7 +336,6 @@ internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean,
                             Switch(attachReminder, { attachReminder = it })
                         }
                     }
-                    // Satu aksi utama yang paling wajar untuk jenis hasilnya; sisanya sekunder.
                     val primaryReplaces = job.action.replaces
                     val selectedRemind = if (attachReminder) remindTime else null
                     PrimaryButton(
@@ -365,9 +361,6 @@ internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean,
     }
 }
 
-// ============================== RIWAYAT VERSI ==============================
-
-/** Riwayat versi: salinan lama yang disimpan otomatis. Memulihkan tidak menghapus versi lain. */
 @Composable
 internal fun VersionsSheet(vm: AppViewModel, list: List<Version>) {
     var preview by remember { mutableStateOf<Version?>(null) }
@@ -397,8 +390,6 @@ internal fun VersionsSheet(vm: AppViewModel, list: List<Version>) {
         }
     }
 }
-
-// ============================== FOLDER ==============================
 
 @Composable
 internal fun FolderDialog(current: String, folders: List<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {

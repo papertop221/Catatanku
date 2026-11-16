@@ -1,0 +1,6 @@
+• Cadangan ZIP lengkap (catatan, riwayat versi, lampiran gambar/suara) + SHA-256 & pemulihan transaksi atomik
+• Enkripsi cadangan opsional AES-256-GCM
+• Verifikasi ulang APK sebelum pemasangan pembaruan (anti-TOCTOU)
+• Profil AI terukur: CPU-4 + konteks 2048 token + MTP per-tugas + GPU vision 1024px + MemoryPolicy adaptif
+• Pencarian hibrida lokal TF-IDF + embedding opsional
+• Pengingat tahan duplikat & perubahan jam/izin alarm

@@ -1,5 +1,8 @@
 package com.catatanku.app
 
+import com.catatanku.app.ai.inference.Agent
+import com.catatanku.app.domain.model.AgentStep
+import com.catatanku.app.domain.model.Repeat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

@@ -1,4 +1,4 @@
-package com.catatanku.app
+package com.catatanku.app.domain.usecase
 
 import kotlin.math.ln
 import kotlin.math.sqrt
@@ -84,10 +84,6 @@ object TextTools {
 /**
  * Indeks pencarian di memori. Tidak bisa diubah setelah dibuat, jadi aman dibaca dari thread mana pun;
  * perubahan catatan menghasilkan indeks baru lewat [update].
- *
- * Bentuknya ringkas: tiap fitur (kata atau trigram) diberi nomor, tiap catatan menyimpan larik nomor fitur
- * dan bobotnya, dan untuk tiap fitur ada daftar catatan yang memuatnya (daftar terbalik). Dengan begitu
- * pencarian hanya menyentuh catatan yang memuat kata kuncinya, bukan seluruh catatan.
  */
 class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
     constructor(docs: List<Doc>) : this(docs, null)
@@ -95,30 +91,25 @@ class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
     data class Doc(val id: Long, val title: String, val body: String, val tags: List<String>)
     data class Hit(val id: Long, val score: Double)
 
-    /** Satu catatan: nomor fiturnya, bobot TF (sudah 1 + ln(1 + jumlah)), dan teks huruf kecil untuk kecocokan utuh. */
     private class Entry(val doc: Doc, val feats: IntArray, val tf: FloatArray, val plain: String)
 
-    private val dict: HashMap<String, Int>      // fitur → nomor; hanya bertambah
-    private val entries: Array<Entry>           // urutan sama dengan daftar catatan
-    private val idf: DoubleArray                // per nomor fitur; 0 = tidak dipakai catatan mana pun
+    private val dict: HashMap<String, Int>
+    private val entries: Array<Entry>
+    private val idf: DoubleArray
     private val maxIdf: Double
-    private val norm: DoubleArray               // panjang vektor tiap catatan
-    private val postStart: IntArray             // daftar terbalik: fitur f ada di postDoc[postStart[f] until postStart[f + 1]]
+    private val norm: DoubleArray
+    private val postStart: IntArray
     private val postDoc: IntArray
     private val postW: FloatArray
-    private val live: Int                       // jumlah fitur yang masih dipakai
+    private val live: Int
 
-    /** Jumlah catatan di dalam indeks. */
     val size: Int get() = entries.size
+    val docIds: List<Long> get() = entries.map { it.doc.id }
 
     init {
-        // Kamus lama dipakai ulang selama tidak penuh fitur usang (sisa kata yang sudah dihapus atau salah ketik
-        // selagi mengetik); kalau sudah, semuanya dibangun dari awal.
         val base = previous?.takeIf { it.dict.size <= 2 * it.live + 5000 }
         val old = HashMap<Long, Entry>()
         base?.entries?.forEach { old[it.doc.id] = it }
-        // Catatan yang tidak berubah memakai hasil lama. Kamus disalin hanya bila ada yang perlu dihitung ulang,
-        // karena indeks lama mungkin sedang dibaca thread lain.
         val changed = base == null || docs.any { old[it.id]?.doc != it }
         dict = if (base == null) HashMap() else if (changed) HashMap(base.dict) else base.dict
         entries = Array(docs.size) { i -> val d = docs[i]; old[d.id]?.takeIf { it.doc == d } ?: entry(d) }
@@ -146,12 +137,11 @@ class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
         }
     }
 
-    /** Indeks untuk daftar catatan yang baru; catatan yang tidak berubah tidak dihitung ulang. */
     fun update(docs: List<Doc>): SearchIndex = SearchIndex(docs, this)
 
     private fun entry(d: Doc): Entry {
         val m = HashMap<String, Double>()
-        TextTools.addFeatures(d.title, 2.5, m)   // judul lebih penting
+        TextTools.addFeatures(d.title, 2.5, m)
         TextTools.addFeatures(d.tags.joinToString(" "), 2.0, m)
         TextTools.addFeatures(d.body, 1.0, m)
         val feats = IntArray(m.size)
@@ -170,11 +160,6 @@ class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
         for (p in postStart[f] until postStart[f + 1]) visit(postDoc[p])
     }
 
-    /**
-     * Kemiripan kosinus antara vektor [raw] (fitur → jumlah berbobot) dan tiap catatan, lewat daftar terbalik.
-     * Fitur yang tidak ada di catatan mana pun dibuang lebih dulu, karena tak mungkin cocok.
-     * Mengembalikan null bila tidak ada fitur yang tersisa.
-     */
     private fun cosines(raw: Map<String, Double>): DoubleArray? {
         val ids = IntArray(raw.size)
         val weights = DoubleArray(raw.size)
@@ -198,7 +183,6 @@ class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
         return scores
     }
 
-    /** [extraTerms]: kata kunci tambahan (mis. hasil perluasan LLM), bobotnya lebih kecil. */
     fun search(query: String, extraTerms: List<String> = emptyList(), limit: Int = 100): List<Hit> {
         if (entries.isEmpty()) return emptyList()
         val raw = HashMap<String, Double>()
@@ -208,9 +192,6 @@ class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
         val needle = query.trim().lowercase()
         val words = (TextTools.tokenize(query) + extraTerms.flatMap(TextTools::tokenize)).distinct()
 
-        // Gerbang relevansi: satu trigram yang kebetulan sama ("jogging" vs "tuning") bukan kecocokan.
-        // Kata cocok bila ada persis, atau minimal separuh trigramnya ada (imbuhan / salah ketik) dan
-        // sedikitnya dua: satu trigram kebetulan ("lari" vs "Januari") tidak dihitung.
         val pass = BooleanArray(entries.size)
         val count = IntArray(entries.size)
         for (w in words) {
@@ -232,7 +213,6 @@ class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
         return hits.sortedByDescending { it.score }.take(limit)
     }
 
-    /** Catatan yang topiknya mirip dengan teks draf yang sedang disunting. */
     fun related(title: String, body: String, tags: List<String>, excludeId: Long, limit: Int = 4): List<Hit> {
         val raw = HashMap<String, Double>()
         TextTools.addFeatures(title, 2.5, raw)
@@ -247,7 +227,6 @@ class SearchIndex private constructor(docs: List<Doc>, previous: SearchIndex?) {
         return hits.sortedByDescending { it.score }.take(limit)
     }
 
-    /** Kata kunci paling khas dari sebuah teks; dipakai sebagai saran tag saat LLM belum ada. */
     fun keywords(title: String, body: String, limit: Int = 5): List<String> {
         val counts = HashMap<String, Double>()
         TextTools.tokenize(title).forEach { counts[it] = (counts[it] ?: 0.0) + 2.5 }

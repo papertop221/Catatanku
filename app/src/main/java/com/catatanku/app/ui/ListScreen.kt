@@ -1,4 +1,4 @@
-package com.catatanku.app
+package com.catatanku.app.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -53,11 +53,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.catatanku.app.ai.engine.AiState
+import com.catatanku.app.domain.model.AgentStep
+import com.catatanku.app.domain.model.Note
+import com.catatanku.app.domain.model.NoteView
+import com.catatanku.app.domain.model.Repeat
+import com.catatanku.app.domain.model.Screen
+import com.catatanku.app.domain.model.Sort
+import com.catatanku.app.reminders.whenLabel
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-
-// Layar utama: satu layar tanpa tab. Dari atas ke bawah: tampilan yang dipilih, blok "Hari ini", daftar catatan,
-// lalu di dasar layar (sejangkauan ibu jari) filter tag, kolom cari, dan tombol catatan baru.
 
 private val WORDS = Regex("\\s+")
 
@@ -80,7 +85,6 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
     LaunchedEffect(vm.searchFocusTick) {
         if (vm.searchFocusTick > 0) runCatching { searchFocus.requestFocus() }
     }
-    // Kolom cari juga menerima perintah ("ingatkan saya …"). Dikenali dengan aturan, jadi tanpa model pun jalan.
     val steps = remember(vm.query) { vm.commandSteps(vm.query) }
     val isCommand = steps != null
     val canCreate = view == NoteView.All || view is NoteView.Folder
@@ -109,8 +113,6 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }
                     }
                 }
-                // Yang bisa dilakukan dengan teks di kolom cari, selain mencari.
-                // Kalimat bebas yang tidak dikenali aturan masih bisa dijalankan lewat model (≥ 3 kata agar tidak muncul di tiap pencarian).
                 val offerAgent = isCommand || (hasModel && vm.query.trim().split(WORDS).size >= 3)
                 if (searching && view != NoteView.Trash && (hasModel || isCommand)) Row(Modifier.padding(horizontal = 8.dp)) {
                     if (offerAgent) TextAction("Jalankan perintah") { vm.startAgent(vm.query) }
@@ -130,7 +132,6 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                             vm.query, vm::updateQuery, if (hasModel) "Cari, tanya, atau beri perintah" else "Cari atau beri perintah",
                             Modifier.weight(1f).focusRequester(searchFocus), ime = ImeAction.Search,
                         ) {
-                            // Enter langsung membuka rencana, kecuali untuk perintah yang menyingkirkan catatan (harus sengaja ditekan).
                             if (steps != null && steps.none { it is AgentStep.Trash || it is AgentStep.Archive }) vm.startAgent(vm.query)
                         }
                         if (vm.query.isNotEmpty()) IconAction(AppIcons.Close, "Hapus teks pencarian", muted, 18.dp) { vm.updateQuery("") }
@@ -147,7 +148,6 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
-            // ---- Kepala: tampilan yang dipilih + menu ----
             Row(Modifier.padding(start = Gutter, end = 6.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     Row(
@@ -208,7 +208,6 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
 
             val today = vm.today
             val showToday = view == NoteView.All && !searching && vm.tagFilter == null && !vm.askActive && (today.isNotEmpty() || vm.openTaskCount > 0)
-            // Bagian "Disematkan" hanya muncul bila memang ada dan tidak sedang mencari.
             val split = !searching && shown.any { it.pinned } && shown.any { !it.pinned }
             val (pinned, rest) = remember(shown, split) { if (split) shown.partition { it.pinned } else shown to emptyList() }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -299,7 +298,6 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
     AgentSheet(vm)
 }
 
-/** Kerangka abu-abu selagi catatan dibaca dari penyimpanan (biasanya hanya sekejap). */
 @Composable
 private fun Skeleton() = Column(Modifier.padding(horizontal = Gutter, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
     repeat(5) {
@@ -310,14 +308,12 @@ private fun Skeleton() = Column(Modifier.padding(horizontal = Gutter, vertical =
     }
 }
 
-/** Keadaan kosong: apa yang terjadi, lalu langkah berikutnya. */
 @Composable
 private fun EmptyState(text: Pair<String, String?>) = Column(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 56.dp)) {
     Text(text.first, style = MaterialTheme.typography.titleMedium)
     text.second?.let { Muted(it, Modifier.padding(top = 6.dp), MaterialTheme.typography.bodyMedium) }
 }
 
-/** "Hari ini": pengingat yang terlewat atau jatuh hari ini, dan jumlah butir daftar centang yang belum selesai. */
 @Composable
 private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fillMaxWidth()) {
     Row(
@@ -358,7 +354,6 @@ private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fill
     Hairline(Modifier.padding(top = 4.dp))
 }
 
-/** Jawaban atas pertanyaan, rekap, atau daftar tugas: tampil di atas daftar, lengkap dengan catatan sumbernya. */
 @Composable
 private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
     Row(Modifier.padding(start = Gutter, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -403,7 +398,6 @@ private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifi
     Hairline()
 }
 
-/** Geser ke kanan atau kiri untuk aksi cepat. Aksi yang sama juga ada di menu tekan-lama, jadi geser bukan satu-satunya jalan. */
 @Composable
 private fun SwipeRow(startLabel: String?, endLabel: String?, onStart: () -> Unit, onEnd: () -> Unit, content: @Composable () -> Unit) {
     if (startLabel == null && endLabel == null) { content(); return }
@@ -444,7 +438,6 @@ private fun SwipeRow(startLabel: String?, endLabel: String?, onStart: () -> Unit
 @Composable
 private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () -> Unit, onDeleteForever: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
-    // Catatan tanpa judul memakai baris pertamanya sebagai judul. Hanya awal isi yang dibaca: catatan bisa sangat panjang.
     val (title, snippet) = remember(n.title, n.body, n.attachments) {
         val lines = n.body.take(400).lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.take(4).toList()
         n.heading to (if (n.title.isBlank()) lines.drop(1) else lines).joinToString(" ")
@@ -477,7 +470,6 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
                 if (snippet.isNotBlank()) Text(snippet, Modifier.padding(top = 2.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, style = NoteType.rowSnippet, color = muted)
                 Row(Modifier.padding(top = 6.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (n.hasReminder && !n.inTrash) {
-                        // Amber = waktu. Pengingat yang sudah berbunyi tetapi belum ditandai selesai tampil merah agar tidak terlupa.
                         val tint = if (n.remindFired) MaterialTheme.colorScheme.error else timeColor
                         val remLabel = remember(n.remindAt, n.remindRepeat, n.remindFired) {
                             " " + (if (n.remindFired) "Terlewat · " else "") + whenLabel(n.remindAt) +
@@ -492,7 +484,6 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
                 Hairline()
             }
         }
-        // Tekan lama: aksi cepat tanpa membuka catatan.
         Menu(menu, { menu = false }) {
             if (n.inTrash) {
                 DropdownMenuItem({ Text("Pulihkan") }, { menu = false; vm.restore(n) })

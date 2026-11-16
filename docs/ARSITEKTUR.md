@@ -1,34 +1,30 @@
 # Arsitektur
 
-Satu modul (`app`), dua Activity (`MainActivity` dan lembar `ProcessTextActivity`), UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
-Tujuannya kode yang kecil dan mudah dibaca: ±7.700 baris Kotlin di sembilan belas berkas.
+Satu modul Gradle (`app`), dua Activity (`MainActivity` dan lembar `ProcessTextActivity`), UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
+Pada `prd-1.8`, kode diorganisasi ke dalam subpaket domain/data/AI/UI di bawah `com.catatanku.app` (32 berkas Kotlin), sementara komponen Android Manifest tetap berada pada paket akar `com.catatanku.app` demi kompatibilitas pembaruan.
 
 ## Berkas
 
 Semua di `app/src/main/java/com/catatanku/app/`.
 
-| Berkas | Tanggung jawab | Bergantung pada Android? |
+| Paket / Berkas | Tanggung jawab | Murni JVM? |
 |---|---|---|
-| `SearchEngine.kt` | Tokenisasi, indeks TF-IDF, pencarian, catatan terkait, kata kunci | Tidak |
-| `AiText.kt` | Prompt teks & multimodal, pengurai keluaran model, alat teks (ketuk centang, lanjut daftar, hitung kata) | Tidak |
-| `TimeParse.kt` | Pengenal waktu bahasa Indonesia, aturan pengulangan pengingat | Tidak |
-| `Agent.kt` | Asisten perintah: pengurai perintah (termasuk satu kalimat jadi pengingat + tugas + tag + folder), prompt perumus ulang | Tidak |
-| `Models.kt` | Katalog model: URL terkunci revisi, ukuran, SHA-256, anjuran RAM | Tidak |
-| `Data.kt` | `Note`, SQLite (`NoteDb` skema v4), riwayat versi, cadangan JSON | Ya |
-| `Media.kt` | Lampiran gambar (kompresi JPEG ≤ 1600px), perekam suara WAV 16 kHz mono (`VoiceRecorder`), pemutar suara (`AudioPlayer`) | Ya |
-| `Reminders.kt` | Alarm sistem, notifikasi, penerima siaran (`ReminderReceiver`), deteksi terlambat, uji pengingat | Ya |
-| `LocalAi.kt` | Unduh/impor/ganti model, engine LiteRT-LM (teks, gambar, suara; satu per proses), pembangkitan streaming | Ya |
-| `Updater.kt` | Periksa rilis GitHub, unduh APK, verifikasi SHA-256 + sertifikat, pasang lewat `PackageInstaller` | Ya |
-| `SystemIntegration.kt` | Menu teks terpilih (`ProcessTextActivity`), tile Setelan Cepat (`QuickNoteTile`), pintasan ikon, kalender, setelan baterai pabrikan (`Oem`) | Ya |
-| `AppViewModel.kt` | Seluruh state dan logika aplikasi | Ya |
-| `ListScreen.kt` | Layar utama: blok "Hari ini", jawaban & daftar tugas interaktif, daftar, bilah bawah, geser baris | Ya |
-| `EditorScreen.kt` | Editor, Undo/Redo ketikan, lampiran gambar/suara, dan simpan otomatis | Ya |
-| `SettingsScreen.kt` | Pengaturan | Ya |
-| `Sheets.kt` | Lembar bawah dan dialog: pengingat, bantu tulis, rencana asisten, riwayat versi, folder, kunci | Ya |
-| `UiKit.kt` | Komponen bersama (tombol, baris, lembar, menu) | Ya |
-| `Theme.kt` | Warna, huruf, bentuk, ikon | Ya |
+| `MainActivity.kt`, `ReminderReceiver.kt`, `SystemIntegration.kt`, `Updater.kt` | Pintu masuk Manifest (`MainActivity`, `ProcessTextActivity`, `QuickNoteTile`, `ReminderReceiver`, `UpdateInstallReceiver`), pembaruan APK & verifikasi ulang TOCTOU | Tidak |
+| `domain/model/` (`NoteModels.kt`, `BackupModels.kt`) | Model domain (`Note`, `Version`, `Repeat`, `AiAction`, `AgentStep`, model manifest/progres cadangan) | Ya |
+| `domain/usecase/` (`SearchEngine.kt`, `HybridSearch.kt`, `TimeParse.kt`) | Indeks TF-IDF + trigram, pencarian hibrida (TF-IDF + kemiripan vektor embedding lokal), pengenal waktu bahasa Indonesia | Ya |
+| `data/backup/` (`BackupArchive.kt`, `BackupCodec.kt`, `JsonStream.kt`) | Ekspor/impor ZIP lengkap (`catatanku-backup.zip`), SHA-256 `checksums.json`, pelindung traversal/ZIP bomb, JSON streaming O(1) | Ya |
+| `data/database/NoteDb.kt` | SQLite (`catatan.db`, skema v5: tabel `notes`, `versions`, `embeddings`), migrasi v1→v5, impor transaksional | Tidak |
+| `data/repository/NoteRepository.kt` | Repositori tunggal, pemulihan atomik berbasis *staging* + rollback, dan `AutoBackup` harian ZIP | Tidak |
+| `ai/modelcatalog/Models.kt` | Katalog model dengan URL terkunci revisi, SHA-256, kapabilitas (`supportsVision`, `supportsAudio`, `isEmbedding`), perkiraan RAM | Ya |
+| `ai/performance/` (`AiPerformance.kt`, `AndroidPerfMonitor.kt`) | Profil runtime per SoC/SDK/runtime/model, kebijakan MTP & anggaran token per tugas, `MemoryPolicy`, metrik thermal/RSS (`VmHWM`) | Sebagian (`AiPerformance.kt` ya) |
+| `ai/inference/` (`AiText.kt`, `Agent.kt`) | Prompt teks/multimodal, sanitisasi input, pembersih keluaran, perencana & pengurai perintah asisten | Ya |
+| `ai/engine/` (`LocalAi.kt`, `LocalEmbeddingProvider.kt`) | Unduh/impor model, `Engine` LiteRT-LM (CPU-4/GPU, `SpeculativeDecodingMode.ADAPTIVE` per percakapan, benchmark in-app), `EmbeddingEngine` opsional | Tidak |
+| `security/` (`BackupCrypto.kt`, `InputSecurity.kt`) | Enkripsi cadangan streaming AES-256-GCM + PBKDF2WithHmacSHA256, validasi URI eksternal | Ya |
+| `reminders/Reminders.kt` | Alarm tahan hemat baterai (`AlarmManager`), pelindung duplikat/jam berubah (`EXTRA_DUE`), `Oem`, kalender sistem | Tidak |
+| `media/Media.kt` | Lampiran gambar (≤ 1600px) & turunan OCR ≤ 1024px di `cacheDir`, perekam WAV 16 kHz (`VoiceRecorder`), pemutar audio | Tidak |
+| `ui/` (`AppViewModel.kt`, `ListScreen.kt`, `EditorScreen.kt`, `SettingsScreen.kt`, `Sheets.kt`, `UiKit.kt`, `Theme.kt`) | State aplikasi, layar utama/editor/pengaturan, dialog progres/sandi cadangan, komponen & tema "Kertas & Tinta" | Tidak |
 
-Lima berkas pertama sengaja murni Kotlin agar bisa diuji di JVM dan dipakai ulang di luar aplikasi.
+Seluruh logika domain, pencarian, pengurai waktu, asisten, prompt AI, pembungkus JSON/ZIP, enkripsi cadangan, kebijakan memori, dan profil performa sengaja murni Kotlin agar cepat diuji di JVM tanpa perangkat.
 
 ## Alur data
 
@@ -253,20 +249,23 @@ pengguna di lembar pengingat.
   `file://` dan otoritas paket internal; impor JSON dibatasi 32 MB dengan sanitasi nama lampiran (`img_*`/`aud_*`); transkode
   audio membatasi laju sampel (`8–192 kHz`), kanal (`1–8`), serta batas waktu 10 detik; dan `AiText.sanitizeInput` membuang
   token kendali templat model.
-- **Cadangan otomatis** ditulis streaming (`Backup.writeJson` via `JsonWriter`) ke folder pilihan pengguna lewat Storage
-  Access Framework saat aplikasi ditinggalkan dan ada perubahan. Satu berkas per hari, 7 terakhir disimpan. Berkasnya JSON
-  polos, tidak dienkripsi.
+- **Cadangan lengkap ZIP & terenkripsi**: `BackupArchive` mengekspor dan mengimpor `catatanku-backup.zip` (`manifest.json`, `notes.json` beserta riwayat versi, `attachments/image/`, `attachments/audio/`, dan `checksums.json` SHA-256), mendukung pembatalan aman & pemulihan *staging* atomik lewat transaksi SQLite (`NoteRepository`), kompatibel mundur dengan JSON v1–v3, serta mendukung enkripsi opsional AES-256-GCM streaming (`BackupCrypto`, PBKDF2WithHmacSHA256 120.000 iterasi). `AutoBackup` harian ikut menulis arsip ZIP ke folder SAF pengguna.
 - **Riwayat versi**: sekali per sesi sunting, keadaan catatan saat dibuka disimpan ke tabel `versions` sebelum isinya
-  berubah. 20 versi terakhir per catatan.
+  berubah. 20 versi terakhir per catatan, dan ikut diekspor/dipulihkan pada cadangan ZIP.
 
 ## Penyimpanan
 
-SQLite lewat `SQLiteOpenHelper`, satu tabel `notes`. Tag dan nama berkas lampiran disimpan sebagai teks berpemisah `U+001F`.
-Skema v2 menambah `folder`, `archived`, `deleted` (stempel waktu; 0 = tidak di sampah).
+SQLite lewat `SQLiteOpenHelper` (`NoteDb`): tabel `notes`, `versions`, dan `embeddings` (skema v5). Tag dan nama berkas lampiran disimpan sebagai teks berpemisah `U+001F`.
+Skema v2 menambah `folder`, `archived`, `deleted`.
 Skema v3 menambah kolom pengingat (`remind_at`, `remind_repeat`, `remind_alarm`, `remind_fired`) dan tabel `versions`.
-Skema v4 menambah kolom `attachments` untuk lampiran gambar (`img_*.jpg`) dan catatan suara (`aud_*.wav`) yang disimpan
-di `filesDir/attachments/`. Berkas lampiran yatim dibersihkan otomatis saat catatan dihapus permanen atau Sampah dikosongkan.
-`NoteDb` adalah satu objek untuk seluruh proses, karena layar dan penerima alarm memakai basis data yang sama.
+Skema v4 menambah kolom `attachments` untuk lampiran gambar (`img_*.jpg`) dan catatan suara (`aud_*.wav`) di `filesDir/attachments/`.
+Skema v5 menambah tabel `embeddings` untuk pencarian semantik lokal bertanda model + hash konten inkremental.
+
+## AI lokal & Pencarian Semantik Hibrida
+
+- **Pemilihan backend berbasis data (`AiPerformance.kt`, `BENCHMARK.md`)**: di Moto G86 Power 5G (`mt6878`), `CPU-4` (`Backend.CPU(threadCount = 4)`) + profil konteks **Hemat (`maxNumTokens = 2048`)** dengan `SpeculativeDecodingMode.ADAPTIVE` per tugas memberikan muat ±1 detik, hemat ±575–680 MB RAM dibanding GPU, serta menyamai/mengungguli GPU di tugas teks harian. Vision/OCR memakai GPU + turunan gambar sementara ≤ 1024 px di `cacheDir` tanpa mengubah gambar asli (`vision-gpu-1024`: ±11,5 dtk, -452 MB RSS). Perangkat lain memulai dari bawaan konservatif CPU-4 lalu dapat menyimpan profil terukur via **Uji kinerja AI** di Pengaturan (`PerformanceProfileStore`).
+- **Kebijakan memori adaptif (`MemoryPolicy`)**: menggunakan RAM fisik aktual tanpa swap/RAM Boost, `ActivityManager.MemoryInfo` (`availMem`, `lowMemory`), dan sinyal `onTrimMemory` untuk memilih jendela konteks & idle timeout tanpa pemanggilan `System.gc()` agresif.
+- **Pencarian hibrida (`HybridSearch.kt`)**: menggabungkan skor TF-IDF + trigram (`alpha = 0,65`) dengan kemiripan kosinus embedding lokal (`beta = 0,35`) saat model embedding aktif diimpor (`LocalEmbeddingProvider`), dan jatuh kembali murni ke TF-IDF bila tidak tersedia.
 
 Simpan otomatis berjalan tiap jeda mengetik (0,7 detik) dan ditulis **sinkron**, agar tidak ada catatan ganda bila
 simpan terpicu dua kali berdekatan. Supaya murah, basis data memakai WAL dengan `synchronous=NORMAL`: satu simpan
@@ -284,14 +283,8 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 - **APK**: build rilis memakai R8 dan penyusutan sumber daya. Kode Java/Kotlin turun dari 24,8 MB menjadi 4,4 MB;
   APK dari 32,0 MB menjadi 25,2 MB. Sisanya hampir seluruhnya mesin AI native (`liblitertlm_jni.so`, 22,7 MB).
   Seluruh paket LiteRT-LM dikecualikan dari penyusutan karena dipanggil lewat JNI (`app/proguard-rules.pro`).
-- **Model AI** tidak dimuat saat aplikasi dibuka. Sebelum dimuat, RAM yang tersedia diperiksa (ditambah cadangan +200 MB
-  bila multimodal gambar/suara aktif); bila kurang, permintaan ditolak dengan pesan yang jelas (bisa dipaksa lewat "Uji
-  muat"). Bila inisialisasi GPU gagal di perangkat lawas, mesin otomatis jatuh ke CPU. Mode ringan memicu `System.gc()`
-  sebelum memuat model dan melepas sesi segera setelah selesai; cache native/XNNPACK ikut dihapus saat model dibuang.
-  Model juga dilepas setelah menganggur, lebih cepat begitu aplikasi ditinggalkan, dan segera bila sistem memberi sinyal
-  kekurangan memori (`onTrimMemory`).
-- **Media & UI**: lampiran gambar didekode di thread IO dengan `ImageDecoder` / `inSampleSize` + `RGB_565` (720 px untuk
-  pratinjau editor, ≤ 1600 px layar penuh), dan durasi rekaman dihitung di thread IO agar scroll daftar & editor tetap mulus.
+- **Model AI** tidak dimuat saat aplikasi dibuka. Sebelum dimuat, `MemoryPolicy` memeriksa RAM fisik aktual (tanpa swap/RAM Boost), `availMem`, sinyal `lowMemory`, `onTrimMemory`, dan status foreground/background dengan cadangan +250 MB untuk multimodal atau +200 MB untuk GPU; bila tidak cukup, model ditolak dengan pesan yang jelas atau fallback aman ke CPU. `System.gc()` agresif tidak lagi dipicu. Mode ringan mengunci konteks 2.048 token dan memperpendek idle timeout (20–30 detik vs 3 menit).
+- **Media & UI**: lampiran gambar didekode di thread IO dengan `ImageDecoder` / `inSampleSize` + `RGB_565` (720 px untuk pratinjau editor, ≤ 1600 px layar penuh), dan gambar OCR diolah lewat turunan sementara ≤ 1024 px di `cacheDir` tanpa mengubah berkas asli.
 - **Jendela awal** memakai warna layar pertama, jadi tidak ada kilatan putih saat aplikasi dibuka.
 
 ## Pengujian
@@ -299,12 +292,15 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 | Kelas | Isi |
 |---|---|
 | `SearchEngineTest` | Morfologi, salah ketik, kecocokan palsu, catatan terkait |
-| `AiTextTest` | Pengurai keluaran model, pembersih Markdown, tombol centang, batas prompt, katalog, pemotongan catatan panjang |
+| `HybridSearchTest` | `EmbeddingCodec`, fallback TF-IDF, evaluasi pencarian hibrida bahasa Indonesia (persis vs parafrasa) |
+| `AiTextTest` & `AiQualityTest` | Pengurai keluaran model, pembersih Markdown, tombol centang, anggaran prompt 2048/3072/4096, pemotongan catatan panjang, mutu bahasa Indonesia |
+| `BackupArchiveTest` | Ekspor/impor `catatanku-backup.zip` (100 catatan + gambar/audio + versi), enkripsi AES-256-GCM + salah sandi/terpotong, verifikasi SHA-256, anti-traversal/ZIP bomb, JSON lama, pembatalan |
+| `PerformanceAndMemoryTest` | Pemilihan profil SoC (`mt6878` vs konservatif vs cache), kebijakan MTP per tugas, `MemoryPolicy`, `BenchmarkStats` median/p95, `InputSecurity` |
 | `TimeParseTest` | 40-an frasa waktu, termasuk yang BUKAN waktu ("pace 6:30", "km 24.500"), dan pengulangan |
-| `ReminderTest` | Alarm, mode tahan penghemat baterai (`setAlarmClock`), deteksi terlambat vs HP mati, uji mandiri, notifikasi, tunda, selesai, gaya alarm, HP dinyalakan ulang, catatan dari luar (`saveFromOutside`), riwayat versi, cadangan, migrasi v2 → v3 |
 | `AgentTest` | Pengurai perintah asisten, penerapan langkah, dan pengaman keluaran model |
+| `UpdaterTest` & `UpdateParserTest` | Pembanding versi semantik, validasi tautan rilis GitHub, penolakan draf/prarilis/tanpa SHA-256 |
+| `ReminderTest` | Alarm, mode tahan penghemat baterai (`setAlarmClock`), pelindung duplikat & `EXTRA_DUE`, perubahan jam/izin exact alarm, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite |
 | `PerfTest` | Pengukuran waktu bangun indeks, pembaruan satu catatan, pencarian, dan catatan terkait |
-| `ShotsLight` / `ShotsDark` / `ShotsTall` | Render 23 layar ke PNG (termasuk lembar teks terpilih) |
+| `ShotsLight` / `ShotsDark` / `ShotsTall` | Render layar Compose ke PNG lewat Robolectric + Roborazzi |
 
-Uji tangkapan layar menjalankan aplikasi sungguhan di Robolectric dengan basis data nyata dan berkas model tiruan
-(model tidak pernah dimuat).
+Uji Robolectric (`ReminderTest`, `UpdateParserTest`, `Shots*`) berjalan di lingkungan Linux `glibc` (seperti GitHub Actions CI), sedangkan seluruh uji logika JVM murni & `PerfTest` berjalan langsung baik di CI maupun Termux.

@@ -19,6 +19,17 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import com.catatanku.app.domain.model.Note
+import com.catatanku.app.domain.model.NoteView
+import com.catatanku.app.domain.model.Screen
+import com.catatanku.app.media.Attachments
+import com.catatanku.app.reminders.Reminders
+import com.catatanku.app.ui.AppViewModel
+import com.catatanku.app.ui.CatatankuTheme
+import com.catatanku.app.ui.EditorScreen
+import com.catatanku.app.ui.ListScreen
+import com.catatanku.app.ui.LockScreen
+import com.catatanku.app.ui.SettingsScreen
 import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : ComponentActivity() {

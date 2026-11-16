@@ -1,5 +1,28 @@
 # Riwayat perubahan
 
+## 1.8
+
+Cadangan lengkap & keamanan data
+- Ekspor & impor ZIP lengkap (`catatanku-backup.zip`): memuat `manifest.json`, `notes.json` beserta riwayat versi, lampiran gambar (`attachments/image/`) dan suara (`attachments/audio/`), serta `checksums.json` SHA-256
+- Pemulihan atomik melalui direktori *staging* + satu transaksi SQLite (`NoteDb.importInTransaction`) dengan dialog progres, dukungan batal aman, perlindungan *path traversal* & *ZIP bomb*, serta deteksi lampiran hilang
+- Cadangan terenkripsi opsional menggunakan AES-256-GCM streaming 64 KB + PBKDF2WithHmacSHA256 (120.000 iterasi) lewat dialog kata sandi saat ekspor/impor (`BackupCrypto`)
+- Cadangan otomatis harian ikut menulis arsip ZIP dan kompatibel mundur saat mengimpor JSON lama (v1–v3)
+- Verifikasi ulang TOCTOU (ukuran, SHA-256, dan tanda tangan APK) tepat sebelum `PackageInstaller.commit` di `Updater`, validasi URI eksternal terpusat (`InputSecurity`), serta dokumentasi audit keamanan di `docs/KEAMANAN.md`
+
+Keandalan pengingat Android
+- Pelindung duplikat notifikasi (`remind_fired` & pemeriksaan `EXTRA_DUE` terhadap jadwal aktif), peredaman deteksi terlambat sesaat setelah perubahan jam/zona waktu sistem, penerimaan `ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, dan cadangan `setAndAllowWhileIdle` bila ROM melempar batas kuota alarm
+
+Performa & kecerdasan AI terukur (`docs/BENCHMARK.md`)
+- Instrumentasi metrik per-panggilan via `ExperimentalFlags.enableBenchmark` (`BenchmarkInfo`, TTFT, decode tok/s, `VmHWM` peak RSS, status termal & suhu baterai via `AndroidPerfMonitor`) serta tombol **Uji kinerja AI** & panel metrik di Pengaturan
+- Profil terukur Moto G86 Power 5G (`mt6878`): `CPU-4` + jendela konteks **Hemat (2.048 token)** + kebijakan MTP per-tugas (`ADAPTIVE` untuk Ringkas/Ejaan/Rapikan/Daftar tugas/Pengingat; `OFF` untuk Judul/Tag/Lanjutkan/Perluas pencarian), menghemat ~575–680 MB RAM dibanding GPU dan memuat model dalam ~1 detik
+- Akselerasi vision GPU opsional untuk OCR gambar memakai turunan ≤ 1.024 px di `cacheDir` (memangkas durasi OCR ~26 detik menjadi ~11,5 detik dan menghemat ~452 MB RSS tanpa mengubah gambar asli)
+- Kebijakan memori adaptif (`MemoryPolicy`) berbasis RAM fisik (tanpa menghitung swap/RAM Boost), `availMem`, `lowMemory`, status foreground/background, dan `onTrimMemory`, tanpa pemanggilan `System.gc()` agresif
+- Penanda kapabilitas model (`supportsVision`, `supportsAudio`, `textOnly`, `isEmbedding`) agar model khusus teks tidak menyembunyikan keterbatasan multimodal secara diam-diam
+
+Pencarian semantik lokal & arsitektur
+- Pencarian hibrida (`HybridSearch`): menggabungkan skor TF-IDF + trigram (`0,65`) dengan kosinus embedding lokal (`0,35`), tabel SQLite `embeddings` (skema v5 + migrasi v4→v5), dan jatuh kembali ke TF-IDF bila model embedding belum diimpor
+- Modularisasi bertahap kode ke subpaket `domain`, `data`, `ai`, `reminders`, `security`, `media`, dan `ui` serta alur kerja CI GitHub Actions (`.github/workflows/ci.yml`)
+
 ## 1.7.1
 
 Pembaruan dari GitHub
