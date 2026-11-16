@@ -169,4 +169,10 @@ object AppIcons {
     val Pen = icon("pen", "M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5z", "M14.5 6L18 9.5")
     val Clock = icon("clock", "M20.5 12a8.5 8.5 0 1 1-17 0a8.5 8.5 0 0 1 17 0z", "M12 7.5V12l3 2")
     val Lock = icon("lock", "M7 11h10a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 7 11z", "M8.5 11V8a3.5 3.5 0 0 1 7 0v3")
+    val Undo = icon("undo", "M9 8L5 12l4 4", "M5 12h9a5 5 0 1 1 0 10h-2")
+    val Redo = icon("redo", "M15 8l4 4-4 4", "M19 12h-9a5 5 0 1 0 0 10h2")
+    val Image = icon("image", "M4.5 6A1.5 1.5 0 0 1 6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18z", "M4.5 16l4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5", fills = listOf(dot(9f, 8.5f, 1.4f)))
+    val Mic = icon("mic", "M12 3.5a3 3 0 0 1 3 3V12a3 3 0 0 1-6 0V6.5a3 3 0 0 1 3-3z", "M6.5 11.5a5.5 5.5 0 0 0 11 0", "M12 17v3.5M9 20.5h6")
+    val Play = icon("play", "M8 6l10 6-10 6z", fills = listOf("M8 6l10 6-10 6z"))
+    val Stop = icon("stop", "M7 7h10v10H7z", fills = listOf("M7 7h10v10H7z"))
 }

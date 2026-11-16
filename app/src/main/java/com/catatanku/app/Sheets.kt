@@ -290,7 +290,7 @@ private fun ActionRow(label: String, hint: String, enabled: Boolean, onClick: ()
 internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean, onCopy: (String) -> Unit) {
     val job = vm.aiJob
     var instr by rememberSaveable { mutableStateOf("") }
-    Sheet(job?.action?.label ?: "Bantu tulis", vm::dismissAi) {
+    Sheet(job?.customTitle ?: job?.action?.label ?: "Bantu tulis", vm::dismissAi) {
         Spacer(Modifier.height(8.dp))
         when {
             !hasModel -> {
@@ -396,6 +396,28 @@ internal fun FolderDialog(current: String, folders: List<String>, onDismiss: () 
         },
         confirmButton = { TextAction("Buat folder", enabled = new.isNotBlank()) { onPick(new.trim()); onDismiss() } },
         dismissButton = { TextAction("Tutup", onClick = onDismiss) },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    )
+}
+
+@Composable
+internal fun RenameFolderDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var name by rememberSaveable(current) { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ubah nama folder", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            OutlinedTextField(
+                name, { name = it.take(30) }, Modifier.fillMaxWidth().padding(top = 4.dp),
+                placeholder = { Text("Nama folder") }, singleLine = true, shape = SmallShape,
+            )
+        },
+        confirmButton = {
+            TextAction("Simpan nama", enabled = name.trim().isNotEmpty() && name.trim() != current) {
+                onRename(name.trim()); onDismiss()
+            }
+        },
+        dismissButton = { TextAction("Batal", onClick = onDismiss) },
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     )
 }

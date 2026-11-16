@@ -7,6 +7,7 @@ import android.content.Context
 import android.net.Uri
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -71,6 +72,8 @@ class LocalAi private constructor(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
     @Volatile private var engine: Engine? = null
+    @Volatile private var hasVision = false
+    @Volatile private var hasAudio = false
     private var watcher: Job? = null
     private var idle: Job? = null
     @Volatile private var lastUse = 0L
@@ -295,7 +298,7 @@ class LocalAi private constructor(private val context: Context) {
 
     private suspend fun release() {
         withContext(Dispatchers.IO) { runCatching { engine?.close() } }
-        engine = null
+        engine = null; hasVision = false; hasAudio = false
         if (_state.value !is AiState.Importing) _state.value = if (hasModel) AiState.Idle else AiState.NoModel
     }
 
@@ -349,24 +352,37 @@ class LocalAi private constructor(private val context: Context) {
             .format(mi.availMem / 1e9, need / 1e9)
     }
 
-    private fun ensureLoaded(force: Boolean = false): Engine {
-        engine?.let { return it }
+    private fun ensureLoaded(force: Boolean = false, wantVision: Boolean = false, wantAudio: Boolean = false): Engine {
+        engine?.let {
+            if ((!wantVision || hasVision) && (!wantAudio || hasAudio)) return it
+            runCatching { it.close() }
+            engine = null; hasVision = false; hasAudio = false
+        }
         val file = checkNotNull(modelFile) { "Model belum dipasang." }
         if (!force) memoryShortage(file)?.let { why ->
             _state.value = AiState.Failed("$why, atau paksa lewat Pengaturan → Model AI → Uji muat.")
             throw IllegalStateException(why)
         }
         _state.value = AiState.Loading
+        val vOn = wantVision || hasVision
+        val aOn = wantAudio || hasAudio
         return try {
             Engine(
                 EngineConfig(
                     modelPath = file.path,
                     backend = if (useGpu) Backend.GPU() else Backend.CPU(),
+                    visionBackend = if (vOn) Backend.CPU() else null,
+                    audioBackend = if (aOn) Backend.CPU() else null,
                     maxNumTokens = if (lightMode) LIGHT_TOKENS else null,
+                    maxNumImages = if (vOn) 1 else null,
                     cacheDir = context.cacheDir.path,
                 )
-            ).also { it.initialize(); engine = it; _state.value = AiState.Ready }
+            ).also { it.initialize(); engine = it; hasVision = vOn; hasAudio = aOn; _state.value = AiState.Ready }
         } catch (e: Throwable) {
+            if (vOn || aOn) {
+                _state.value = if (hasModel) AiState.Idle else AiState.NoModel
+                throw IllegalStateException("Model $activeName belum mendukung gambar/suara. Gunakan Gemma 4 E2B untuk membaca gambar atau rekaman suara.")
+            }
             _state.value = AiState.Failed(
                 "Model gagal dimuat" + (if (useGpu) " dengan GPU; coba matikan GPU" else "; mungkin RAM tidak cukup") + ": ${e.message}"
             )
@@ -378,12 +394,12 @@ class LocalAi private constructor(private val context: Context) {
     suspend fun load(force: Boolean = false) = lock.withLock { withContext(Dispatchers.Default) { ensureLoaded(force) }; touch() }
 
     /**
-     * Menjalankan satu permintaan. [onPartial] menerima teks yang terkumpul sejauh ini (streaming).
+     * Menjalankan satu permintaan teks atau multimodal (gambar/suara). [onPartial] menerima teks yang terkumpul sejauh ini.
      * Membatalkan coroutine pemanggil akan menghentikan pembangkitan.
      */
-    suspend fun generate(prompt: String, onPartial: (String) -> Unit = {}): String = lock.withLock {
+    suspend fun generate(prompt: String, imageFile: File? = null, audioFile: File? = null, onPartial: (String) -> Unit = {}): String = lock.withLock {
         withContext(Dispatchers.Default) {
-            val e = ensureLoaded()
+            val e = ensureLoaded(wantVision = imageFile != null, wantAudio = audioFile != null)
             // Percakapan baru tiap permintaan: tanpa riwayat, konteks kecil, hasil konsisten.
             val sampler = SamplerConfig(topK = 20, topP = 0.9, temperature = 0.3, seed = 1)
             // Model yang "berpikir" dulu terlalu lambat di HP; penalarannya dimatikan.
@@ -393,7 +409,17 @@ class LocalAi private constructor(private val context: Context) {
             val c = e.createConversation(config)
             try {
                 var acc = ""
-                c.sendMessageAsync(prompt).collect { m ->
+                val flow = if (imageFile == null && audioFile == null) {
+                    c.sendMessageAsync(prompt)
+                } else {
+                    val parts = buildList<Content> {
+                        if (imageFile != null) add(Content.ImageFile(imageFile.absolutePath))
+                        if (audioFile != null) add(Content.AudioFile(audioFile.absolutePath))
+                        add(Content.Text(prompt))
+                    }
+                    c.sendMessageAsync(Contents.of(parts))
+                }
+                flow.collect { m ->
                     val piece = m.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
                     // Tahan terhadap dua gaya streaming: potongan baru, atau teks kumulatif.
                     acc = if (acc.isNotEmpty() && piece.length > acc.length && piece.startsWith(acc)) piece else acc + piece

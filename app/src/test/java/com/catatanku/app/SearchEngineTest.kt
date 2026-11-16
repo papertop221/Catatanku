@@ -169,4 +169,40 @@ class AiTextTest {
     }
 
     @Test fun wordCount() = assertEquals(3, AiText.wordCount("  satu dua\n tiga "))
+
+    @Test fun tapCheckboxDirectlyAndContinueListOnEnter() {
+        val src = "Judul bagian\n☐ Beli beras\n  ☑ Cuci motor\nBiasa"
+        // Ketuk tepat di kotak ☐ pada baris kedua (indeks 13 atau 14) -> berubah jadi ☑ tanpa menghapus kotak.
+        val (checked, cur1) = AiText.toggleCheckAt(src, 13)!!
+        assertEquals("Judul bagian\n☑ Beli beras\n  ☑ Cuci motor\nBiasa", checked)
+        assertEquals(15, cur1)
+        // Ketuk lagi di kotak ☑ yang sama -> kembali jadi ☐.
+        val (unchecked, _) = AiText.toggleCheckAt(checked, 14)!!
+        assertEquals(src, unchecked)
+        // Ketuk pada kotak berindentasi "  ☑" -> jadi "  ☐".
+        val (unindent, _) = AiText.toggleCheckAt(src, 28)!!
+        assertEquals("Judul bagian\n☐ Beli beras\n  ☐ Cuci motor\nBiasa", unindent)
+        // Ketuk di tengah teks tugas bukan ketukan kotak centang.
+        assertEquals(null, AiText.toggleCheckAt(src, 18))
+
+        // Tekan Enter setelah "☐ Beli beras" -> baris baru otomatis "☐ ".
+        val before = "☐ Beli beras"
+        val after = "☐ Beli beras\n"
+        val (cont, cCont) = AiText.continueListOnEnter(before, after, after.length)!!
+        assertEquals("☐ Beli beras\n☐ ", cont)
+        assertEquals(cont.length, cCont)
+
+        // Tekan Enter pada baris "☐ " kosong -> keluar dari mode daftar (awalan dihapus).
+        val (exit, cExit) = AiText.continueListOnEnter(cont, cont + "\n", cont.length + 1)!!
+        assertEquals("☐ Beli beras\n", exit)
+        assertEquals(exit.length, cExit)
+
+        // Centang/buka centang tugas dari daftar tugas layar utama.
+        val toggled = AiText.setTaskChecked(src, "☐ Beli beras", checked = true)!!
+        assertEquals("Judul bagian\n☑ Beli beras\n  ☑ Cuci motor\nBiasa", toggled)
+        assertEquals(src, AiText.setTaskChecked(toggled, "☐ Beli beras", checked = false))
+
+        assertTrue(AiText.imagePrompt(true).contains("☐"))
+        assertTrue(AiText.audioPrompt(false).contains("Transkripsikan"))
+    }
 }

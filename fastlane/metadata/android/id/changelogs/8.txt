@@ -1,3 +1,3 @@
-"Catatanku" di menu teks terpilih aplikasi lain: simpan sebagai catatan, simpan dengan pengingat, ringkas, perbaiki ejaan, atau ambil daftar tugas.
-Tile Setelan Cepat "Catatan baru" dan pintasan tekan-lama ikon aplikasi.
-Pengingat tahan penghemat baterai: jadwalkan sebagai alarm sistem (bawaan aktif di Oppo/Vivo/Realme/Xiaomi), deteksi keterlambatan, uji pengingat 2 menit, panduan setelan per merek HP, dan salin pengingat ke Kalender HP.
+Ketuk langsung kotak ☐/☑ di editor & daftar tugas, otomatis lanjut daftar saat tekan Enter, dan tombol Urungkan/Ulangi ketikan.
+Catatan suara & lampiran gambar: baca teks/isi gambar (OCR) dan transkripsikan rekaman suara dengan AI lokal (Gemma 4 E2B).
+"Catatanku" di menu teks terpilih aplikasi lain, terima bagikan gambar/suara, tile Setelan Cepat, dan pengingat tahan penghemat baterai.

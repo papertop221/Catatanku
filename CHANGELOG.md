@@ -1,10 +1,31 @@
 # Riwayat perubahan
 
 ## 1.7
+Catatan, editor, dan daftar (perbaikan fundamental)
+- Daftar centang interaktif: ketuk langsung kotak `☐` atau `☑` di editor untuk mencentang/melepas centang tanpa menghapus
+  kotaknya; baris yang sudah `☑` tampil redup dan dicoret
+- Menekan *Enter* di baris daftar (`☐`, `☑`, `•`) otomatis melanjutkan daftar di baris baru, atau keluar dari daftar bila
+  ditekan pada baris daftar kosong
+- Daftar "Tugas yang belum selesai" di layar utama kini interaktif: ketuk langsung butir tugas untuk mencentangnya
+  (lengkap dengan tombol Urungkan)
+- Tombol *Urungkan* dan *Ulangi* di bilah atas editor untuk suntingan ketikan; tombol *Next* di Judul langsung
+  memindahkan fokus ke isi catatan; input tag yang belum ditekan *Done* tetap tersimpan saat keluar dari editor
+- Kelola folder: ubah nama folder atau bubarkan folder dari menu titik tiga saat membuka folder; menu tekan-lama di
+  daftar kini punya *Pindahkan ke folder*, *Tandai pengingat selesai*, dan *Hapus permanen* (di Sampah)
+
+Catatan suara, gambar, dan AI multimodal
+- Rekam catatan suara (WAV 16 kHz mono) dan lampirkan gambar di dalam catatan (`Media.kt`, skema basis data v4)
+- AI multimodal lokal (Gemma 4 E2B): baca teks/isi gambar (OCR), ambil daftar tugas dari gambar, serta transkripsikan
+  atau ambil daftar tugas dari rekaman suara sepenuhnya di perangkat
+- Satu kalimat menjadi beberapa objek: "ingatkan saya besok jam 7 malam rapat RT: siapkan laporan, beli konsumsi #rt di
+  folder Warga" langsung membuat catatan berjudul, berisi daftar centang `☐`, bertag, berfolder, sekaligus berpengingat
+
 Integrasi sistem
 - "Catatanku" di menu teks terpilih aplikasi lain (browser, obrolan, PDF): simpan langsung sebagai catatan, simpan
   dengan pengingat bila teks memuat waktu, atau olah dengan AI lokal (ringkas, perbaiki ejaan, ambil daftar tugas) dan
   ganti teks di aplikasi asal bila kolomnya bisa disunting
+- Terima bagikan (*Share*) gambar (`image/*`) dan berkas suara (`audio/*`) dari aplikasi lain, serta pintu masuk
+  asisten perangkat (`ACTION_ASSIST` / `VOICE_COMMAND`)
 - Tile Setelan Cepat "Catatan baru" untuk menulis dari mana saja
 - Pintasan tekan-lama ikon aplikasi: Catatan baru, Pengingat, dan Tugas belum selesai
 - Intent publik `com.catatanku.app.NEW_NOTE`, `SHOW_REMINDERS`, dan `SHOW_TASKS` untuk aplikasi otomasi (mis. Tasker)

@@ -1,3 +1,3 @@
-"Catatanku" in the text selection menu across apps: save as note, save with reminder, summarize, fix spelling, or extract tasks.
-"New note" Quick Settings tile and app icon shortcuts.
-Battery-saver resilient reminders: schedule as system alarm clock (on by default on Oppo/Vivo/Realme/Xiaomi), lateness detection, 2-minute reminder self-test, OEM autostart guides, and copy reminder to the phone Calendar.
+Tap checkboxes ☐/☑ directly in the editor and task list, auto-continue lists on Enter, and Undo/Redo typing.
+Voice notes & image attachments: extract text/tasks from images and transcribe voice recordings on-device with Gemma 4 E2B.
+"Catatanku" in the system text selection menu, receive shared images/audio, Quick Settings tile, and battery-saver resilient reminders.

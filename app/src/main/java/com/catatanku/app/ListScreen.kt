@@ -35,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -69,6 +72,14 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
     var moreMenu by remember { mutableStateOf(false) }
     var confirmEmpty by remember { mutableStateOf(false) }
     var confirmOrganize by remember { mutableStateOf(false) }
+    var renameFolderTarget by remember { mutableStateOf<String?>(null) }
+    var dissolveFolderTarget by remember { mutableStateOf<String?>(null) }
+    var moveFolderNote by remember { mutableStateOf<Note?>(null) }
+    var deleteForeverNote by remember { mutableStateOf<Note?>(null) }
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(vm.searchFocusTick) {
+        if (vm.searchFocusTick > 0) runCatching { searchFocus.requestFocus() }
+    }
     // Kolom cari juga menerima perintah ("ingatkan saya …"). Dikenali dengan aturan, jadi tanpa model pun jalan.
     val steps = remember(vm.query) { vm.commandSteps(vm.query) }
     val isCommand = steps != null
@@ -117,7 +128,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         Spacer(Modifier.width(10.dp))
                         PlainField(
                             vm.query, vm::updateQuery, if (hasModel) "Cari, tanya, atau beri perintah" else "Cari atau beri perintah",
-                            Modifier.weight(1f), ime = ImeAction.Search,
+                            Modifier.weight(1f).focusRequester(searchFocus), ime = ImeAction.Search,
                         ) {
                             // Enter langsung membuka rencana, kecuali untuk perintah yang menyingkirkan catatan (harus sengaja ditekan).
                             if (steps != null && steps.none { it is AgentStep.Trash || it is AgentStep.Archive }) vm.startAgent(vm.query)
@@ -183,6 +194,11 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                             { Text("Isi judul & tag kosong (${vm.organizableCount})") }, { moreMenu = false; confirmOrganize = true },
                             enabled = vm.batch == null && vm.organizableCount > 0,
                         )
+                        if (view is NoteView.Folder) {
+                            Hairline()
+                            DropdownMenuItem({ Text("Ubah nama folder") }, { moreMenu = false; renameFolderTarget = view.name })
+                            DropdownMenuItem({ Text("Bubarkan folder") }, { moreMenu = false; dissolveFolderTarget = view.name })
+                        }
                         if (view == NoteView.Trash) DropdownMenuItem({ Text("Kosongkan Sampah") }, { moreMenu = false; confirmEmpty = true }, enabled = vm.trashCount > 0)
                         Hairline()
                         DropdownMenuItem({ Text("Pengaturan") }, { moreMenu = false; vm.go(Screen.Settings) })
@@ -237,10 +253,14 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                     else -> {
                         if (split) item(key = "h-pin", contentType = "label") { SectionLabel("Disematkan", Modifier.padding(start = Gutter, top = 12.dp, bottom = 2.dp)) }
-                        items(pinned, key = { it.id }, contentType = { "note" }) { n -> NoteRow(vm, n, view) }
+                        items(pinned, key = { it.id }, contentType = { "note" }) { n ->
+                            NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n })
+                        }
                         if (split) {
                             item(key = "h-rest", contentType = "label") { SectionLabel("Lainnya", Modifier.padding(start = Gutter, top = 16.dp, bottom = 2.dp)) }
-                            items(rest, key = { it.id }, contentType = { "note" }) { n -> NoteRow(vm, n, view) }
+                            items(rest, key = { it.id }, contentType = { "note" }) { n ->
+                                NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n })
+                            }
                         }
                     }
                 }
@@ -255,6 +275,26 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
         "AI mengisi judul, tag, dan folder yang masih kosong. Isian yang sudah ada dan isi catatan tidak diubah. " +
             "Bisa dihentikan kapan saja; periksa hasilnya sesudahnya.",
         "Mulai mengisi", onDismiss = { confirmOrganize = false }) { vm.organizeAll() }
+    renameFolderTarget?.let { old ->
+        RenameFolderDialog(old, onDismiss = { renameFolderTarget = null }) { newName -> vm.renameFolder(old, newName) }
+    }
+    dissolveFolderTarget?.let { name ->
+        Confirm(
+            "Bubarkan folder $name?",
+            "Catatan di dalamnya tidak dihapus, hanya dikembalikan ke Tanpa folder. Bisa diurungkan.",
+            "Bubarkan folder", onDismiss = { dissolveFolderTarget = null },
+        ) { vm.dissolveFolder(name) }
+    }
+    moveFolderNote?.let { target ->
+        FolderDialog(target.folder, vm.folders, onDismiss = { moveFolderNote = null }) { f -> vm.moveNoteToFolder(target, f) }
+    }
+    deleteForeverNote?.let { target ->
+        Confirm(
+            "Hapus permanen?",
+            "Catatan “${target.heading.take(40).ifBlank { "(kosong)" }}” tidak bisa dipulihkan lagi.",
+            "Hapus permanen", destructive = true, onDismiss = { deleteForeverNote = null },
+        ) { vm.deleteNoteForever(target) }
+    }
     ReminderSheet(vm)
     AgentSheet(vm)
 }
@@ -331,11 +371,33 @@ private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifi
             LinearProgressIndicator(Modifier.fillMaxWidth())
             if (vm.askAnswer.isEmpty()) Muted(if (loadingModel) "Memuat model ke memori…" else "Membaca catatan…", Modifier.padding(top = 10.dp), MaterialTheme.typography.bodyMedium)
         }
-        if (vm.askAnswer.isNotEmpty()) Text(vm.askAnswer, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)
-        if (vm.askSources.isNotEmpty()) {
-            SectionLabel("Sumber", Modifier.padding(top = 14.dp))
-            vm.askSources.forEach { n -> SourceRow(n) { vm.open(n) } }
-            if (vm.askByAi) Muted("AI bisa keliru. Untuk hal penting, buka catatan sumbernya.", Modifier.padding(top = 4.dp))
+        if (!vm.askByAi && vm.openTasksList.isNotEmpty()) {
+            Muted("Ketuk tugas untuk mencentangnya, atau ketuk judul catatan untuk membuka.", Modifier.padding(bottom = 6.dp))
+            vm.openTasksList.forEachIndexed { idx, (note, tasks) ->
+                if (idx > 0) Spacer(Modifier.height(8.dp))
+                Text(
+                    note.heading.take(60).ifBlank { "(tanpa judul)" },
+                    Modifier.clip(SmallShape).clickable(role = Role.Button) { vm.open(note) }.padding(vertical = 4.dp),
+                    style = NoteType.rowTitle, color = MaterialTheme.colorScheme.onSurface,
+                )
+                tasks.forEach { task ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(SmallShape)
+                            .clickable(role = Role.Button, onClickLabel = "Centang tugas") { vm.toggleOpenTask(note, task) }
+                            .heightIn(min = 40.dp).padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(task, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        } else {
+            if (vm.askAnswer.isNotEmpty()) Text(vm.askAnswer, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)
+            if (vm.askSources.isNotEmpty()) {
+                SectionLabel("Sumber", Modifier.padding(top = 14.dp))
+                vm.askSources.forEach { n -> SourceRow(n) { vm.open(n) } }
+                if (vm.askByAi) Muted("AI bisa keliru. Untuk hal penting, buka catatan sumbernya.", Modifier.padding(top = 4.dp))
+            }
         }
     }
     Hairline()
@@ -380,17 +442,19 @@ private fun SwipeRow(startLabel: String?, endLabel: String?, onStart: () -> Unit
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView) {
+private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () -> Unit, onDeleteForever: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     // Catatan tanpa judul memakai baris pertamanya sebagai judul. Hanya awal isi yang dibaca: catatan bisa sangat panjang.
-    val (title, snippet) = remember(n.title, n.body) {
+    val (title, snippet) = remember(n.title, n.body, n.attachments) {
         val lines = n.body.take(400).lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.take(4).toList()
-        n.title.ifBlank { lines.firstOrNull().orEmpty() } to (if (n.title.isBlank()) lines.drop(1) else lines).joinToString(" ")
+        n.heading to (if (n.title.isBlank()) lines.drop(1) else lines).joinToString(" ")
     }
     val meta = remember(n, view) {
         listOfNotNull(
             if (n.archived && !n.inTrash && view != NoteView.Archive) "Arsip" else null,
             if (view !is NoteView.Folder && n.folder.isNotBlank()) n.folder else null,
+            if (n.imageCount > 0) "${n.imageCount} gambar" else null,
+            if (n.audioCount > 0) "${n.audioCount} suara" else null,
             n.tags.take(3).joinToString(" ") { "#$it" }.ifBlank { null },
             shortDate(n.updated),
         ).joinToString("  ·  ")
@@ -429,10 +493,14 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView) {
         }
         // Tekan lama: aksi cepat tanpa membuka catatan.
         Menu(menu, { menu = false }) {
-            if (n.inTrash) DropdownMenuItem({ Text("Pulihkan") }, { menu = false; vm.restore(n) })
-            else {
+            if (n.inTrash) {
+                DropdownMenuItem({ Text("Pulihkan") }, { menu = false; vm.restore(n) })
+                DropdownMenuItem({ Text("Hapus permanen", color = MaterialTheme.colorScheme.error) }, { menu = false; onDeleteForever() })
+            } else {
                 if (!n.archived) DropdownMenuItem({ Text(if (n.pinned) "Lepas sematan" else "Sematkan") }, { menu = false; vm.togglePin(n) })
+                if (n.hasReminder && n.remindFired) DropdownMenuItem({ Text("Tandai pengingat selesai") }, { menu = false; vm.finishReminder(n) })
                 DropdownMenuItem({ Text(if (n.hasReminder) "Ubah pengingat" else "Setel pengingat") }, { menu = false; vm.openReminder(n) })
+                DropdownMenuItem({ Text("Pindahkan ke folder") }, { menu = false; onMoveFolder() })
                 DropdownMenuItem({ Text(if (n.archived) "Keluarkan dari arsip" else "Arsipkan") }, { menu = false; vm.toggleArchive(n) })
                 DropdownMenuItem({ Text("Pindahkan ke Sampah") }, { menu = false; vm.trash(n) })
             }

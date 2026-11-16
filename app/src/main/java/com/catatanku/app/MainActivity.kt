@@ -37,17 +37,25 @@ class MainActivity : ComponentActivity() {
             vm.openFromReminder(remindId)
             return
         }
-        // Tile Setelan Cepat, pintasan ikon, dan aplikasi otomasi.
+        // Tile Setelan Cepat, pintasan ikon, asisten perangkat, dan aplikasi otomasi.
         when (intent?.action) {
             Actions.NEW_NOTE -> { vm.saveDraft(); vm.open(null); return }
             Actions.SHOW_REMINDERS -> { vm.showReminders(); return }
             Actions.SHOW_TASKS -> { vm.showTasks(); return }
+            Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND -> { vm.openAssist(); return }
         }
-        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        if (intent?.action != Intent.ACTION_SEND) return
+        val type = intent.type.orEmpty()
+        val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty().take(120)
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
-        if (text.isEmpty()) return
-        vm.saveDraft()
-        vm.open(Note(title = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty().take(120), body = text))
+        @Suppress("DEPRECATION")
+        val stream = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+        else intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        when {
+            type.startsWith("image/") && stream != null -> { vm.saveDraft(); vm.openSharedMedia(stream, isImage = true, title = subject, body = text) }
+            type.startsWith("audio/") && stream != null -> { vm.saveDraft(); vm.openSharedMedia(stream, isImage = false, title = subject, body = text) }
+            type == "text/plain" && text.isNotEmpty() -> { vm.saveDraft(); vm.open(Note(title = subject, body = text)) }
+        }
     }
 
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleIntent(intent) }

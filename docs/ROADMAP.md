@@ -16,8 +16,10 @@ Diperbarui 16 November 2026, untuk penyelesaian cabang `wip-1.7`.
 | Tile Setelan Cepat | "Catatan baru" (`QuickNoteTile`) | Selesai di kode |
 | Pintasan ikon | Catatan baru, Pengingat, Tugas belum selesai (didaftarkan dari kode, `publishShortcuts`) | Selesai di kode |
 | Intent publik | `com.catatanku.app.NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS` (untuk Tasker dan sejenisnya) | Selesai di kode |
-| Pengingat tahan penghemat baterai | Semua pengingat dijadwalkan dengan `setAlarmClock` (bawaan nyala di HP Oppo/Vivo/Realme/Xiaomi), deteksi pengingat terlambat, tombol "Uji pengingat" 2 menit, langkah setelan per pabrikan, pengecualian pengoptimalan baterai | Selesai di kode; kedua uji `ReminderTest` diperbaiki |
-| Salin ke Kalender HP | Dari lembar pengingat, lewat layar "acara baru" kalender (tanpa izin kalender) | Selesai di kode |
+| Pengingat tahan penghemat baterai | Semua pengingat dijadwalkan dengan `setAlarmClock` (bawaan nyala di HP Oppo/Vivo/Realme/Xiaomi), deteksi pengingat terlambat, tombol "Uji pengingat" 2 menit, langkah setelan per pabrikan, pengecualian pengoptimalan baterai | Selesai & diuji di HP |
+| Salin ke Kalender HP | Dari lembar pengingat, lewat layar "acara baru" kalender (tanpa izin kalender) | Selesai & diuji di HP |
+| Perbaikan fundamental editor & daftar | Ketuk langsung kotak `☐`/`☑` + coret baris selesai, otomatis lanjut daftar saat *Enter*, centang langsung di daftar *Tugas belum selesai*, *Undo/Redo* ketikan, fokus judul→isi, kelola folder (ubah nama/bubarkan), pindah folder & hapus permanen dari menu tekan-lama | Selesai |
+| Catatan suara, gambar, & AI multimodal | Rekam suara WAV 16 kHz mono + putar ulang, lampirkan gambar (galeri/Share), skema DB v4 + migrasi, baca gambar (OCR/tugas) & transkripsi suara dengan Gemma 4 E2B, satu kalimat jadi pengingat + daftar centang | Selesai |
 | Lain-lain | `LocalAi` satu objek per proses; `whenLabel` lebih murah; `localeFilters` id/en; APK rilis 1.7 (`releases/Catatanku-1.7.apk`) dan dokumen 1.7 | Selesai |
 
 **Catatan pengujian 1.7:**

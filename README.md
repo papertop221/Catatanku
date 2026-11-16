@@ -40,7 +40,7 @@ Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `a285ece473c135bc1ea9b40010b68f642b3d1373281191ba0aacbedfaba5d57a`
+SHA-256: `706a0e13bbc738cc928c2d054d8a226443a6be75c00b858ecb0f9d998932c075`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
@@ -67,13 +67,14 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 ## Fitur
 
 **Catatan**
-- Simpan otomatis tiap jeda mengetik, sematkan, folder, tag, arsip, dan Sampah (pulih dalam 30 hari)
-- Daftar centang dan poin, hitung kata, urutkan
-- Riwayat versi: 20 versi terakhir tiap catatan bisa dipulihkan
-- Bagikan/salin, terima teks dari aplikasi lain
+- Simpan otomatis tiap jeda mengetik, sematkan, folder (bisa diubah namanya atau dibubarkan), tag, arsip, dan Sampah (pulih dalam 30 hari)
+- Daftar centang interaktif (ketuk langsung kotak `☐`/`☑` di editor atau di daftar *Tugas belum selesai*; baris selesai dicoret) dan poin, otomatis berlanjut saat menekan *Enter*
+- Riwayat *Urungkan/Ulangi* ketikan di editor + 20 versi terakhir tiap catatan di Riwayat versi
+- Catatan suara (rekam WAV 16 kHz mono & putar ulang) dan lampiran gambar (galeri atau kiriman dari aplikasi lain)
+- Bagikan/salin, terima teks, gambar (`image/*`), dan suara (`audio/*`) dari aplikasi lain
 - Menu teks terpilih di aplikasi lain (browser, obrolan, PDF): simpan langsung sebagai catatan, simpan dengan pengingat, atau ringkas/perbaiki ejaan/ambil daftar tugas dengan AI lokal (dan ganti teks di aplikasi asal bila kolomnya bisa disunting)
-- Tile Setelan Cepat "Catatan baru", pintasan tekan-lama ikon aplikasi, dan intent publik (`NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS`)
-- Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; tekan lama untuk aksi lain
+- Tile Setelan Cepat "Catatan baru", pintasan tekan-lama ikon aplikasi, pintu masuk asisten perangkat (`ACTION_ASSIST`), dan intent publik (`NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS`)
+- Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; tekan lama untuk sematkan, pindahkan ke folder, tandai pengingat selesai, arsipkan, atau hapus
 - Blok "Hari ini": pengingat yang terlewat atau jatuh hari ini, dan jumlah tugas yang belum dicentang
 
 **Pengingat**
@@ -96,6 +97,7 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 
 **AI lokal** — opsional, butuh model
 - *Bantu tulis*: lanjutkan, perbaiki ejaan, rapikan struktur, ringkas, ambil daftar tugas, buat judul, instruksi bebas
+- *Gambar & suara (Gemma 4 E2B)*: baca teks/isi gambar (OCR), ambil daftar tugas dari gambar, serta transkripsikan atau ambil daftar tugas dari rekaman suara
 - *Catatan panjang*: ringkas, daftar tugas, dan perbaiki ejaan memproses seluruh isi bagian demi bagian
 - *Merapikan*: isi judul, folder, dan tag yang kosong untuk satu atau semua catatan, atau otomatis saat catatan ditutup
 - *Tanya catatan*: jawaban dari hingga 4 catatan paling relevan, tampil di atas daftar lengkap dengan sumbernya

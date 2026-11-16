@@ -34,6 +34,18 @@ class AgentTest {
         assertEquals(AgentStep.Unremind("bayar listrik"), one("hapus pengingat catatan bayar listrik"))
         // Tanpa waktu: langkahnya tetap dikenali, dan layar meminta waktunya.
         assertEquals(AgentStep.Create("Bayar pajak", wantsReminder = true), one("ingatkan saya bayar pajak"))
+        // Satu kalimat menjadi beberapa objek: pengingat + daftar centang + tag + folder.
+        assertEquals(
+            AgentStep.Create(
+                "Rapat RT", "☐ Siapkan laporan\n☐ Beli konsumsi",
+                tags = listOf("rt"), folder = "Warga", at = dt(11, 16, 19), wantsReminder = true,
+            ),
+            one("ingatkan saya besok jam 7 malam rapat RT: siapkan laporan, beli konsumsi #rt di folder Warga"),
+        )
+        assertEquals(
+            AgentStep.Create("Bayar listrik", "☐ Bayar listrik\n☐ Beli token 250rb", at = dt(11, 16, 19), wantsReminder = true),
+            one("ingatkan besok jam 7 malam bayar listrik, beli token 250rb"),
+        )
     }
 
     @Test fun createNotes() {

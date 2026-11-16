@@ -1,7 +1,7 @@
 # Arsitektur
 
 Satu modul (`app`), dua Activity (`MainActivity` dan lembar `ProcessTextActivity`), UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
-Tujuannya kode yang kecil dan mudah dibaca: ±5.300 baris Kotlin di enam belas berkas.
+Tujuannya kode yang kecil dan mudah dibaca: ±5.800 baris Kotlin di tujuh belas berkas.
 
 ## Berkas
 
@@ -10,17 +10,18 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 | Berkas | Tanggung jawab | Bergantung pada Android? |
 |---|---|---|
 | `SearchEngine.kt` | Tokenisasi, indeks TF-IDF, pencarian, catatan terkait, kata kunci | Tidak |
-| `AiText.kt` | Prompt, pengurai keluaran model, alat teks (centang, hitung kata) | Tidak |
+| `AiText.kt` | Prompt teks & multimodal, pengurai keluaran model, alat teks (ketuk centang, lanjut daftar, hitung kata) | Tidak |
 | `TimeParse.kt` | Pengenal waktu bahasa Indonesia, aturan pengulangan pengingat | Tidak |
-| `Agent.kt` | Asisten perintah: pengurai perintah, prompt perumus ulang, penerapan pada isi catatan | Tidak |
+| `Agent.kt` | Asisten perintah: pengurai perintah (termasuk satu kalimat jadi pengingat + tugas + tag + folder), prompt perumus ulang | Tidak |
 | `Models.kt` | Katalog model: URL terkunci revisi, ukuran, SHA-256, anjuran RAM | Tidak |
-| `Data.kt` | `Note`, SQLite (`NoteDb`), riwayat versi, cadangan JSON | Ya |
+| `Data.kt` | `Note`, SQLite (`NoteDb` skema v4), riwayat versi, cadangan JSON | Ya |
+| `Media.kt` | Lampiran gambar (kompresi JPEG ≤ 1600px), perekam suara WAV 16 kHz mono (`VoiceRecorder`), pemutar suara (`AudioPlayer`) | Ya |
 | `Reminders.kt` | Alarm sistem, notifikasi, penerima siaran (`ReminderReceiver`), deteksi terlambat, uji pengingat | Ya |
-| `LocalAi.kt` | Unduh/impor/ganti model, engine LiteRT-LM (satu per proses), pembangkitan streaming | Ya |
+| `LocalAi.kt` | Unduh/impor/ganti model, engine LiteRT-LM (teks, gambar, suara; satu per proses), pembangkitan streaming | Ya |
 | `SystemIntegration.kt` | Menu teks terpilih (`ProcessTextActivity`), tile Setelan Cepat (`QuickNoteTile`), pintasan ikon, kalender, setelan baterai pabrikan (`Oem`) | Ya |
 | `AppViewModel.kt` | Seluruh state dan logika aplikasi | Ya |
-| `ListScreen.kt` | Layar utama: blok "Hari ini", jawaban, daftar, bilah bawah, geser baris | Ya |
-| `EditorScreen.kt` | Editor dan simpan otomatis | Ya |
+| `ListScreen.kt` | Layar utama: blok "Hari ini", jawaban & daftar tugas interaktif, daftar, bilah bawah, geser baris | Ya |
+| `EditorScreen.kt` | Editor, Undo/Redo ketikan, lampiran gambar/suara, dan simpan otomatis | Ya |
 | `SettingsScreen.kt` | Pengaturan | Ya |
 | `Sheets.kt` | Lembar bawah dan dialog: pengingat, bantu tulis, rencana asisten, riwayat versi, folder, kunci | Ya |
 | `UiKit.kt` | Komponen bersama (tombol, baris, lembar, menu) | Ya |
@@ -227,9 +228,11 @@ pengguna di lembar pengingat.
 
 ## Penyimpanan
 
-SQLite lewat `SQLiteOpenHelper`, satu tabel `notes`. Tag disimpan sebagai teks berpemisah `U+001F`.
+SQLite lewat `SQLiteOpenHelper`, satu tabel `notes`. Tag dan nama berkas lampiran disimpan sebagai teks berpemisah `U+001F`.
 Skema v2 menambah `folder`, `archived`, `deleted` (stempel waktu; 0 = tidak di sampah).
 Skema v3 menambah kolom pengingat (`remind_at`, `remind_repeat`, `remind_alarm`, `remind_fired`) dan tabel `versions`.
+Skema v4 menambah kolom `attachments` untuk lampiran gambar (`img_*.jpg`) dan catatan suara (`aud_*.wav`) yang disimpan
+di `filesDir/attachments/`. Berkas lampiran yatim dibersihkan otomatis saat catatan dihapus permanen atau Sampah dikosongkan.
 `NoteDb` adalah satu objek untuk seluruh proses, karena layar dan penerima alarm memakai basis data yang sama.
 
 Simpan otomatis berjalan tiap jeda mengetik (0,7 detik) dan ditulis **sinkron**, agar tidak ada catatan ganda bila

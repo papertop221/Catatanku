@@ -23,26 +23,37 @@ data class Note(
     val remindRepeat: Repeat = Repeat.None,
     val remindAlarm: Boolean = false, // berdering seperti alarm sampai ditanggapi
     val remindFired: Boolean = false, // sudah berbunyi tetapi belum ditandai selesai
+    val attachments: List<String> = emptyList(), // berkas lampiran di filesDir/attachments (img_*, aud_*)
 ) {
-    val isBlank get() = title.isBlank() && body.isBlank()
+    val isBlank get() = title.isBlank() && body.isBlank() && attachments.isEmpty()
     val inTrash get() = deletedAt != 0L
     val hasReminder get() = remindAt != 0L
+    val imageCount get() = attachments.count { it.startsWith("img_") }
+    val audioCount get() = attachments.count { it.startsWith("aud_") }
     /** Judul untuk ditampilkan: judul, atau baris pertama isi bila judul kosong. */
-    val heading get() = title.ifBlank { body.trim().lineSequence().firstOrNull().orEmpty() }
+    val heading get() = title.ifBlank {
+        body.trim().lineSequence().firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: when {
+                audioCount > 0 && imageCount > 0 -> "Catatan suara & gambar"
+                audioCount > 0 -> "Catatan suara"
+                imageCount > 0 -> "Catatan gambar"
+                else -> ""
+            }
+    }
 }
 
 /** Salinan lama sebuah catatan, disimpan otomatis sebelum isinya berubah. */
 data class Version(val id: Long, val noteId: Long, val title: String, val body: String, val saved: Long)
 
 /** Penyimpanan lokal SQLite. Semua data ada di penyimpanan internal aplikasi. */
-class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.applicationContext, "catatan.db", null, 3) {
+class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.applicationContext, "catatan.db", null, 4) {
     companion object {
         const val KEEP_VERSIONS = 20
         @Volatile private var instance: NoteDb? = null
         /** Satu koneksi untuk seluruh aplikasi: layar dan penerima alarm memakai basis data yang sama. */
         fun get(context: Context): NoteDb = instance ?: synchronized(this) { instance ?: NoteDb(context).also { instance = it } }
         internal fun resetForTest() { instance?.close(); instance = null }
-        private const val COLS = "id,title,body,tags,pinned,created,updated,folder,archived,deleted,remind_at,remind_repeat,remind_alarm,remind_fired"
+        private const val COLS = "id,title,body,tags,pinned,created,updated,folder,archived,deleted,remind_at,remind_repeat,remind_alarm,remind_fired,attachments"
         private const val VERSIONS_SQL =
             "CREATE TABLE IF NOT EXISTS versions(id INTEGER PRIMARY KEY AUTOINCREMENT, note_id INTEGER NOT NULL, " +
                 "title TEXT NOT NULL, body TEXT NOT NULL, saved INTEGER NOT NULL)"
@@ -74,7 +85,8 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
                 "tags TEXT NOT NULL, pinned INTEGER NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, " +
                 "folder TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, " +
                 "remind_at INTEGER NOT NULL DEFAULT 0, remind_repeat INTEGER NOT NULL DEFAULT 0, " +
-                "remind_alarm INTEGER NOT NULL DEFAULT 0, remind_fired INTEGER NOT NULL DEFAULT 0)"
+                "remind_alarm INTEGER NOT NULL DEFAULT 0, remind_fired INTEGER NOT NULL DEFAULT 0, " +
+                "attachments TEXT NOT NULL DEFAULT '')"
         )
         db.execSQL(VERSIONS_SQL)
         db.execSQL("CREATE INDEX IF NOT EXISTS versions_note ON versions(note_id)")
@@ -94,6 +106,9 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
             db.execSQL(VERSIONS_SQL)
             db.execSQL("CREATE INDEX IF NOT EXISTS versions_note ON versions(note_id)")
         }
+        if (oldVersion < 4) {   // v1.7 -> v1.8: lampiran gambar dan catatan suara
+            db.execSQL("ALTER TABLE notes ADD COLUMN attachments TEXT NOT NULL DEFAULT ''")
+        }
     }
 
     private fun Cursor.note() = Note(
@@ -102,6 +117,7 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
         pinned = getInt(4) != 0, created = getLong(5), updated = getLong(6),
         folder = getString(7), archived = getInt(8) != 0, deletedAt = getLong(9),
         remindAt = getLong(10), remindRepeat = Repeat.of(getInt(11)), remindAlarm = getInt(12) != 0, remindFired = getInt(13) != 0,
+        attachments = getString(14).split('\u001f').filter { it.isNotBlank() },
     )
 
     private fun query(where: String?, vararg args: String): List<Note> = readableDatabase
@@ -121,6 +137,7 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
             put("folder", n.folder); put("archived", if (n.archived) 1 else 0); put("deleted", n.deletedAt)
             put("remind_at", n.remindAt); put("remind_repeat", n.remindRepeat.ordinal)
             put("remind_alarm", if (n.remindAlarm) 1 else 0); put("remind_fired", if (n.remindFired) 1 else 0)
+            put("attachments", n.attachments.joinToString("\u001f"))
         }
         return if (n.id == 0L) writableDatabase.insertOrThrow("notes", null, v)
         else { writableDatabase.update("notes", v, "id=?", arrayOf(n.id.toString())); n.id }
@@ -181,6 +198,7 @@ object Backup {
                         put("remindAt", n.remindAt); put("remindRepeat", n.remindRepeat.name)
                         put("remindAlarm", n.remindAlarm); put("remindFired", n.remindFired)
                     }
+                    if (n.attachments.isNotEmpty()) put("attachments", JSONArray(n.attachments))
                 })
             }
         })
@@ -191,6 +209,7 @@ object Backup {
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             val t = o.optJSONArray("tags") ?: JSONArray()
+            val att = o.optJSONArray("attachments") ?: JSONArray()
             Note(
                 title = o.optString("title"), body = o.optString("body"),
                 tags = (0 until t.length()).map { t.getString(it) },
@@ -201,6 +220,7 @@ object Backup {
                 remindAt = o.optLong("remindAt", 0),
                 remindRepeat = runCatching { Repeat.valueOf(o.optString("remindRepeat", "None")) }.getOrDefault(Repeat.None),
                 remindAlarm = o.optBoolean("remindAlarm"), remindFired = o.optBoolean("remindFired"),
+                attachments = (0 until att.length()).map { att.getString(it) }.filter { it.isNotBlank() },
             )
         }
     }

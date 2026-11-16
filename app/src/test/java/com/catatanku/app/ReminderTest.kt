@@ -197,14 +197,34 @@ class ReminderTest {
 
     @Test fun backupKeepsTrashAndReminders() {
         val src = listOf(
-            Note(title = "Aktif", body = "a", tags = listOf("x", "y"), pinned = true, folder = "Kerja", remindAt = 123456L, remindRepeat = Repeat.Weekly, remindAlarm = true),
+            Note(title = "Aktif", body = "a", tags = listOf("x", "y"), pinned = true, folder = "Kerja", remindAt = 123456L, remindRepeat = Repeat.Weekly, remindAlarm = true, attachments = listOf("img_1.jpg", "aud_2.wav")),
             Note(title = "Dibuang", body = "b", deletedAt = 99L, archived = true),
         )
         val back = Backup.fromJson(Backup.toJson(src))
         assertEquals(src.map { it.copy(id = 0) }, back)
         // Cadangan dari versi lama (tanpa kolom baru) tetap terbaca.
         val old = Backup.fromJson("""{"app":"Catatanku","version":2,"notes":[{"title":"Lama","body":"z","tags":["t"],"pinned":false,"folder":"","archived":false,"created":1,"updated":2}]}""").single()
-        assertEquals("Lama", old.title); assertFalse(old.hasReminder); assertFalse(old.inTrash)
+        assertEquals("Lama", old.title); assertFalse(old.hasReminder); assertFalse(old.inTrash); assertTrue(old.attachments.isEmpty())
+    }
+
+    @Test fun upgradeFromVersion3AddsAttachments() {
+        NoteDb.resetForTest()
+        val path = app.getDatabasePath("catatan.db").apply { parentFile!!.mkdirs(); delete() }
+        SQLiteDatabase.openOrCreateDatabase(path, null).use { old ->
+            old.execSQL(
+                "CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT NOT NULL, " +
+                    "tags TEXT NOT NULL, pinned INTEGER NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, " +
+                    "folder TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, " +
+                    "remind_at INTEGER NOT NULL DEFAULT 0, remind_repeat INTEGER NOT NULL DEFAULT 0, " +
+                    "remind_alarm INTEGER NOT NULL DEFAULT 0, remind_fired INTEGER NOT NULL DEFAULT 0)"
+            )
+            old.execSQL("INSERT INTO notes(title,body,tags,pinned,created,updated,remind_at) VALUES('Versi3','isi v3','',0,10,20,777)")
+            old.version = 3
+        }
+        val n = db.all().single()
+        assertEquals("Versi3", n.title); assertEquals(777L, n.remindAt); assertTrue(n.attachments.isEmpty())
+        db.upsert(n.copy(attachments = listOf("img_test.jpg", "aud_test.wav")))
+        assertEquals(listOf("img_test.jpg", "aud_test.wav"), db.get(n.id)!!.attachments)
     }
 
     @Test fun upgradeFromVersion2KeepsNotes() {

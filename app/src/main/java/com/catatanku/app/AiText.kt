@@ -253,7 +253,7 @@ object AiText {
     /** Mengganti awalan baris tempat kursor berada: tanpa → ☐ → ☑ → tanpa (atau poin). */
     fun toggleLinePrefix(text: String, cursor: Int, checklist: Boolean): Pair<String, Int> {
         val c = cursor.coerceIn(0, text.length)
-        val start = text.lastIndexOf('\n', c - 1) + 1
+        val start = if (c <= 0) 0 else text.lastIndexOf('\n', c - 1) + 1
         val end = text.indexOf('\n', c).let { if (it < 0) text.length else it }
         val line = text.substring(start, end)
         val known = listOf("☐ ", "☑ ", "• ")
@@ -265,4 +265,89 @@ object AiText {
         val delta = newLine.length - line.length
         return (text.substring(0, start) + newLine + text.substring(end)) to (c + delta).coerceIn(start, start + newLine.length)
     }
+
+    /**
+     * Bila ketukan ([offset]) jatuh pada kotak centang (☐ atau ☑) di awal baris, langsung ubah ☐ ↔ ☑
+     * tanpa menghapus kotaknya, lalu kembalikan (teks baru, posisi kursor sesudah kotak).
+     * Mengembalikan null bila ketukan bukan pada kotak centang.
+     */
+    fun toggleCheckAt(text: String, offset: Int): Pair<String, Int>? {
+        if (text.isEmpty() || offset !in 0..text.length) return null
+        val start = if (offset <= 0) 0 else text.lastIndexOf('\n', offset - 1) + 1
+        val end = text.indexOf('\n', start).let { if (it < 0) text.length else it }
+        var boxPos = start
+        while (boxPos < end && text[boxPos] == ' ') boxPos++
+        if (boxPos >= end || offset !in start..(boxPos + 1)) return null
+        val flipped = when (text[boxPos]) {
+            '☐' -> '☑'
+            '☑' -> '☐'
+            else -> return null
+        }
+        val nextText = text.substring(0, boxPos) + flipped + text.substring(boxPos + 1)
+        val nextCursor = (boxPos + 2).coerceAtMost( end)
+        return nextText to nextCursor
+    }
+
+    /**
+     * Saat pengguna menekan Enter di akhir/tengah baris daftar (☐, ☑, atau •):
+     * - Bila baris daftar itu kosong (hanya "☐ " atau "• "), hapus awalannya (keluar dari daftar).
+     * - Bila baris daftar itu ada isinya, otomatis mulai baris baru dengan "☐ " atau "• ".
+     * Mengembalikan null bila perubahan teks bukan penekanan Enter pada baris daftar.
+     */
+    fun continueListOnEnter(before: String, after: String, cursorAfter: Int): Pair<String, Int>? {
+        if (after.length != before.length + 1 || cursorAfter !in 1..after.length) return null
+        val nlPos = cursorAfter - 1
+        if (after[nlPos] != '\n') return null
+        if (!after.regionMatches(0, before, 0, nlPos) || !after.regionMatches(cursorAfter, before, nlPos, before.length - nlPos)) return null
+        val lineStart = if (nlPos <= 0) 0 else before.lastIndexOf('\n', nlPos - 1) + 1
+        val prevLine = before.substring(lineStart, nlPos)
+        val indent = prevLine.takeWhile { it == ' ' }
+        val trimmed = prevLine.substring(indent.length)
+        val prefix = listOf("☐ ", "☑ ", "• ").firstOrNull { trimmed.startsWith(it) } ?: return null
+        val content = trimmed.substring(prefix.length)
+        if (content.isBlank()) {
+            // Enter pada butir kosong: hapus awalan daftar dan batalkan baris baru.
+            val cleaned = before.substring(0, lineStart) + before.substring(nlPos)
+            return cleaned to lineStart
+        }
+        val nextPrefix = indent + if (prefix == "• ") "• " else "☐ "
+        val updated = after.substring(0, cursorAfter) + nextPrefix + after.substring(cursorAfter)
+        return updated to (cursorAfter + nextPrefix.length)
+    }
+
+    /** Mengubah status centang satu baris tugas tertentu di dalam [body]; null bila barisnya tidak ditemukan. */
+    fun setTaskChecked(body: String, taskLine: String, checked: Boolean): String? {
+        val target = taskLine.trim()
+        val from = if (checked) "☐" else "☑"
+        val to = if (checked) "☑" else "☐"
+        val expected = if (target.startsWith("☐") || target.startsWith("☑")) from + target.substring(1) else "$from $target"
+        var done = false
+        val out = body.lines().joinToString("\n") { line ->
+            if (!done && line.trim() == expected) {
+                done = true
+                line.replaceFirst(from, to)
+            } else line
+        }
+        return if (done) out else null
+    }
+
+    /** Prompt multimodal untuk membaca teks/isi gambar atau mengambil daftar tugas dari gambar. */
+    fun imagePrompt(extractTasks: Boolean = false): String =
+        if (extractTasks)
+            "Perhatikan gambar ini, lalu tuliskan daftar tugas, kegiatan, atau barang yang perlu dikerjakan/dibeli, " +
+                "satu butir per baris diawali \"☐ \". Jika tidak ada tugas, salin teks penting yang terlihat di gambar. " +
+                "Gunakan bahasa Indonesia, teks polos tanpa tanda * atau #."
+        else
+            "Baca semua teks yang terlihat di gambar ini dengan teliti dan salin secara rapi. Jika gambar memuat struk, " +
+                "jadwal, atau catatan papan tulis, tuliskan per baris. Jika gambar tidak memuat teks, jelaskan isinya secara " +
+                "singkat dalam 2 sampai 3 kalimat. Gunakan bahasa Indonesia, teks polos tanpa tanda * atau #."
+
+    /** Prompt multimodal untuk mentranskripsikan rekaman suara atau mengambil daftar tugas darinya. */
+    fun audioPrompt(extractTasks: Boolean = false): String =
+        if (extractTasks)
+            "Dengarkan rekaman suara ini, lalu tuliskan daftar tugas atau hal yang harus dikerjakan satu per baris " +
+                "diawali \"☐ \", diikuti ringkasan singkat isi rekaman. Gunakan bahasa Indonesia, teks polos tanpa tanda * atau #."
+        else
+            "Transkripsikan ucapan dalam rekaman suara ini ke bahasa Indonesia secara lengkap dan rapi. " +
+                "Tulis HANYA hasil transkripsinya sebagai teks polos tanpa tanda * atau #."
 }

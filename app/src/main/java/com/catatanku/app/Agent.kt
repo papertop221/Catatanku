@@ -113,45 +113,59 @@ object Agent {
         return Repeat.None to text
     }
 
-    /** Teks pendek menjadi judul; "Belanja: susu, telur" menjadi judul + daftar centang; teks panjang menjadi isi. */
+    /** Teks pendek menjadi judul; "Judul: butir 1, butir 2" atau daftar koma menjadi judul + daftar centang; teks panjang menjadi isi. */
     private fun noteOf(text: String): Pair<String, String> {
         val c = text.trim()
         R_HEAD.matchEntire(c)?.let { m ->
             val head = m.groupValues[1].trim(); val rest = m.groupValues[2].trim()
             val list = items(rest)
-            return if (R_LISTY.containsMatchIn(head) && list.size >= 2) cap(head) to list.joinToString("\n") { "☐ " + cap(it) }
+            return if (list.size >= 2) cap(head) to list.joinToString("\n") { "☐ " + cap(it) }
             else cap(head) to cap(rest)
+        }
+        if (',' in c) {
+            val list = items(c)
+            if (list.size >= 2 && list.all { it.length in 2..60 }) {
+                return cap(list.first()) to list.joinToString("\n") { "☐ " + cap(it) }
+            }
         }
         return if (c.length <= 60 && '\n' !in c) cap(c) to "" else "" to cap(c)
     }
 
-    private fun remindLike(rest: String, alarmAsked: Boolean, hasPrev: Boolean, now: LocalDateTime): AgentStep? {
-        val (repeat, r) = takeRepeat(rest)
-        val alarm = alarmAsked || R_ALARM_WORD.containsMatchIn(r)
-        val text = R_ALARM_WORD.replace(r, "")
-        val found = TimeParse.best(text, now)
-        val what = tidy(if (found != null) text.replaceFirst(found.phrase, " ") else text)
-        if (what.lowercase().startsWith("catatan ") && what.length > 8) return AgentStep.Remind(target(what.substring(8)), found?.at, repeat, alarm)
-        if (what.lowercase() in PRONOUNS) return if (hasPrev) AgentStep.Remind(PREV, found?.at, repeat, alarm) else null
-        val (title, body) = noteOf(what)
-        return AgentStep.Create(title, body, at = found?.at, repeat = repeat, alarm = alarm, wantsReminder = true)
-    }
-
-    private fun create(rest: String): AgentStep? {
-        var c = rest.trim()
+    /** Memisahkan #hashtag, "di folder X", dan "tag X" dari ujung kalimat perintah. */
+    private fun takeMeta(raw: String): Triple<String, List<String>, String> {
+        var c = raw.trim()
         val found = ArrayList<String>()
         R_HASHTAG.findAll(c).forEach { found += it.groupValues[1] }
         c = R_HASHTAG.replace(c, "").trim()
         var folder = ""
-        // Folder dan tag boleh disebut dalam urutan apa pun di akhir kalimat.
         repeat(2) {
             R_FOLDER.find(c)?.let { m -> folder = m.groupValues[1].trim(); c = c.removeRange(m.range).trim() }
             R_TAGS.find(c)?.takeIf { it.range.first > 0 }?.let { m -> found += tags(m.groupValues[1]); c = c.removeRange(m.range).trim() }
         }
         c = c.trim(',', ';', ' ')
+        val cleanTags = found.map(TextTools::normalizeTag).filter { it.length >= 2 }.distinct().take(5)
+        return Triple(c, cleanTags, folder)
+    }
+
+    private fun remindLike(rest: String, alarmAsked: Boolean, hasPrev: Boolean, now: LocalDateTime): AgentStep? {
+        val ( withoutMeta, foundTags, folder) = takeMeta(rest)
+        val (repeat, r) = takeRepeat(withoutMeta)
+        val alarm = alarmAsked || R_ALARM_WORD.containsMatchIn(r)
+        val text = R_ALARM_WORD.replace(r, "")
+        val found = TimeParse.best(text, now)
+        val what = tidy(if (found != null) text.replaceFirst(found.phrase, " ") else text)
+        if (what.lowercase().startsWith("catatan ") && what.length > 8 && foundTags.isEmpty() && folder.isEmpty())
+            return AgentStep.Remind(target(what.substring(8)), found?.at, repeat, alarm)
+        if (what.lowercase() in PRONOUNS) return if (hasPrev) AgentStep.Remind(PREV, found?.at, repeat, alarm) else null
+        val (title, body) = noteOf(what)
+        return AgentStep.Create(title, body, tags = foundTags, folder = folder, at = found?.at, repeat = repeat, alarm = alarm, wantsReminder = true)
+    }
+
+    private fun create(rest: String): AgentStep? {
+        val (c, foundTags, folder) = takeMeta(rest)
         if (c.isEmpty()) return null
         val (title, body) = noteOf(c)
-        return AgentStep.Create(title, body, found.map(TextTools::normalizeTag).filter { it.length >= 2 }.distinct().take(5), folder)
+        return AgentStep.Create(title, body, foundTags, folder)
     }
 
     /** Sasaran "itu" atau tanpa sasaran ("lalu sematkan") hanya sah bila ada langkah sebelumnya. */

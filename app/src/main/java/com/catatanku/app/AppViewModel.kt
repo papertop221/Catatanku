@@ -41,6 +41,7 @@ sealed interface NoteView {
 data class AiJob(
     val action: AiAction, val text: String = "", val running: Boolean = true, val error: String? = null,
     val progress: String? = null,       // mis. "Bagian 2 dari 4" untuk catatan panjang
+    val customTitle: String? = null,    // mis. "Baca gambar" atau "Transkripsikan suara"
 )
 
 /** Satu langkah rencana asisten: catatan sasaran yang ditemukan, pilihan lain, dan alasan bila belum bisa dijalankan. */
@@ -184,7 +185,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var askRunning by mutableStateOf(false); private set
     var askByAi by mutableStateOf(false); private set                     // jawabannya ditulis model (bukan daftar apa adanya)
     var askQuery by mutableStateOf(""); private set
+    var openTasksList by mutableStateOf<List<Pair<Note, List<String>>>>(emptyList()); private set
     val askActive get() = askQuery.isNotEmpty()
+    var searchFocusTick by mutableStateOf(0); private set                 // memicu fokus ke kolom cari/perintah saat dipanggil sebagai asisten
 
     // Asisten perintah
     var agent by mutableStateOf<AgentRun?>(null); private set
@@ -210,7 +213,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { ai.events.collect { say(it) } }
         viewModelScope.launch {
             reload()        // daftar tampil dulu; beres-beres menyusul
-            val purged = withContext(Dispatchers.IO) { db.purgeOldTrash().also { Reminders.rescheduleAll(app); publishShortcuts(app) } }
+            val purged = withContext(Dispatchers.IO) {
+                db.purgeOldTrash().also { Reminders.rescheduleAll(app); publishShortcuts(app); Attachments.cleanup(app, db.all()) }
+            }
             if (purged) reload()
         }
         // Alarm berbunyi atau tombol notifikasi ditekan: samakan layar dengan basis data.
@@ -444,8 +449,88 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         draft = Note(); screen = Screen.List
         if (id != 0L) {
             dropLocal(id)
-            appScope.launch { db.delete(id); Reminders.clear(ctx, id) }
+            appScope.launch { db.delete(id); Reminders.clear(ctx, id); Attachments.cleanup(ctx, db.all()) }
             markDirty()
+        }
+    }
+
+    fun deleteNoteForever(n: Note) {
+        if (n.id == 0L) return
+        dropLocal(n.id)
+        appScope.launch { db.delete(n.id); Reminders.clear(ctx, n.id); Attachments.cleanup(ctx, db.all()) }
+        markDirty()
+        say("Catatan dihapus permanen.")
+    }
+
+    // ============================== Lampiran gambar & suara ==============================
+
+    fun attachImage(uri: Uri) = viewModelScope.launch {
+        try {
+            val name = withContext(Dispatchers.IO) { Attachments.importImage(ctx, uri) }
+            draft = draft.copy(attachments = draft.attachments + name)
+            saveDraft()
+            say("Gambar ditambahkan.")
+        } catch (e: Throwable) { say("Gagal memuat gambar: ${e.message}") }
+    }
+
+    fun attachRecordedAudio(name: String) {
+        draft = draft.copy(attachments = draft.attachments + name)
+        saveDraft()
+        say("Catatan suara disimpan.")
+    }
+
+    fun removeAttachment(name: String) {
+        if (name !in draft.attachments) return
+        draft = draft.copy(attachments = draft.attachments - name)
+        saveDraft()
+        say("Lampiran dihapus.", "Urungkan") {
+            if (name !in draft.attachments) {
+                draft = draft.copy(attachments = draft.attachments + name)
+                saveDraft()
+            }
+        }
+    }
+
+    fun openSharedMedia(uri: Uri, isImage: Boolean, title: String = "", body: String = "") = viewModelScope.launch {
+        try {
+            val name = withContext(Dispatchers.IO) {
+                if (isImage) Attachments.importImage(ctx, uri) else Attachments.importAudio(ctx, uri)
+            }
+            open(Note(title = title, body = body, attachments = listOf(name)))
+            saveDraft()
+        } catch (e: Throwable) {
+            say("Gagal menerima lampiran: ${e.message}")
+        }
+    }
+
+    /** Menjalankan AI multimodal (Gemma 4 E2B) atas berkas gambar atau rekaman suara di catatan. */
+    fun runMediaAi(name: String, extractTasks: Boolean = false) {
+        if (aiJob?.running == true) return
+        val file = Attachments.file(ctx, name)
+        if (!file.exists()) { say("Berkas lampiran tidak ditemukan."); return }
+        val isImg = Attachments.isImage(name)
+        val label = when {
+            isImg && extractTasks -> "Ambil tugas dari gambar"
+            isImg -> "Baca isi gambar"
+            extractTasks -> "Ambil tugas dari suara"
+            else -> "Transkripsikan suara"
+        }
+        val prompt = if (isImg) AiText.imagePrompt(extractTasks) else AiText.audioPrompt(extractTasks)
+        aiJob = AiJob(if (extractTasks) AiAction.Tasks else AiAction.Summarize, customTitle = label)
+        running = viewModelScope.launch {
+            try {
+                val out = ai.generate(
+                    prompt,
+                    imageFile = if (isImg) file else null,
+                    audioFile = if (!isImg) file else null,
+                ) { partial -> aiJob = aiJob?.copy(text = AiText.cleanBlock(partial)) }
+                val clean = AiText.cleanBlock(out)
+                aiJob = aiJob?.copy(text = clean, running = false, error = if (clean.isBlank()) "Model tidak menghasilkan teks." else null)
+            } catch (e: CancellationException) {
+                aiJob = aiJob?.copy(running = false)
+            } catch (e: Throwable) {
+                aiJob = aiJob?.copy(running = false, error = "AI gagal: ${e.message}")
+            }
         }
     }
 
@@ -546,7 +631,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun emptyTrash() = viewModelScope.launch {
-        withContext(Dispatchers.IO) { db.emptyTrash() }; reload()
+        withContext(Dispatchers.IO) { db.emptyTrash(); Attachments.cleanup(ctx, db.all()) }; reload()
         markDirty()
         say("Sampah dikosongkan.")
     }
@@ -774,9 +859,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         askQuery = "Tugas yang belum selesai"; askByAi = false
         val withTasks = notes.filter { !it.inTrash && !it.archived }.sortedByDescending { it.updated }
             .mapNotNull { n -> AiText.openTasks(n.body).takeIf { it.isNotEmpty() }?.let { n to it } }
+        openTasksList = withTasks
         askSources = withTasks.map { it.first }
         askAnswer = if (withTasks.isEmpty()) "Tidak ada butir daftar centang yang belum selesai."
         else withTasks.joinToString("\n\n") { (n, tasks) -> n.heading.take(60) + "\n" + tasks.joinToString("\n") }
+    }
+
+    /** Mencentang langsung satu butir tugas dari daftar "Tugas yang belum selesai" di layar utama. */
+    fun toggleOpenTask(note: Note, taskLine: String) {
+        val cur = stats.byId[note.id] ?: return
+        val nextBody = AiText.setTaskChecked(cur.body, taskLine, checked = true) ?: return
+        update(cur.copy(body = nextBody, updated = System.currentTimeMillis()))
+        if (askActive && !askByAi) askOpenTasks()
+        say("Tugas dicentang.", "Urungkan") {
+            stats.byId[note.id]?.let { latest ->
+                AiText.setTaskChecked(latest.body, taskLine, checked = false)?.let { restored ->
+                    update(latest.copy(body = restored, updated = System.currentTimeMillis()))
+                    if (askActive && !askByAi) askOpenTasks()
+                }
+            }
+        }
     }
 
     /** Rekap catatan 7 hari terakhir. Tanpa model, daftar catatannya tetap ditampilkan. */
@@ -803,7 +905,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Menutup jawaban yang sedang tampil di atas daftar. */
     fun closeAsk() {
         if (askRunning) stopAi()
-        askQuery = ""; askAnswer = ""; askSources = emptyList(); askRunning = false
+        askQuery = ""; askAnswer = ""; askSources = emptyList(); openTasksList = emptyList(); askRunning = false
     }
 
     // ============================== Asisten perintah ==============================
@@ -977,6 +1079,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun restore(n: Note) { update(n.copy(deletedAt = 0)); say("Catatan dipulihkan.") }
 
+    fun moveNoteToFolder(n: Note, folder: String) {
+        val old = n.folder
+        val target = folder.trim()
+        if (old == target) return
+        update(n.copy(folder = target))
+        say(if (target.isEmpty()) "Dikeluarkan dari folder." else "Dipindah ke folder $target.", "Urungkan") {
+            stats.byId[n.id]?.let { update(it.copy(folder = old)) }
+        }
+    }
+
+    fun renameFolder(oldName: String, newName: String) {
+        val target = newName.trim().take(30)
+        if (target.isEmpty() || target == oldName) return
+        val affected = notes.filter { !it.inTrash && it.folder == oldName }
+        if (affected.isEmpty()) return
+        affected.forEach { persist(it.copy(folder = target)) }
+        view = NoteView.Folder(target)
+        viewModelScope.launch { reload() }
+        say("Folder diubah menjadi $target.", "Urungkan") {
+            affected.forEach { old -> stats.byId[old.id]?.let { persist(it.copy(folder = oldName)) } }
+            view = NoteView.Folder(oldName)
+            viewModelScope.launch { reload() }
+        }
+    }
+
+    fun dissolveFolder(name: String) {
+        val affected = notes.filter { !it.inTrash && it.folder == name }
+        if (affected.isEmpty()) { view = NoteView.All; return }
+        affected.forEach { persist(it.copy(folder = "")) }
+        view = NoteView.All
+        viewModelScope.launch { reload() }
+        say("Folder $name dibubarkan (catatan tetap ada).", "Urungkan") {
+            affected.forEach { old -> stats.byId[old.id]?.let { persist(it.copy(folder = name)) } }
+            view = NoteView.Folder(name)
+            viewModelScope.launch { reload() }
+        }
+    }
+
     // ============================== Pengaturan ==============================
 
     fun importModel(uri: Uri) = viewModelScope.launch {
@@ -1076,9 +1216,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun unlocked() { locked = false }
-    /** Dari pintasan ikon: daftar pengingat, atau daftar tugas yang belum selesai. */
+    /** Dari pintasan ikon atau asisten: daftar pengingat, daftar tugas belum selesai, atau fokus kolom perintah. */
     fun showReminders() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.Reminders }
     fun showTasks() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.All; askOpenTasks() }
+    fun openAssist() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.All; searchFocusTick++ }
 
     /** Hanya untuk uji tangkapan layar. */
     internal fun debugLock() { locked = true }
