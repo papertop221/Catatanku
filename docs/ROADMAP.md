@@ -1,11 +1,11 @@
 # Peta jalan dan keputusan
 
-Diperbarui 16 November 2026, untuk penyelesaian cabang `wip-1.7`.
+Diperbarui 16 November 2026, mencakup penyelesaian 1.7, audit keamanan & optimasi HP spek rendah (`keamanan-dan-performa`), serta penetapan `docs/FILOSOFI.md`.
 
 ## Keadaan sekarang
 
-- **1.6** ada di `main` dan sudah diterbitkan.
-- **1.7** di cabang `wip-1.7` sudah selesai ditulis, kedua uji `ReminderTest` yang sebelumnya gagal sudah diperbaiki, dokumen (`CHANGELOG.md`, `fastlane/.../changelogs/8.txt`, `README.md`, `docs/ARSITEKTUR.md`) dan APK rilis bertanda tangan (`releases/Catatanku-1.7.apk`) sudah dibangun.
+- **Panduan wajib aktif:** seluruh pengembangan mengikuti lima pilar di [FILOSOFI.md](FILOSOFI.md) (**Praktis, Efektif & Efisien, Canggih, 100% Privasi, Aman**) dan [AGENTS.md](../AGENTS.md).
+- **1.7** sudah lengkap beserta audit keamanan & optimasi ringan HP spek rendah (40 uji JVM + `PerfTest` lulus; 19 uji Robolectric terkompilasi) dan APK rilis bertanda tangan di `releases/Catatanku-1.7.apk`.
 - Belum ada versi yang diuji menyeluruh di HP sungguhan. Itu prioritas tertinggi sebelum menambah fitur besar.
 
 ## Status 1.7 (cabang `wip-1.7`)

@@ -32,7 +32,17 @@ Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 | **AI yang membantu, bukan mengambil alih** | Ringkas, perbaiki ejaan, ambil daftar tugas, tanya catatan — juga langsung dari menu teks terpilih di aplikasi lain. Hasil selalu ditinjau dulu dan bisa diurungkan. |
 | **Ringan** | APK 24,9 MB. Pencarian instan tanpa model; dekode media dan indeks ditunda hemat RAM untuk HP berspesifikasi rendah; AI hanya memakai RAM saat dipakai. |
 
-**Isi:** [Pasang](#pasang) · [Fitur](#fitur) · [Model AI](#model-ai) · [Privasi](#privasi) · [Build](#build) · [Status pengujian](#status-pengujian) · [Dokumentasi](#dokumentasi) · [Lisensi](#lisensi)
+**Isi:** [Filosofi](#filosofi) · [Pasang](#pasang) · [Fitur](#fitur) · [Model AI](#model-ai) · [Privasi](#privasi) · [Build](#build) · [Status pengujian](#status-pengujian) · [Dokumentasi](#dokumentasi) · [Lisensi](#lisensi)
+
+## Filosofi
+
+Catatanku dibangun di atas lima pilar yang menjadi standar wajib setiap perubahan kode maupun fitur (lihat [Filosofi & Standar Pengembangan](docs/FILOSOFI.md) dan [AGENTS.md](AGENTS.md)):
+
+- **Praktis:** Buka, tulis, selesai — simpan otomatis tanpa tombol simpan, ketuk langsung kotak centang, selalu bisa diurungkan, dan menyatu dengan menu bagikan, teks terpilih, serta Setelan Cepat Android.
+- **Efektif & Efisien:** Tetap responsif dan hemat RAM bahkan di HP berspesifikasi rendah (dekode gambar asinkron/subsampled, cadangan & audio *streaming*, transaksi SQLite, pembaruan indeks ditunda saat mengetik, tanpa dependensi berat).
+- **Canggih:** AI lokal (teks, gambar, suara) yang benar-benar membantu dan terintegrasi sistem, bukan gimmick visual; waktu dan pencarian instan tetap dikerjakan kode deterministik.
+- **100% Privasi:** Offline-first tanpa akun, server, pelacak, iklan, ataupun SDK tertutup (siap F-Droid).
+- **Aman:** Kunci aplikasi ditegakkan hingga ke notifikasi bertoken acak, `FLAG_SECURE`, dan clipboard sensitif; input eksternal (URI, cadangan JSON, prompt AI) disaring ketat dan trafik jaringan tak terenkripsi ditolak.
 
 ## Pasang
 
@@ -192,6 +202,7 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 ## Dokumentasi
 
+- [Filosofi dan standar pengembangan](docs/FILOSOFI.md) — lima pilar wajib (Praktis, Efektif & Efisien, Canggih, 100% Privasi, Aman)
 - [Arsitektur](docs/ARSITEKTUR.md) — struktur kode, alur data, keputusan teknis
 - [Desain](docs/DESAIN.md) — aturan tampilan "Kertas & Tinta"
 - [Riwayat perubahan](CHANGELOG.md)

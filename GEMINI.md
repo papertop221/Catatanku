@@ -1,1 +1,1 @@
-Baca AGENTS.md di akar repositori dan ikuti seluruh isinya.
+Baca `AGENTS.md` dan `docs/FILOSOFI.md` di repositori ini lalu ikuti seluruh isinya tanpa pengecualian.
