@@ -1,11 +1,12 @@
 # Peta jalan dan keputusan
 
-Diperbarui 16 November 2026, mencakup penyelesaian 1.7, audit keamanan & optimasi HP spek rendah (`keamanan-dan-performa`), serta penetapan `docs/FILOSOFI.md`.
+Diperbarui 16 November 2026, mencakup penyelesaian 1.7, audit keamanan & optimasi HP spek rendah (`keamanan-dan-performa`), penetapan `docs/FILOSOFI.md`, serta rilis 1.7.1 dengan pembaruan dari GitHub.
 
 ## Keadaan sekarang
 
 - **Panduan wajib aktif:** seluruh pengembangan mengikuti lima pilar di [FILOSOFI.md](FILOSOFI.md) (**Praktis, Efektif & Efisien, Canggih, 100% Privasi, Aman**) dan [AGENTS.md](../AGENTS.md).
 - **1.7** sudah lengkap beserta audit keamanan & optimasi ringan HP spek rendah (40 uji JVM + `PerfTest` lulus; 19 uji Robolectric terkompilasi) dan APK rilis bertanda tangan di `releases/Catatanku-1.7.apk`.
+- **1.7.1** menambahkan pembaruan dari GitHub: cek rilis resmi paling banyak sekali sehari (bisa dimatikan), catatan rilis, unduhan `DownloadManager`, verifikasi SHA-256/nama paket/versi/sertifikat, lalu pemasangan lewat `PackageInstaller`. APK hanya diunggah ke GitHub Releases agar riwayat git tidak membengkak (44 uji JVM + `PerfTest` lulus; 23 uji Robolectric terkompilasi).
 - Belum ada versi yang diuji menyeluruh di HP sungguhan. Itu prioritas tertinggi sebelum menambah fitur besar.
 
 ## Status 1.7 (cabang `wip-1.7`)
@@ -39,7 +40,7 @@ Diperbarui 16 November 2026, mencakup penyelesaian 1.7, audit keamanan & optimas
 3. **Satu kalimat menjadi beberapa objek**: "besok jam 7 bayar listrik 250rb" → pengingat + tugas, lewat asisten perintah yang sudah ada.
 4. **Catatan suara** dengan transkripsi di perangkat (whisper.cpp atau Vosk; keduanya sumber terbuka).
 5. **Pencarian semantik** dengan model embedding kecil, sebagai pelengkap TF-IDF, bukan pengganti.
-6. **Pindahkan APK dari repositori ke GitHub Releases** agar riwayat git tidak membengkak ±25 MB tiap rilis.
+6. **Pindahkan APK dari repositori ke GitHub Releases** agar riwayat git tidak membengkak ±25 MB tiap rilis (1.7.1 sudah hanya di GitHub Releases; `releases/Catatanku-1.7.apk` lama dibiarkan).
 
 ## Keputusan yang sudah diambil
 
@@ -53,6 +54,7 @@ Jangan diusulkan ulang tanpa alasan baru.
 | Mesin pencarian sendiri (TF-IDF + trigram), bukan Room/FTS4 | Toleran imbuhan dan salah ketik bahasa Indonesia ("lari" menemukan "berlari") |
 | SQLite lewat `SQLiteOpenHelper`, bukan Room | Tanpa pembangkit kode; skema kecil |
 | Distribusi F-Droid dan GitHub, bukan Play Store | Pilihan pemilik; menuntut semua pustaka sumber terbuka |
+| Pembaruan mandiri dari GitHub Releases (unduh + pasang, cek otomatis sekali sehari yang bisa dimatikan) | Diminta pemilik. APK diverifikasi SHA-256 rilis + sertifikat tanda tangan. Konsekuensinya build ini **tidak memenuhi kebijakan F-Droid** yang melarang self-updater; build F-Droid harus mematikan `Updater` |
 | Repositori publik, lisensi Apache-2.0 | Pilihan pemilik |
 | Satu layar tanpa tab; cari dan tombol baru di bawah | Ramah satu tangan, lebih sedikit layar |
 | Amber = waktu, bukan AI; tanpa ikon ✨, gradasi, emoji, kartu berbayang | Menghindari tampilan AI generik; lihat DESAIN.md |

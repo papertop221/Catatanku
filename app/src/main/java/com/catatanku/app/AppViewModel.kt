@@ -116,6 +116,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("ui", Context.MODE_PRIVATE)
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)      // tetap hidup saat layar ditutup (cadangan)
     val ai = LocalAi.get(app)
+    val updater = Updater.get(app)
 
     var screen by mutableStateOf(Screen.List); private set
     var notes by mutableStateOf<List<Note>>(emptyList()); private set     // semua, termasuk sampah
@@ -218,6 +219,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { ai.events.collect { say(it) } }
+        viewModelScope.launch { updater.events.collect { say(it) } }
+        updater.check(manual = false)   // paling banyak sekali sehari; build uji dilewati
         viewModelScope.launch {
             reload()        // daftar tampil dulu; beres-beres menyusul
             val purged = withContext(Dispatchers.IO) {

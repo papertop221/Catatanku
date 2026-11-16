@@ -57,7 +57,16 @@ Catatan pribadi berisi pikiran, rencana, suara, dan gambar milik pengguna. Catat
 
 **Aturan wajib:**
 - **Nol server, nol akun, nol telemetri.** Tidak ada akun login, cloud sync pihak ketiga, analitik, pelacak, iklan, ataupun laporan crash eksternal. Cadangan cloud bawaan Android (`allowBackup`) tetap dinonaktifkan.
-- **Satu-satunya akses jaringan yang diizinkan** adalah mengunduh berkas model AI open-source atas permintaan eksplisit pengguna melalui `DownloadManager` (dengan verifikasi SHA-256 pada katalog `Models.kt`). Aplikasi harus tetap berfungsi penuh 100% meskipun izin `INTERNET` dihapus (impor berkas model lokal tetap berjalan).
+- **Dua akses jaringan yang diizinkan**, keduanya tanpa akun dan tanpa mengirim data pengguna:
+  1. Mengunduh berkas model AI open-source atas permintaan eksplisit pengguna melalui `DownloadManager` (dengan
+     verifikasi SHA-256 pada katalog `Models.kt`).
+  2. Memeriksa dan mengunduh pembaruan aplikasi dari GitHub Releases repositori resmi. Pemeriksaan berjalan paling
+     banyak sekali sehari, bisa dimatikan di Pengaturan, dan APK hanya boleh dipasang setelah ukuran, SHA-256 rilis,
+     nama paket, nomor versi, serta sertifikat tanda tangannya cocok dengan aplikasi terpasang.
+  Aplikasi harus tetap berfungsi penuh 100% meskipun izin `INTERNET` dihapus (impor berkas model lokal tetap berjalan,
+  dan bagian Pembaruan hanya menampilkan pesan galat).
+- **Pembaruan mandiri adalah pengecualian yang disetujui pemilik.** Fitur ini membuat build tersebut tidak memenuhi
+  kebijakan F-Droid yang melarang aplikasi memperbarui dirinya sendiri; build untuk F-Droid harus mematikan updater.
 - **100% pustaka sumber terbuka (siap F-Droid).** Dilarang keras memasukkan Google Play Services, Firebase, ML Kit, AdMob, atau SDK tertutup apa pun.
 - **Prinsip izin minimum (*least privilege*).** Dilarang meminta izin invasif yang tidak esensial (misalnya `AccessibilityService`, membaca daftar aplikasi/kontak penuh, atau lokasi terus-menerus).
 

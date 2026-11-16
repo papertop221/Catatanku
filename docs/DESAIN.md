@@ -58,7 +58,7 @@ berdiri sendiri (bilah atas), ia punya keterangan untuk pembaca layar. Tidak ada
 ## Keadaan yang harus selalu didesain
 
 Memuat (kerangka abu-abu), kosong, tidak ada hasil, galat, izin ditolak, model belum ada, model sedang dimuat,
-RAM tidak cukup, unduhan berjalan.
+RAM tidak cukup, unduhan berjalan, pembaruan tersedia, pembaruan sedang diunduh, dan menunggu izin pemasangan.
 
 ## Yang sengaja dihindari
 

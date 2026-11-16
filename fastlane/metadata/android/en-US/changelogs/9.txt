@@ -1,0 +1,2 @@
+In-app updates: Settings → Updates checks official GitHub releases, shows release notes, then downloads and installs the APK.
+Daily automatic check can be turned off. Size, SHA-256, package name, version, and signing certificate are verified before installing.

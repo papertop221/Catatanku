@@ -1,0 +1,2 @@
+Pembaruan langsung dari dalam aplikasi: Pengaturan → Pembaruan memeriksa rilis resmi GitHub, menampilkan catatan rilis, lalu mengunduh dan memasang APK.
+Pemeriksaan otomatis sekali sehari bisa dimatikan. Ukuran, SHA-256, nama paket, versi, dan sertifikat APK diperiksa sebelum dipasang.

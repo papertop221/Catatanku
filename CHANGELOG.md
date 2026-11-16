@@ -1,5 +1,16 @@
 # Riwayat perubahan
 
+## 1.7.1
+
+Pembaruan dari GitHub
+- Pengaturan → Pembaruan memeriksa rilis terbaru di repositori resmi GitHub, menampilkan catatan rilis, lalu
+  mengunduh dan memasang APK tanpa keluar dari aplikasi
+- Pemeriksaan otomatis berjalan paling banyak sekali sehari saat aplikasi dibuka dan bisa dimatikan; tombol
+  Periksa pembaruan selalu tersedia
+- Hanya aset `Catatanku-<versi>.apk` resmi yang diterima. Sebelum dipasang, ukuran dan SHA-256 dari rilis, nama paket,
+  nomor versi, serta sertifikat tanda tangan APK diperiksa agar hanya build resmi yang dapat menggantikan aplikasi
+- Build uji tidak dapat memasang pembaruan, dan aplikasi tetap berfungsi penuh tanpa izin internet
+
 ## 1.7
 Catatan, editor, dan daftar (perbaikan fundamental)
 - Daftar centang interaktif: ketuk langsung kotak `☐` atau `☑` di editor untuk mencentang/melepas centang tanpa menghapus

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Hanya dipakai untuk mengunduh model AI lewat DownloadManager saat pengguna memintanya.
-         Kode aplikasi tidak membuka koneksi jaringan sendiri. -->
+    <!-- Dipakai untuk mengunduh model AI, serta memeriksa dan mengunduh pembaruan dari GitHub.
+         Pemeriksaan otomatis paling banyak sekali sehari dan bisa dimatikan di Pengaturan. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Memasang pembaruan yang diunduh dari GitHub Releases; Android tetap meminta persetujuan pengguna. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Pengingat: notifikasi, alarm tepat waktu, dan penyetelan ulang setelah HP dinyalakan. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
@@ -80,6 +82,8 @@
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
         </service>
+        <!-- Hasil pemasangan pembaruan dari PackageInstaller; hanya dipakai di dalam aplikasi. -->
+        <receiver android:name=".UpdateInstallReceiver" android:exported="false" />
         <receiver android:name=".ReminderReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

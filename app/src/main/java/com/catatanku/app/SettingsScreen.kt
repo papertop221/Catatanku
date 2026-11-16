@@ -110,6 +110,10 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     val importFrom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::importFrom) }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(vm::setBackupFolder) }
     val ctx = LocalContext.current
+    val update by vm.updater.state.collectAsStateWithLifecycle()
+    val currentVersion = vm.updater.currentVersion
+    var autoUpdate by remember { mutableStateOf(vm.updater.autoCheck) }
+    var releaseNotes by remember { mutableStateOf<UpdateRelease?>(null) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }     // model yang rinciannya sedang dibuka
     // Izin bisa berubah di pengaturan sistem; periksa lagi tiap kali layar ini kembali tampil.
     var canNotify by remember { mutableStateOf(Reminders.canNotify(ctx)) }
@@ -309,11 +313,62 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
             }
 
+            // ---------- Pembaruan ----------
+            Section("Pembaruan")
+            when (val u = update) {
+                UpdateState.Checking -> {
+                    SettingRow("Memeriksa pembaruan", "Menghubungi GitHub untuk nomor versi terbaru.") {}
+                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Gutter))
+                }
+                is UpdateState.Available -> {
+                    val release = u.release
+                    SettingRow(
+                        "Catatanku ${release.version} tersedia",
+                        when {
+                            u.progress != null -> "${u.progress.percent}%  ·  ${u.progress.note}"
+                            u.ready -> "Sudah terunduh dan diperiksa. Tekan Pasang pembaruan; layar sistem akan meminta persetujuan."
+                            else -> "Versi $currentVersion terpasang  ·  unduhan ${release.sizeLabel} dari GitHub"
+                        },
+                        error = u.error != null,
+                    ) {
+                        when {
+                            u.progress != null -> SmallButton("Batalkan") { vm.updater.cancelDownload() }
+                            u.ready -> SmallButton("Pasang pembaruan", primary = true) { vm.updater.install() }
+                            else -> SmallButton("Unduh dan pasang", primary = true) { vm.updater.download() }
+                        }
+                    }
+                    u.progress?.let { LinearProgressIndicator({ it.percent / 100f }, Modifier.fillMaxWidth().padding(horizontal = Gutter)) }
+                    u.error?.let { Muted(it, Modifier.padding(horizontal = Gutter, vertical = 4.dp)) }
+                    TextAction("Lihat catatan rilis", Modifier.padding(start = 8.dp)) { releaseNotes = release }
+                }
+                is UpdateState.Failed -> SettingRow("Gagal memeriksa pembaruan", u.message, error = true) {
+                    SmallButton("Coba lagi") { vm.updater.check(manual = true) }
+                }
+                else -> SettingRow(
+                    "Versi $currentVersion terpasang",
+                    if (update == UpdateState.UpToDate) {
+                        "Sudah versi terbaru." + if (vm.updater.lastCheck > 0) " Diperiksa ${whenLabel(vm.updater.lastCheck)}." else ""
+                    } else {
+                        "Periksa apakah ada rilis baru di GitHub."
+                    },
+                ) { SmallButton("Periksa pembaruan") { vm.updater.check(manual = true) } }
+            }
+            SettingRow(
+                "Periksa otomatis",
+                "Sekali sehari saat aplikasi dibuka. Tidak ada data yang dikirim; hanya meminta nomor versi terbaru dari GitHub.",
+            ) {
+                Switch(autoUpdate, {
+                    autoUpdate = it
+                    vm.updater.autoCheck = it
+                    if (it) vm.updater.check(manual = false)
+                })
+            }
+
             // ---------- Privasi ----------
             Section("Privasi")
             Muted(
-                "Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Internet hanya dipakai saat kamu menekan Unduh, " +
-                    "untuk mengambil berkas model dari huggingface.co.",
+                "Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Internet hanya dipakai saat kamu menekan Unduh " +
+                    "untuk mengambil model dari huggingface.co, dan saat memeriksa atau mengunduh pembaruan dari github.com.",
                 Modifier.padding(horizontal = Gutter),
             )
             Spacer(Modifier.height(32.dp))
@@ -345,5 +400,26 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     confirmDelete?.let { id ->
         Confirm("Hapus model ini?", "Catatan tidak terpengaruh. Model bisa dipasang lagi kapan saja.", "Hapus model", destructive = true,
             onDismiss = { confirmDelete = null }) { vm.deleteModel(id) }
+    }
+    releaseNotes?.let { release ->
+        AlertDialog(
+            onDismissRequest = { releaseNotes = null },
+            title = { Text("Apa yang baru di ${release.version}", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    Text(release.notes.ifBlank { "Rilis ini tidak menyertakan catatan." })
+                }
+            },
+            confirmButton = {
+                TextAction("Buka di GitHub") {
+                    releaseNotes = null
+                    runCatching {
+                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.page)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+            },
+            dismissButton = { TextAction("Tutup") { releaseNotes = null } },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        )
     }
 }

@@ -46,8 +46,8 @@ data class Download(val id: String, val percent: Int, val note: String)
  * LLM lokal lewat LiteRT-LM. Model (.litertlm) diunduh dari katalog atau diimpor dari berkas,
  * lalu dijalankan sepenuhnya di perangkat.
  *
- * Satu-satunya pemakaian jaringan di aplikasi ini ada di [startDownload], dan itu dijalankan oleh
- * DownloadManager milik Android; kode aplikasi sendiri tidak pernah membuka koneksi.
+ * Unduhan model memakai DownloadManager milik Android. Pemeriksaan dan unduhan pembaruan aplikasi ada di
+ * [Updater]; keduanya hanya berjalan saat pengguna meminta atau (untuk pembaruan) paling banyak sekali sehari.
  */
 class LocalAi private constructor(private val context: Context) {
     companion object {

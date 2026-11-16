@@ -8,12 +8,12 @@
 
 *An offline-first Android notes app with reminders and an on-device AI assistant. No account, no cloud, no tracking.*
 
-[![Versi](https://img.shields.io/badge/versi-1.7-191918)](CHANGELOG.md)
+[![Versi](https://img.shields.io/badge/versi-1.7.1-191918)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-191918)](#pasang)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
 [![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-### [Unduh Catatanku 1.7 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.7.apk)
+### [Unduh Catatanku 1.7.1 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.7.1/Catatanku-1.7.1.apk)
 
 Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 
@@ -41,24 +41,25 @@ Catatanku dibangun di atas lima pilar yang menjadi standar wajib setiap perubaha
 - **Praktis:** Buka, tulis, selesai — simpan otomatis tanpa tombol simpan, ketuk langsung kotak centang, selalu bisa diurungkan, dan menyatu dengan menu bagikan, teks terpilih, serta Setelan Cepat Android.
 - **Efektif & Efisien:** Tetap responsif dan hemat RAM bahkan di HP berspesifikasi rendah (dekode gambar asinkron/subsampled, cadangan & audio *streaming*, transaksi SQLite, pembaruan indeks ditunda saat mengetik, tanpa dependensi berat).
 - **Canggih:** AI lokal (teks, gambar, suara) yang benar-benar membantu dan terintegrasi sistem, bukan gimmick visual; waktu dan pencarian instan tetap dikerjakan kode deterministik.
-- **100% Privasi:** Offline-first tanpa akun, server, pelacak, iklan, ataupun SDK tertutup (siap F-Droid).
+- **100% Privasi:** Offline-first tanpa akun, server, pelacak, iklan, ataupun SDK tertutup; jaringan hanya untuk model AI dan pembaruan resmi dari GitHub.
 - **Aman:** Kunci aplikasi ditegakkan hingga ke notifikasi bertoken acak, `FLAG_SECURE`, dan clipboard sensitif; input eksternal (URI, cadangan JSON, prompt AI) disaring ketat dan trafik jaringan tak terenkripsi ditolak.
 
 ## Pasang
 
-1. Unduh [`Catatanku-1.7.apk`](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.7.apk).
+1. Unduh [`Catatanku-1.7.1.apk`](https://github.com/papertop221/Catatanku/releases/download/v1.7.1/Catatanku-1.7.1.apk).
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `9a0734c572218dd13ac76c86621e12c600dbb3bc427961fccd76ded1289df070`
+SHA-256: `f5c14673e1efe198a528ca3c0107a18275ce6a6f37c655c4f7a80fa2b5fe0a0d`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
-**Memperbarui dari 1.4, 1.5, atau 1.6:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Sebelum memperbarui,
-sebaiknya ekspor dulu lewat Pengaturan → Cadangan → **Ekspor**.
+**Memperbarui dari 1.4–1.7:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Mulai 1.7.1,
+pembaruan berikutnya bisa dijalankan dari Pengaturan → **Pembaruan**. Sebelum memperbarui, sebaiknya ekspor dulu lewat
+Pengaturan → Cadangan → **Ekspor**.
 
 > [!IMPORTANT]
-> Versi 1.7 lulus 40 uji unit JVM + 1 benchmark `PerfTest` di Termux (dan membawa 19 uji Robolectric yang terkompilasi untuk desktop Linux glibc), serta telah mulai diuji sebagian di HP. Bila menemukan masalah,
+> Versi 1.7.1 lulus 44 uji unit JVM + 1 benchmark `PerfTest` di Termux (dan membawa 23 uji Robolectric yang terkompilasi untuk desktop Linux glibc), serta telah mulai diuji sebagian di HP. Bila menemukan masalah,
 > [laporkan di sini](https://github.com/papertop221/Catatanku/issues/new/choose) dengan menyebut merek HP dan versi Android.
 
 <details>
@@ -69,7 +70,7 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 
 1. Di versi lama: Pengaturan → **Ekspor**, simpan berkas JSON-nya.
 2. Copot versi lama. Model AI yang sudah diunduh ikut terhapus.
-3. Pasang 1.7, lalu Pengaturan → **Impor**.
+3. Pasang 1.7.1, lalu Pengaturan → **Impor**.
 4. Unduh ulang model AI.
 
 </details>
@@ -122,6 +123,11 @@ Hasil AI selalu ditinjau dulu sebelum diterapkan; "Ganti isi" bisa diurungkan, d
 - Mode terang dan gelap (hitam pekat); pilihan warna mengikuti wallpaper di Android 12+
 - Aturan desainnya tertulis di [DESAIN.md](docs/DESAIN.md)
 
+**Pembaruan**
+- Pengaturan → Pembaruan memeriksa GitHub Releases resmi, menampilkan catatan rilis, lalu mengunduh dan memasang APK di dalam aplikasi
+- Pemeriksaan otomatis sekali sehari bisa dimatikan; hanya APK dengan SHA-256 dan sertifikat tanda tangan yang sama dengan aplikasi terpasang yang dapat dipasang
+- Versi lama (sebelum fitur ini ada) perlu diperbarui sekali secara manual; sesudahnya pembaruan berjalan dari dalam aplikasi
+
 **Keamanan dan cadangan**
 - Kunci aplikasi dengan sidik jari atau PIN layar HP (`FLAG_SECURE` juga melindungi layar teks terpilih dan salinan papan klip ditandai sensitif di Android 13+)
 - Validasi ketat intent notifikasi (`EXTRA_TOKEN`), URI eksternal (menolak `file://` dan otoritas internal), batas baca impor JSON 32 MB, dan pembersih token templat prompt AI
@@ -153,11 +159,16 @@ Sudah punya berkas `.litertlm`? Pakai **Dari berkas**.
 ## Privasi
 
 Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Izin internet hanya dipakai untuk mengunduh berkas model saat
-pengguna memintanya, lewat `DownloadManager` Android; kode aplikasi tidak membuka koneksi sendiri. Cadangan cloud
-Android dimatikan. Untuk varian tanpa izin internet sama sekali, hapus `uses-permission INTERNET` di manifest —
-impor model dari berkas tetap berfungsi.
+pengguna memintanya, dan untuk memeriksa/mengunduh pembaruan dari GitHub (otomatis paling banyak sekali sehari, bisa
+dimatikan). Tidak ada isi catatan atau data pengguna yang dikirim. Cadangan cloud Android dimatikan.
 
-Izin lain: notifikasi, alarm tepat waktu, dan mulai-saat-boot untuk pengingat; biometrik untuk kunci aplikasi.
+Pembaruan mandiri membuat build ini tidak memenuhi kebijakan F-Droid, yang melarang aplikasi memperbarui dirinya
+sendiri; build untuk F-Droid perlu mematikan `Updater`. Untuk varian tanpa izin internet sama sekali, hapus
+`uses-permission INTERNET` di manifest — impor model dari berkas tetap berfungsi dan bagian Pembaruan hanya
+menampilkan pesan galat.
+
+Izin lain: notifikasi, alarm tepat waktu, dan mulai-saat-boot untuk pengingat; biometrik untuk kunci aplikasi;
+pemasangan aplikasi (`REQUEST_INSTALL_PACKAGES`) untuk memasang pembaruan setelah disetujui pengguna.
 
 ## Build
 
@@ -190,14 +201,14 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Semua uji di bawah | 40 uji unit JVM + 1 benchmark `PerfTest` lulus di Termux (`AgentTest` 7, `AiTextTest` 17, `SearchEngineTest` 9, `TimeParseTest` 7, `PerfTest` 1); 19 uji Robolectric (`ReminderTest` 16, `Shots*` 3) terkompilasi dan disiapkan untuk desktop Linux glibc |
+| Semua uji di bawah | 44 uji unit JVM + 1 benchmark `PerfTest` lulus di Termux (`AgentTest` 7, `AiTextTest` 17, `SearchEngineTest` 9, `TimeParseTest` 7, `UpdaterTest` 4, `PerfTest` 1); 23 uji Robolectric (`ReminderTest` 16, `UpdateParserTest` 4, `Shots*` 3) terkompilasi dan disiapkan untuk desktop Linux glibc |
 | Mesin pencarian, pengurai keluaran AI, pengaman prompt, ekstraksi tugas dua langkah (gambar/suara), katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
 | Pengingat (alarm, mode tahan penghemat baterai, deteksi terlambat vs HP mati, uji mandiri, token intent, notifikasi, tunda, selesai, boot), catatan dari luar, riwayat versi, cadangan streaming & sanitasi lampiran/URI, migrasi v2 → v3 → v4 | Uji otomatis di Android tiruan (Robolectric) |
 | Asisten perintah: rencana, jalankan, urungkan, riwayat versi | Uji otomatis di Android tiruan (Robolectric) |
 | Tampilan 23 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
 | Prompt AI dengan Gemma 4 E2B, Qwen3 1.7B, Qwen2.5 1.5B | Diuji di desktop lewat `litertlm-jvm` |
 | Prompt asisten perintah | Diuji di desktop dengan Gemma 4 E2B saja: 15 dari 19 kalimat bebas benar |
-| Build rilis 1.7 yang disusutkan R8 | Tanda tangan sama dengan 1.4–1.6 (`CN=Catatanku, O=papertop221`); belum dijalankan di HP |
+| Build rilis 1.7.1 yang disusutkan R8 | Tanda tangan sama dengan 1.4–1.7 (`CN=Catatanku, O=papertop221`); belum dijalankan di HP |
 | Aplikasi di HP sungguhan (sentuhan, geser baris, bunyi alarm, sidik jari, unduhan, kecepatan, RAM, menu teks terpilih, mulai otomatis OEM) | **Belum diuji** |
 
 ## Dokumentasi

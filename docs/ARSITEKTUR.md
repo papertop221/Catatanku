@@ -1,7 +1,7 @@
 # Arsitektur
 
 Satu modul (`app`), dua Activity (`MainActivity` dan lembar `ProcessTextActivity`), UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
-Tujuannya kode yang kecil dan mudah dibaca: ±5.800 baris Kotlin di tujuh belas berkas.
+Tujuannya kode yang kecil dan mudah dibaca: ±7.700 baris Kotlin di sembilan belas berkas.
 
 ## Berkas
 
@@ -18,6 +18,7 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 | `Media.kt` | Lampiran gambar (kompresi JPEG ≤ 1600px), perekam suara WAV 16 kHz mono (`VoiceRecorder`), pemutar suara (`AudioPlayer`) | Ya |
 | `Reminders.kt` | Alarm sistem, notifikasi, penerima siaran (`ReminderReceiver`), deteksi terlambat, uji pengingat | Ya |
 | `LocalAi.kt` | Unduh/impor/ganti model, engine LiteRT-LM (teks, gambar, suara; satu per proses), pembangkitan streaming | Ya |
+| `Updater.kt` | Periksa rilis GitHub, unduh APK, verifikasi SHA-256 + sertifikat, pasang lewat `PackageInstaller` | Ya |
 | `SystemIntegration.kt` | Menu teks terpilih (`ProcessTextActivity`), tile Setelan Cepat (`QuickNoteTile`), pintasan ikon, kalender, setelan baterai pabrikan (`Oem`) | Ya |
 | `AppViewModel.kt` | Seluruh state dan logika aplikasi | Ya |
 | `ListScreen.kt` | Layar utama: blok "Hari ini", jawaban & daftar tugas interaktif, daftar, bilah bawah, geser baris | Ya |
@@ -142,6 +143,18 @@ Model yang "berpikir" dulu (mis. Qwen3) tidak cocok: di pengujian, satu perminta
 `DownloadManager` Android mengunduh ke penyimpanan eksternal milik aplikasi sebagai `.part`. Setelah selesai,
 ukuran dan SHA-256 diperiksa, baru berkas diganti nama dan dijadikan model aktif. Status dipantau dengan polling,
 dan dilanjutkan bila aplikasi sempat ditutup.
+
+### Pembaruan aplikasi
+
+`Updater` meminta `https://api.github.com/repos/papertop221/Catatanku/releases/latest` lewat HTTPS tanpa akun. Pemeriksaan
+otomatis berjalan paling banyak sekali sehari saat aplikasi dibuka (bisa dimatikan di Pengaturan); tombol **Periksa
+pembaruan** selalu tersedia. Hanya aset bernama `Catatanku-<versi>.apk` yang punya digest SHA-256 dan tautan resmi repo
+yang diterima; rilis draf, prarilis, tautan non-HTTPS, dan repo lain diabaikan.
+
+APK diunduh lewat `DownloadManager`, lalu diperiksa berlapis sebelum dipasang: ukuran dan SHA-256 dari rilis, nama paket,
+nomor versi lebih tinggi, serta sertifikat tanda tangan APK harus sama dengan aplikasi terpasang. Pemasangan memakai
+`PackageInstaller` (izin `REQUEST_INSTALL_PACKAGES`) dan tetap menampilkan layar persetujuan Android. Build uji
+(`FLAG_DEBUGGABLE`) tidak boleh memasang pembaruan karena paket dan kunci tanda tangannya berbeda.
 
 ## Asisten perintah
 
