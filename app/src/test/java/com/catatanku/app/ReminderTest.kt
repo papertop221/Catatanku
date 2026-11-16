@@ -346,6 +346,11 @@ class ReminderTest {
                     "remind_alarm INTEGER NOT NULL DEFAULT 0, remind_fired INTEGER NOT NULL DEFAULT 0, " +
                     "attachments TEXT NOT NULL DEFAULT '')"
             )
+            old.execSQL(
+                "CREATE TABLE versions(id INTEGER PRIMARY KEY AUTOINCREMENT, note_id INTEGER NOT NULL, " +
+                    "title TEXT NOT NULL, body TEXT NOT NULL, saved INTEGER NOT NULL)"
+            )
+            old.execSQL("CREATE INDEX versions_note ON versions(note_id)")
             old.execSQL("INSERT INTO notes(title,body,tags,pinned,created,updated) VALUES('Versi4','isi v4','',0,10,20)")
             old.version = 4
         }
