@@ -39,6 +39,8 @@ class ReminderTest {
 
     @Before fun setUp() {
         NoteDb.resetForTest()
+        app.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().clear().commit()
+        org.robolectric.shadows.ShadowAlarmManager.setCanScheduleExactAlarms(true)
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         Reminders.channels(app)
     }
@@ -81,7 +83,6 @@ class ReminderTest {
 
     @Test fun lateReminderIsRecordedButPhoneOffIsNot() {
         // HP "menyala" 2 jam: pengingat yang berbunyi 10 menit terlambat berarti ditahan sistem.
-        android.os.SystemClock.setCurrentTimeMillis(System.currentTimeMillis())
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofHours(2))
         val n = note(System.currentTimeMillis() - 10 * 60_000)
         assertEquals(0L, Reminders.lastLate(app).first)

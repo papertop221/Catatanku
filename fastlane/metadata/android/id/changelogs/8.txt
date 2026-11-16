@@ -1,0 +1,3 @@
+"Catatanku" di menu teks terpilih aplikasi lain: simpan sebagai catatan, simpan dengan pengingat, ringkas, perbaiki ejaan, atau ambil daftar tugas.
+Tile Setelan Cepat "Catatan baru" dan pintasan tekan-lama ikon aplikasi.
+Pengingat tahan penghemat baterai: jadwalkan sebagai alarm sistem (bawaan aktif di Oppo/Vivo/Realme/Xiaomi), deteksi keterlambatan, uji pengingat 2 menit, panduan setelan per merek HP, dan salin pengingat ke Kalender HP.

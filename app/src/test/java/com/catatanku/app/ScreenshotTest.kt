@@ -13,6 +13,7 @@ import org.robolectric.annotation.GraphicsMode
  * Merender tiap layar ke PNG (app/build/shots) agar desain bisa ditinjau tanpa perangkat:
  *   ./gradlew testDebugUnitTest --tests '*ScreenshotTest*' -Pshots=true
  */
+@OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 abstract class Shots(private val suffix: String) {
@@ -82,9 +83,9 @@ abstract class Shots(private val suffix: String) {
         val hint = vm.reminderHint()
         check(hint != null && hint.hasTime) { "Waktu di catatan rapat harus dikenali: $hint" }
         shot("12-editor-saran-pengingat")
-        rule.runOnUiThread { vm.openReminder(seed = hint!!.at.toMillis()) }
+        rule.runOnUiThread { vm.openReminder(seed = hint.at.toMillis()) }
         shot("13-lembar-pengingat")
-        rule.runOnUiThread { vm.saveReminder(hint!!.at.toMillis(), Repeat.None, alarm = true) }
+        rule.runOnUiThread { vm.saveReminder(hint.at.toMillis(), Repeat.None, alarm = true) }
         check(vm.draft.hasReminder && vm.draft.remindAlarm)
         shot("14-editor-berpengingat")
         // Mengubah isi lalu menutup menyimpan keadaan lama ke riwayat versi.
@@ -146,6 +147,16 @@ abstract class Shots(private val suffix: String) {
         shot("22-rencana-bermasalah")
         rule.runOnUiThread { vm.closeAgent(); vm.debugLock() }
         shot("17-terkunci")
+
+        // ---- 1.7: menu teks terpilih (ProcessTextActivity) ----
+        androidx.test.core.app.ActivityScenario.launch<ProcessTextActivity>(
+            android.content.Intent(rule.activity, ProcessTextActivity::class.java)
+                .putExtra(android.content.Intent.EXTRA_PROCESS_TEXT, "Rapat evaluasi proyek besok jam 10 pagi di ruang lantai 2.")
+                .putExtra(android.content.Intent.EXTRA_PROCESS_TEXT_READONLY, false)
+        ).use {
+            rule.waitForIdle()
+            captureScreenRoboImage("build/shots/23-teks-terpilih-$suffix.png")
+        }
     }
 }
 

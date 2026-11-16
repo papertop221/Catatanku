@@ -1,7 +1,7 @@
 # Arsitektur
 
-Satu modul (`app`), satu Activity, UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
-Tujuannya kode yang kecil dan mudah dibaca: ±5.000 baris Kotlin di lima belas berkas.
+Satu modul (`app`), dua Activity (`MainActivity` dan lembar `ProcessTextActivity`), UI Jetpack Compose, tanpa pustaka navigasi atau injeksi dependensi.
+Tujuannya kode yang kecil dan mudah dibaca: ±5.300 baris Kotlin di enam belas berkas.
 
 ## Berkas
 
@@ -15,8 +15,9 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 | `Agent.kt` | Asisten perintah: pengurai perintah, prompt perumus ulang, penerapan pada isi catatan | Tidak |
 | `Models.kt` | Katalog model: URL terkunci revisi, ukuran, SHA-256, anjuran RAM | Tidak |
 | `Data.kt` | `Note`, SQLite (`NoteDb`), riwayat versi, cadangan JSON | Ya |
-| `Reminders.kt` | Alarm sistem, notifikasi, penerima siaran (`ReminderReceiver`) | Ya |
-| `LocalAi.kt` | Unduh/impor/ganti model, engine LiteRT-LM, pembangkitan streaming | Ya |
+| `Reminders.kt` | Alarm sistem, notifikasi, penerima siaran (`ReminderReceiver`), deteksi terlambat, uji pengingat | Ya |
+| `LocalAi.kt` | Unduh/impor/ganti model, engine LiteRT-LM (satu per proses), pembangkitan streaming | Ya |
+| `SystemIntegration.kt` | Menu teks terpilih (`ProcessTextActivity`), tile Setelan Cepat (`QuickNoteTile`), pintasan ikon, kalender, setelan baterai pabrikan (`Oem`) | Ya |
 | `AppViewModel.kt` | Seluruh state dan logika aplikasi | Ya |
 | `ListScreen.kt` | Layar utama: blok "Hari ini", jawaban, daftar, bilah bawah, geser baris | Ya |
 | `EditorScreen.kt` | Editor dan simpan otomatis | Ya |
@@ -171,17 +172,42 @@ dan menyemat dengan kalimat bebas paling sering keliru. Kecepatan di HP dan mode
 
 `AlarmManager` membangunkan `ReminderReceiver`, yang menampilkan notifikasi. Tidak ada layanan latar yang terus hidup.
 
-- **Tepat waktu**: `setAlarmClock` (gaya alarm) atau `setExactAndAllowWhileIdle`. Bila izin alarm tepat waktu dicabut,
-  jatuh ke `setAndAllowWhileIdle`, yang bisa terlambat beberapa menit.
+- **Tepat waktu**: `setAlarmClock` (gaya alarm, atau semua pengingat bila "Jadwalkan sebagai alarm sistem" aktif) atau
+  `setExactAndAllowWhileIdle`. Bila izin alarm tepat waktu dicabut, jatuh ke `setAndAllowWhileIdle`, yang bisa terlambat
+  beberapa menit.
+- **Tahan penghemat baterai**: di HP dengan pembatas latar agresif (`Oem.aggressive`: Oppo, Vivo, Realme, OnePlus, Xiaomi,
+  Huawei, Transsion), mode `robust` bawaan menyala sehingga semua pengingat memakai `setAlarmClock` — jenis alarm yang
+  dikecualikan dari Doze dan paling jarang ditahan sistem. Bila pengingat tetap berbunyi terlambat ≥ 3 menit saat HP
+  menyala (`SystemClock.elapsedRealtime() >= late + 60_000L`, sehingga pengingat yang terlewat karena HP mati tidak
+  ikut dihitung), `Reminders.noteLateness` mencatatnya untuk ditampilkan di Pengaturan bersama langkah setelan per
+  pabrikan (`Oem.steps`), pembuka halaman mulai otomatis (`Oem.openAutostart`), permintaan pengecualian baterai, dan
+  tombol "Uji pengingat" 2 menit (`Reminders.startTest`). Lembar pengingat juga menyediakan "Salin juga ke Kalender HP"
+  (`addToCalendar`) lewat intent `ACTION_INSERT` tanpa meminta izin kalender.
 - **Gaya alarm**: kanal notifikasi tersendiri dengan nada dan volume alarm, `FLAG_INSISTENT` (nada diulang). Setelah
   2 menit tanpa tanggapan, dering dihentikan dan diganti notifikasi "Terlewat".
 - **Setelah berbunyi**: pengingat berulang maju ke jadwal berikutnya; yang sekali ditandai `remind_fired` dan tetap
   menempel pada catatan (merah di daftar) sampai "Selesai" ditekan atau catatannya dibuka dari notifikasi.
 - **Bertahan**: alarm disetel ulang saat HP dinyalakan, aplikasi diperbarui, jam diubah, dan tiap aplikasi dibuka.
   Pengingat yang terlewat selagi HP mati berbunyi segera setelahnya.
-- **Satu pintu**: semua penulisan catatan di `AppViewModel` lewat `persist()`, yang memanggil `Reminders.sync()`.
+- **Satu pintu**: semua penulisan catatan di `AppViewModel` lewat `persist()`, dan catatan dari luar layar utama lewat
+  `saveFromOutside()`, yang keduanya memanggil `Reminders.sync()` serta menandai cadangan otomatis (`dirty`).
   Penerima alarm hanya mengubah kolom pengingat (`NoteDb.setReminder`) agar tidak menimpa suntingan yang berjalan,
   lalu memberi tahu layar lewat `Reminders.changed`.
+
+## Integrasi sistem
+
+`SystemIntegration.kt` menampung pintu masuk dari luar aplikasi:
+
+- **Menu teks terpilih (`ProcessTextActivity`)**: menerima `ACTION_PROCESS_TEXT` dari aplikasi mana pun. Teks bisa
+  langsung disimpan sebagai catatan, disimpan beserta pengingat bila `TimeParse.best(text)` menemukan waktu, atau
+  diolah dengan AI lokal (Ringkas, Perbaiki ejaan, Ambil daftar tugas). Bila aplikasi asal mengizinkan penyuntingan
+  (`EXTRA_PROCESS_TEXT_READONLY == false`), tombol utamanya mengganti teks terpilih di aplikasi asal lewat `RESULT_OK`.
+  Layar ini hanya menulis catatan baru dan tidak menampilkan catatan yang ada, sehingga aman dipakai walau kunci
+  aplikasi aktif. Begitu ditutup (`onDestroy`), ia memberi sinyal `TRIM_MEMORY_UI_HIDDEN` ke `LocalAi.get(this)` agar
+  model tidak menahan RAM.
+- **Tile Setelan Cepat (`QuickNoteTile`)**, **pintasan ikon dinamis (`publishShortcuts`)**, dan **intent publik**
+  (`com.catatanku.app.NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS`) membuka `MainActivity` langsung ke catatan baru,
+  tampilan Pengingat, atau daftar tugas yang belum selesai.
 
 **Pengenal waktu** (`TimeParse`) deterministik: ekspresi reguler untuk tanggal, hari, jam, dan kata relatif, lalu
 dipasangkan per baris. LLM tidak menghitung tanggal. "Sarankan pengingat" hanya meminta LLM menyalin frasa waktunya
@@ -234,8 +260,10 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 | `SearchEngineTest` | Morfologi, salah ketik, kecocokan palsu, catatan terkait |
 | `AiTextTest` | Pengurai keluaran model, pembersih Markdown, tombol centang, batas prompt, katalog, pemotongan catatan panjang |
 | `TimeParseTest` | 40-an frasa waktu, termasuk yang BUKAN waktu ("pace 6:30", "km 24.500"), dan pengulangan |
-| `ReminderTest` | Alarm, notifikasi, tunda, selesai, gaya alarm, HP dinyalakan ulang, riwayat versi, cadangan, migrasi v2 → v3 |
-| `ShotsLight` / `ShotsDark` / `ShotsTall` | Render 22 layar ke PNG |
+| `ReminderTest` | Alarm, mode tahan penghemat baterai (`setAlarmClock`), deteksi terlambat vs HP mati, uji mandiri, notifikasi, tunda, selesai, gaya alarm, HP dinyalakan ulang, catatan dari luar (`saveFromOutside`), riwayat versi, cadangan, migrasi v2 → v3 |
+| `AgentTest` | Pengurai perintah asisten, penerapan langkah, dan pengaman keluaran model |
+| `PerfTest` | Pengukuran waktu bangun indeks, pembaruan satu catatan, pencarian, dan catatan terkait |
+| `ShotsLight` / `ShotsDark` / `ShotsTall` | Render 23 layar ke PNG (termasuk lembar teks terpilih) |
 
 Uji tangkapan layar menjalankan aplikasi sungguhan di Robolectric dengan basis data nyata dan berkas model tiruan
 (model tidak pernah dimuat).

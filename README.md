@@ -8,12 +8,12 @@
 
 *An offline-first Android notes app with reminders and an on-device AI assistant. No account, no cloud, no tracking.*
 
-[![Versi](https://img.shields.io/badge/versi-1.6-191918)](CHANGELOG.md)
+[![Versi](https://img.shields.io/badge/versi-1.7-191918)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-191918)](#pasang)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
 [![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-### [Unduh Catatanku 1.6 (APK, 25 MB)](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.6.apk)
+### [Unduh Catatanku 1.7 (APK, 25 MB)](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.7.apk)
 
 Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 
@@ -27,28 +27,28 @@ Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 | | |
 |---|---|
 | **Milikmu sendiri** | Tanpa akun dan tanpa server. Catatan, pengingat, dan pemrosesan AI tidak pernah keluar dari HP. |
-| **Tidak kelupaan** | Pengingat sekali atau berulang, gaya alarm, dan blok "Hari ini" untuk yang terlewat dan tugas yang belum selesai. |
+| **Tidak kelupaan** | Pengingat sekali atau berulang, gaya alarm, mode tahan penghemat baterai, dan blok "Hari ini" untuk yang terlewat dan tugas yang belum selesai. |
 | **Cukup diketik** | "ingatkan saya bayar listrik besok jam 7 malam" di kolom cari menjadi catatan berpengingat, setelah kamu setujui. |
-| **AI yang membantu, bukan mengambil alih** | Ringkas, perbaiki ejaan, ambil daftar tugas, tanya catatan. Hasil selalu ditinjau dulu dan bisa diurungkan. |
+| **AI yang membantu, bukan mengambil alih** | Ringkas, perbaiki ejaan, ambil daftar tugas, tanya catatan — juga langsung dari menu teks terpilih di aplikasi lain. Hasil selalu ditinjau dulu dan bisa diurungkan. |
 | **Ringan** | APK 25 MB. Pencarian instan tanpa model; model AI opsional dan hanya memakai RAM saat dipakai. |
 
 **Isi:** [Pasang](#pasang) · [Fitur](#fitur) · [Model AI](#model-ai) · [Privasi](#privasi) · [Build](#build) · [Status pengujian](#status-pengujian) · [Dokumentasi](#dokumentasi) · [Lisensi](#lisensi)
 
 ## Pasang
 
-1. Unduh [`Catatanku-1.6.apk`](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.6.apk).
+1. Unduh [`Catatanku-1.7.apk`](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.7.apk).
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `300877a57002ec658eef560600bab2ca4cbb2a1eb7594d5e7a306cc3254d3944`
+SHA-256: `a285ece473c135bc1ea9b40010b68f642b3d1373281191ba0aacbedfaba5d57a`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
-**Memperbarui dari 1.4 atau 1.5:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Sebelum memperbarui,
+**Memperbarui dari 1.4, 1.5, atau 1.6:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Sebelum memperbarui,
 sebaiknya ekspor dulu lewat Pengaturan → Cadangan → **Ekspor**.
 
 > [!IMPORTANT]
-> Versi 1.6 lulus 49 uji otomatis, tetapi belum diuji menyeluruh di HP sungguhan. Bila menemukan masalah,
+> Versi 1.7 lulus 54 uji unit/Robolectric di kode, tetapi belum diuji menyeluruh di HP sungguhan. Bila menemukan masalah,
 > [laporkan di sini](https://github.com/papertop221/Catatanku/issues/new/choose) dengan menyebut merek HP dan versi Android.
 
 <details>
@@ -59,7 +59,7 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 
 1. Di versi lama: Pengaturan → **Ekspor**, simpan berkas JSON-nya.
 2. Copot versi lama. Model AI yang sudah diunduh ikut terhapus.
-3. Pasang 1.6, lalu Pengaturan → **Impor**.
+3. Pasang 1.7, lalu Pengaturan → **Impor**.
 4. Unduh ulang model AI.
 
 </details>
@@ -71,12 +71,15 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 - Daftar centang dan poin, hitung kata, urutkan
 - Riwayat versi: 20 versi terakhir tiap catatan bisa dipulihkan
 - Bagikan/salin, terima teks dari aplikasi lain
+- Menu teks terpilih di aplikasi lain (browser, obrolan, PDF): simpan langsung sebagai catatan, simpan dengan pengingat, atau ringkas/perbaiki ejaan/ambil daftar tugas dengan AI lokal (dan ganti teks di aplikasi asal bila kolomnya bisa disunting)
+- Tile Setelan Cepat "Catatan baru", pintasan tekan-lama ikon aplikasi, dan intent publik (`NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS`)
 - Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; tekan lama untuk aksi lain
 - Blok "Hari ini": pengingat yang terlewat atau jatuh hari ini, dan jumlah tugas yang belum dicentang
 
 **Pengingat**
 - Sekali, harian, mingguan, atau bulanan; berbunyi saat aplikasi tertutup dan setelah HP dinyalakan ulang
 - Notifikasi biasa, atau gaya alarm yang berdering dengan volume alarm sampai ditanggapi
+- Mode tahan penghemat baterai (`setAlarmClock`, bawaan aktif di Oppo, Vivo, Realme, OnePlus, Xiaomi, Huawei, Transsion), deteksi keterlambatan, tombol "Uji pengingat" 2 menit, panduan setelan mulai otomatis per merek HP, dan salin pengingat ke Kalender HP
 - "Selesai" dan "Tunda 10 mnt" langsung dari notifikasi; yang belum ditanggapi tampil merah di daftar
 - Waktu di isi catatan ("besok jam 7 malam", "tanggal 24 jam 10 pagi") dikenali dan ditawarkan sebagai pengingat, tanpa model
 
@@ -174,15 +177,15 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Semua uji di bawah | 49 uji, lulus pada 1.6 |
+| Semua uji di bawah | 54 uji otomatis (35 uji unit JVM lulus di Termux; 19 uji Robolectric disiapkan untuk desktop Linux glibc) |
 | Mesin pencarian, pengurai keluaran AI, katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
-| Pengingat (alarm, notifikasi, tunda, selesai, boot), riwayat versi, cadangan, migrasi v2 → v3 | Uji otomatis di Android tiruan (Robolectric) |
+| Pengingat (alarm, mode tahan penghemat baterai, deteksi terlambat vs HP mati, uji mandiri, notifikasi, tunda, selesai, boot), catatan dari luar, riwayat versi, cadangan, migrasi v2 → v3 | Uji otomatis di Android tiruan (Robolectric) |
 | Asisten perintah: rencana, jalankan, urungkan, riwayat versi | Uji otomatis di Android tiruan (Robolectric) |
-| Tampilan 22 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
+| Tampilan 23 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
 | Prompt AI dengan Gemma 4 E2B, Qwen3 1.7B, Qwen2.5 1.5B | Diuji di desktop lewat `litertlm-jvm` |
 | Prompt asisten perintah | Diuji di desktop dengan Gemma 4 E2B saja: 15 dari 19 kalimat bebas benar |
-| Build rilis yang disusutkan R8 | Diperiksa isinya (kelas LiteRT-LM utuh, tanda tangan sama dengan 1.4); belum dijalankan di HP |
-| Aplikasi di HP sungguhan (sentuhan, geser baris, bunyi alarm, sidik jari, unduhan, kecepatan, RAM) | **Belum diuji** |
+| Build rilis 1.7 yang disusutkan R8 | Tanda tangan sama dengan 1.4–1.6 (`CN=Catatanku, O=papertop221`); belum dijalankan di HP |
+| Aplikasi di HP sungguhan (sentuhan, geser baris, bunyi alarm, sidik jari, unduhan, kecepatan, RAM, menu teks terpilih, mulai otomatis OEM) | **Belum diuji** |
 
 ## Dokumentasi
 

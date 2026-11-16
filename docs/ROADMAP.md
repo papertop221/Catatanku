@@ -1,40 +1,34 @@
 # Peta jalan dan keputusan
 
-Diperbarui 16 November 2026, setelah rilis 1.6.
+Diperbarui 16 November 2026, untuk penyelesaian cabang `wip-1.7`.
 
 ## Keadaan sekarang
 
-- **1.6** ada di `main` dan sudah diterbitkan (APK di `releases/`). 49 uji otomatis lulus.
+- **1.6** ada di `main` dan sudah diterbitkan.
+- **1.7** di cabang `wip-1.7` sudah selesai ditulis, kedua uji `ReminderTest` yang sebelumnya gagal sudah diperbaiki, dokumen (`CHANGELOG.md`, `fastlane/.../changelogs/8.txt`, `README.md`, `docs/ARSITEKTUR.md`) dan APK rilis bertanda tangan (`releases/Catatanku-1.7.apk`) sudah dibangun.
 - Belum ada versi yang diuji menyeluruh di HP sungguhan. Itu prioritas tertinggi sebelum menambah fitur besar.
 
-## Berikutnya: 1.7 (cabang `wip-1.7`, belum selesai)
-
-Kodenya sudah ditulis dan terkompilasi, tetapi **belum diuji di HP** dan **dua uji baru masih gagal**.
+## Status 1.7 (cabang `wip-1.7`)
 
 | Bagian | Isi | Status |
 |---|---|---|
-| Menu teks terpilih | "Catatanku" di menu salin/tempel aplikasi lain: simpan, simpan + pengingat, ringkas, perbaiki ejaan, ambil tugas; bisa mengganti teks di aplikasi asal (`ProcessTextActivity`) | Terkompilasi |
-| Tile Setelan Cepat | "Catatan baru" (`QuickNoteTile`) | Terkompilasi |
-| Pintasan ikon | Catatan baru, Pengingat, Tugas belum selesai (didaftarkan dari kode, `publishShortcuts`) | Terkompilasi |
-| Intent publik | `com.catatanku.app.NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS` (untuk Tasker dan sejenisnya) | Terkompilasi |
-| Pengingat tahan penghemat baterai | Semua pengingat dijadwalkan dengan `setAlarmClock` (bawaan nyala di HP Oppo/Vivo/Realme/Xiaomi), deteksi pengingat terlambat, tombol "Uji pengingat" 2 menit, langkah setelan per pabrikan, pengecualian pengoptimalan baterai | Terkompilasi; 2 uji gagal |
-| Salin ke Kalender HP | Dari lembar pengingat, lewat layar "acara baru" kalender (tanpa izin kalender) | Terkompilasi |
-| Lain-lain | `LocalAi` satu objek per proses; `whenLabel` lebih murah; `localeFilters` id/en | Terkompilasi |
+| Menu teks terpilih | "Catatanku" di menu salin/tempel aplikasi lain: simpan, simpan + pengingat (waktu berwarna amber sesuai `DESAIN.md`), ringkas, perbaiki ejaan, ambil tugas; bisa mengganti teks di aplikasi asal (`ProcessTextActivity`) | Selesai di kode; masuk `ScreenshotTest` (`23-teks-terpilih`) |
+| Tile Setelan Cepat | "Catatan baru" (`QuickNoteTile`) | Selesai di kode |
+| Pintasan ikon | Catatan baru, Pengingat, Tugas belum selesai (didaftarkan dari kode, `publishShortcuts`) | Selesai di kode |
+| Intent publik | `com.catatanku.app.NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS` (untuk Tasker dan sejenisnya) | Selesai di kode |
+| Pengingat tahan penghemat baterai | Semua pengingat dijadwalkan dengan `setAlarmClock` (bawaan nyala di HP Oppo/Vivo/Realme/Xiaomi), deteksi pengingat terlambat, tombol "Uji pengingat" 2 menit, langkah setelan per pabrikan, pengecualian pengoptimalan baterai | Selesai di kode; kedua uji `ReminderTest` diperbaiki |
+| Salin ke Kalender HP | Dari lembar pengingat, lewat layar "acara baru" kalender (tanpa izin kalender) | Selesai di kode |
+| Lain-lain | `LocalAi` satu objek per proses; `whenLabel` lebih murah; `localeFilters` id/en; APK rilis 1.7 (`releases/Catatanku-1.7.apk`) dan dokumen 1.7 | Selesai |
 
-**Yang harus dibereskan sebelum 1.7 digabung:**
+**Catatan pengujian 1.7:**
 
-1. `ReminderTest.robustModeUsesAlarmClockForEveryReminder` gagal (NullPointerException). Kemungkinan uji membaca
-   `alarmClockInfo` yang tidak diisi Robolectric; periksa dulu apakah kodenya benar, baru ujinya.
-2. `ReminderTest.lateReminderIsRecordedButPhoneOffIsNot` gagal: pengingat yang terlewat karena HP mati ikut tercatat
-   sebagai "terlambat". Periksa cara `Reminders.noteLateness` membedakan HP mati dan aplikasi ditahan
-   (`SystemClock.elapsedRealtime`), dan cara uji memajukan jam.
-3. Render tangkapan layar Pengaturan (bagian baru "Agar pengingat tidak ditahan HP") dan lembar menu teks terpilih,
-   lalu periksa terhadap DESAIN.md.
-4. Uji di HP sungguhan, terutama Oppo dan Vivo:
+1. `ReminderTest.robustModeUsesAlarmClockForEveryReminder` diperbaiki dengan mengaktifkan `ShadowAlarmManager.setCanScheduleExactAlarms(true)` di `ReminderTest.setUp()` (di Robolectric SDK 36 nilainya bawaan `false`, padahal di Android nyata izin `USE_EXACT_ALARM` aktif saat dipasang) dan membersihkan `SharedPreferences("ui")` antar-uji.
+2. `ReminderTest.lateReminderIsRecordedButPhoneOffIsNot` diperbaiki dengan menghapus pemanggilan `SystemClock.setCurrentTimeMillis(System.currentTimeMillis())` yang di Robolectric mengubah jam monotonik `elapsedRealtime()` menjadi puluhan tahun epoch, sehingga cukup `ShadowSystemClock.advanceBy(Duration.ofHours(2))`.
+3. Di lingkungan Termux (Android Bionic), 35 uji unit JVM murni (`AiTextTest`, `SearchEngineTest`, `TimeParseTest`, `AgentTest`) serta `assembleRelease` (R8) lulus; eksekusi runtime Robolectric (`ReminderTest`, `ScreenshotTest`) membutuhkan lingkungan Linux desktop (`glibc`) karena `librobolectric-nativeruntime.so` ditautkan ke `glibc`.
+4. Yang masih perlu diuji di HP sungguhan (terutama Oppo dan Vivo):
    - Uji pengingat dengan aplikasi ditutup dari layar aplikasi terbaru dan layar terkunci.
    - Tombol "Buka setelan mulai otomatis": nama halaman pabrikan diambil dari daftar komunitas dan bisa berbeda antarversi.
    - Menu teks terpilih di browser dan aplikasi obrolan; pastikan model tidak dimuat dua kali.
-5. CHANGELOG, changelog fastlane `8.txt`, README, dan ARSITEKTUR untuk 1.7.
 
 ## Sesudah itu (belum dikerjakan, urutan usulan)
 

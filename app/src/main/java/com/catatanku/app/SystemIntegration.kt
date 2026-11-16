@@ -255,16 +255,16 @@ class ProcessTextActivity : ComponentActivity() {
                     if (out == null) {
                         Text(text, Modifier.padding(top = 6.dp, bottom = 10.dp), style = NoteType.rowSnippet, color = muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         @androidx.compose.runtime.Composable
-                        fun Option(title: String, hint: String, enabled: Boolean = true, onClick: () -> Unit) = Row(
+                        fun Option(title: String, hint: String, enabled: Boolean = true, hintColor: androidx.compose.ui.graphics.Color = muted, onClick: () -> Unit) = Row(
                             Modifier.fillMaxWidth().clip(SmallShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick).heightIn(min = 48.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else muted.copy(alpha = 0.5f))
-                            Muted(hint, Modifier.padding(start = 12.dp))
+                            Text(hint, Modifier.padding(start = 12.dp), color = hintColor, style = MaterialTheme.typography.bodySmall)
                         }
                         Option("Simpan sebagai catatan", "Tanpa AI") { save(text) }
                         // Waktu yang disebut di teks dikenali tanpa model.
-                        if (time != null) Option("Simpan dan ingatkan", whenLabel(time)) { save(text, time) }
+                        if (time != null) Option("Simpan dan ingatkan", whenLabel(time), hintColor = timeColor) { save(text, time) }
                         Hairline(Modifier.padding(vertical = 4.dp))
                         Option("Ringkas", "Menjadi 3–5 poin", hasModel) { run(AiAction.Summarize, text) }
                         Option("Perbaiki ejaan", "Makna tetap", hasModel) { run(AiAction.Fix, text) }

@@ -1,5 +1,29 @@
 # Riwayat perubahan
 
+## 1.7
+Integrasi sistem
+- "Catatanku" di menu teks terpilih aplikasi lain (browser, obrolan, PDF): simpan langsung sebagai catatan, simpan
+  dengan pengingat bila teks memuat waktu, atau olah dengan AI lokal (ringkas, perbaiki ejaan, ambil daftar tugas) dan
+  ganti teks di aplikasi asal bila kolomnya bisa disunting
+- Tile Setelan Cepat "Catatan baru" untuk menulis dari mana saja
+- Pintasan tekan-lama ikon aplikasi: Catatan baru, Pengingat, dan Tugas belum selesai
+- Intent publik `com.catatanku.app.NEW_NOTE`, `SHOW_REMINDERS`, dan `SHOW_TASKS` untuk aplikasi otomasi (mis. Tasker)
+
+Pengingat tahan penghemat baterai
+- Jadwalkan sebagai alarm sistem (`setAlarmClock`) untuk semua pengingat, jenis alarm yang paling jarang ditahan
+  penghemat baterai; aktif bawaan di HP Oppo, Vivo, Realme, OnePlus, Xiaomi, Huawei, dan Transsion
+- Deteksi pengingat terlambat: bila pengingat berbunyi jauh setelah waktunya saat HP menyala, Pengaturan memberi
+  tahu dan mengarahkan langkah perbaikannya (yang terlewat karena HP mati tidak dihitung)
+- Tombol "Uji pengingat" 2 menit di Pengaturan untuk memastikan pengingat berbunyi saat aplikasi ditutup dan layar terkunci
+- Panduan setelan latar belakang per merek HP, tombol pembuka halaman mulai otomatis pabrikan, dan permintaan
+  pengecualian pengoptimalan baterai Android
+- "Salin juga ke Kalender HP" di lembar pengingat sebagai cadangan tanpa meminta izin kalender
+
+Lain-lain
+- `LocalAi` menjadi satu objek per proses agar layar utama dan lembar teks terpilih tidak memuat model dua kali
+- Pemformat waktu (`whenLabel`) memakai `DateTimeFormatter` bersama tanpa membuat `SimpleDateFormat` tiap baris;
+  filter bahasa sumber daya (`id`, `en`)
+
 ## 1.6
 Tampilan baru "Kertas & Tinta" (aturannya di docs/DESAIN.md)
 - Satu layar utama: blok "Hari ini" (pengingat yang terlewat atau jatuh hari ini, jumlah tugas belum dicentang), lalu daftar
