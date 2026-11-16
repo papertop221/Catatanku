@@ -1,41 +1,73 @@
+<div align="center">
+
+<img src="docs/gambar/ikon.png" width="96" alt="Ikon Catatanku">
+
 # Catatanku
 
-Aplikasi catatan pribadi Android yang bekerja offline, dengan asisten AI yang berjalan sepenuhnya di perangkat.
+**Catatan pribadi yang bekerja offline, dengan AI yang berjalan sepenuhnya di HP.**
 
-**[⬇ Unduh APK v1.4](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.4.apk)** · 32 MB · Android 8.0+ · arm64
+*An offline-first Android notes app with reminders and an on-device AI assistant. No account, no cloud, no tracking.*
 
-> Kode sumber di cabang ini sudah versi 1.6 (tampilan baru, lebih ringan, asisten perintah). APK 1.6 belum diterbitkan di sini;
-> tautan di atas masih 1.4.
+[![Versi](https://img.shields.io/badge/versi-1.6-191918)](CHANGELOG.md)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-191918)](#pasang)
+[![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
+[![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-![Tampilan terang](docs/screenshots/terang.png)
-![Tampilan gelap](docs/screenshots/gelap.png)
+### [Unduh Catatanku 1.6 (APK, 25 MB)](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.6.apk)
+
+Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
+
+</div>
+
+![Daftar, editor, lembar pengingat, dan rencana asisten dalam mode terang](docs/screenshots/terang.png)
+![Tampilan yang sama dalam mode gelap](docs/screenshots/gelap.png)
+
+## Sekilas
+
+| | |
+|---|---|
+| **Milikmu sendiri** | Tanpa akun dan tanpa server. Catatan, pengingat, dan pemrosesan AI tidak pernah keluar dari HP. |
+| **Tidak kelupaan** | Pengingat sekali atau berulang, gaya alarm, dan blok "Hari ini" untuk yang terlewat dan tugas yang belum selesai. |
+| **Cukup diketik** | "ingatkan saya bayar listrik besok jam 7 malam" di kolom cari menjadi catatan berpengingat, setelah kamu setujui. |
+| **AI yang membantu, bukan mengambil alih** | Ringkas, perbaiki ejaan, ambil daftar tugas, tanya catatan. Hasil selalu ditinjau dulu dan bisa diurungkan. |
+| **Ringan** | APK 25 MB. Pencarian instan tanpa model; model AI opsional dan hanya memakai RAM saat dipakai. |
+
+**Isi:** [Pasang](#pasang) · [Fitur](#fitur) · [Model AI](#model-ai) · [Privasi](#privasi) · [Build](#build) · [Status pengujian](#status-pengujian) · [Dokumentasi](#dokumentasi) · [Lisensi](#lisensi)
 
 ## Pasang
 
-1. Unduh [`Catatanku-1.4.apk`](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.4.apk).
+1. Unduh [`Catatanku-1.6.apk`](https://github.com/papertop221/Catatanku/raw/main/releases/Catatanku-1.6.apk).
 2. Buka berkasnya di HP dan izinkan pemasangan dari sumber ini bila diminta.
 3. Opsional: Pengaturan → Model AI → unduh model untuk mengaktifkan fitur AI.
 
-SHA-256: `6ce7f72a4326d350d598c1709216dcdf5899bb8e49c94a681548dd38ca7f952b`
+SHA-256: `300877a57002ec658eef560600bab2ca4cbb2a1eb7594d5e7a306cc3254d3944`
 
 Play Protect mungkin menampilkan peringatan aplikasi tak dikenal, karena APK ini tidak berasal dari Play Store.
 
-### Pindah dari 1.3 atau lebih lama
+**Memperbarui dari 1.4 atau 1.5:** pasang langsung di atasnya; catatan, pengingat, dan model AI tetap. Sebelum memperbarui,
+sebaiknya ekspor dulu lewat Pengaturan → Cadangan → **Ekspor**.
 
-Versi 1.4 ditandatangani dengan kunci baru yang tetap; kunci versi lama tidak tersimpan. Android menolak memasang 1.4
-di atas versi lama, jadi:
+> [!IMPORTANT]
+> Versi 1.6 lulus 49 uji otomatis, tetapi belum diuji menyeluruh di HP sungguhan. Bila menemukan masalah,
+> [laporkan di sini](https://github.com/papertop221/Catatanku/issues/new/choose) dengan menyebut merek HP dan versi Android.
+
+<details>
+<summary>Pindah dari 1.3 atau lebih lama</summary>
+
+Mulai 1.4 aplikasi ditandatangani dengan kunci baru yang tetap; kunci versi lama tidak tersimpan. Android menolak memasang
+versi baru di atas 1.3 atau lebih lama, jadi:
 
 1. Di versi lama: Pengaturan → **Ekspor**, simpan berkas JSON-nya.
 2. Copot versi lama. Model AI yang sudah diunduh ikut terhapus.
-3. Pasang 1.4, lalu Pengaturan → **Impor**.
+3. Pasang 1.6, lalu Pengaturan → **Impor**.
 4. Unduh ulang model AI.
 
-Mulai 1.4, pembaruan berikutnya bisa dipasang langsung selama dibangun dengan kunci yang sama (lihat [Build](#build)).
+</details>
 
 ## Fitur
 
 **Catatan**
-- Simpan otomatis, sematkan, folder, tag, arsip, dan sampah (pulih dalam 30 hari)
+- Simpan otomatis tiap jeda mengetik, sematkan, folder, tag, arsip, dan Sampah (pulih dalam 30 hari)
 - Daftar centang dan poin, hitung kata, urutkan
 - Riwayat versi: 20 versi terakhir tiap catatan bisa dipulihkan
 - Bagikan/salin, terima teks dari aplikasi lain
@@ -63,12 +95,17 @@ Mulai 1.4, pembaruan berikutnya bisa dipasang langsung selama dibangun dengan ku
 - *Bantu tulis*: lanjutkan, perbaiki ejaan, rapikan struktur, ringkas, ambil daftar tugas, buat judul, instruksi bebas
 - *Catatan panjang*: ringkas, daftar tugas, dan perbaiki ejaan memproses seluruh isi bagian demi bagian
 - *Merapikan*: isi judul, folder, dan tag yang kosong untuk satu atau semua catatan, atau otomatis saat catatan ditutup
-- *Tanya catatan*: jawaban dari hingga 4 catatan paling relevan, lengkap dengan sumbernya
+- *Tanya catatan*: jawaban dari hingga 4 catatan paling relevan, tampil di atas daftar lengkap dengan sumbernya
 - *Rekap 7 hari* dan daftar semua tugas yang belum dicentang
 - *Sarankan pengingat* dari jadwal atau tenggat di catatan
 - *Perluas pencarian*: "jogging" → "lari, olahraga"
 
 Hasil AI selalu ditinjau dulu sebelum diterapkan; "Ganti isi" bisa diurungkan, dan merapikan tidak pernah menimpa isian yang sudah ada.
+
+**Tampilan**
+- Satu layar tanpa tab; kolom cari, filter tag, dan tombol catatan baru di bawah, sejangkauan ibu jari
+- Mode terang dan gelap (hitam pekat); pilihan warna mengikuti wallpaper di Android 12+
+- Aturan desainnya tertulis di [DESAIN.md](docs/DESAIN.md)
 
 **Keamanan dan cadangan**
 - Kunci aplikasi dengan sidik jari atau PIN layar HP
@@ -91,6 +128,9 @@ Model berukuran berkas lebih kecil belum tentu lebih ringan: pada pengukuran, Ge
 Untuk HP dengan RAM terbatas, nyalakan **Mode ringan** (aktif otomatis bila RAM di bawah 7 GB): jendela konteks lebih
 kecil dan model langsung dilepas dari memori, dengan konsekuensi AI membaca teks lebih pendek.
 
+Model hanya dimuat saat fitur AI dipakai. Ia dilepas dari RAM setelah menganggur, begitu aplikasi ditinggalkan, atau saat
+sistem kekurangan memori; bila RAM yang tersedia tidak cukup, model tidak dimuat dan aplikasi memberi tahu alasannya.
+
 Semua berlisensi Apache-2.0 dari [litert-community](https://huggingface.co/litert-community) dan bisa diunduh tanpa login.
 Sudah punya berkas `.litertlm`? Pakai **Dari berkas**.
 
@@ -108,10 +148,11 @@ Izin lain: notifikasi, alarm tepat waktu, dan mulai-saat-boot untuk pengingat; b
 Butuh JDK 17+ dan Android SDK 36.
 
 ```bash
-./gradlew assembleRelease      # APK: app/build/outputs/apk/release/
+./gradlew assembleRelease      # APK rilis (R8): app/build/outputs/apk/release/
 ./gradlew assembleDebug        # APK uji "Catatanku uji" (id .uji), bisa berdampingan dengan rilis resmi
 ./gradlew testDebugUnitTest    # uji logika + render layar
 ./gradlew testDebugUnitTest --tests '*Shots*' -Pshots=true   # tangkapan layar → app/build/shots/
+./gradlew testDebugUnitTest --tests '*PerfTest*' -Pperf=true -i   # pengukuran mesin pencarian
 ```
 
 Versi: AGP 8.13.2 · Kotlin 2.4.21 · Compose BOM 2025.10.01 · LiteRT-LM 0.19.1 · minSdk 26.
@@ -133,23 +174,27 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
+| Semua uji di bawah | 49 uji, lulus pada 1.6 |
 | Mesin pencarian, pengurai keluaran AI, katalog model, pengenal waktu, pemotongan catatan panjang, pengurai perintah asisten | Uji unit otomatis |
 | Pengingat (alarm, notifikasi, tunda, selesai, boot), riwayat versi, cadangan, migrasi v2 → v3 | Uji otomatis di Android tiruan (Robolectric) |
 | Asisten perintah: rencana, jalankan, urungkan, riwayat versi | Uji otomatis di Android tiruan (Robolectric) |
 | Tampilan 22 layar, terang & gelap | Dirender otomatis (Robolectric + Roborazzi) |
 | Prompt AI dengan Gemma 4 E2B, Qwen3 1.7B, Qwen2.5 1.5B | Diuji di desktop lewat `litertlm-jvm` |
 | Prompt asisten perintah | Diuji di desktop dengan Gemma 4 E2B saja: 15 dari 19 kalimat bebas benar |
-| Aplikasi di HP sungguhan (sentuhan, bunyi alarm, sidik jari, unduhan, kecepatan, RAM) | **Belum diuji** |
+| Build rilis yang disusutkan R8 | Diperiksa isinya (kelas LiteRT-LM utuh, tanda tangan sama dengan 1.4); belum dijalankan di HP |
+| Aplikasi di HP sungguhan (sentuhan, geser baris, bunyi alarm, sidik jari, unduhan, kecepatan, RAM) | **Belum diuji** |
 
 ## Dokumentasi
 
 - [Arsitektur](docs/ARSITEKTUR.md) — struktur kode, alur data, keputusan teknis
 - [Desain](docs/DESAIN.md) — aturan tampilan "Kertas & Tinta"
 - [Riwayat perubahan](CHANGELOG.md)
+- [Berkontribusi](CONTRIBUTING.md)
 
 ## Lisensi
 
 [Apache License 2.0](LICENSE) © 2026 papertop221.
 
 Model AI tidak disertakan dan diunduh pengguna langsung dari penerbitnya di bawah lisensi masing-masing
-(Gemma 4 dan Qwen2.5: Apache-2.0). Pustaka pihak ketiga: LiteRT-LM, Jetpack Compose, Kotlin (Apache-2.0).
+(Gemma 4 dan Qwen3: Apache-2.0). Pustaka pihak ketiga: LiteRT-LM, Jetpack Compose, Kotlin (Apache-2.0).
+Huruf Atkinson Hyperlegible Next © Braille Institute of America, [SIL Open Font License 1.1](docs/lisensi/AtkinsonHyperlegibleNext-OFL.txt).

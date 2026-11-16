@@ -1,0 +1,13 @@
+name: Usul fitur
+description: Ide untuk membuat Catatanku lebih berguna
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: Masalah yang ingin diselesaikan
+      description: Ceritakan situasinya, bukan hanya fiturnya.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Usulan

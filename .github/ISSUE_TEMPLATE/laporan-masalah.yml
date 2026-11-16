@@ -1,0 +1,37 @@
+name: Laporan masalah
+description: Ada yang tidak berjalan semestinya
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: Apa yang terjadi?
+      description: Ceritakan langkahnya, apa yang kamu harapkan, dan apa yang muncul.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Versi Catatanku
+      placeholder: "1.6"
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: HP dan versi Android
+      placeholder: "Oppo A78, Android 14, RAM 8 GB"
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Bagian
+      options:
+        - Catatan dan editor
+        - Pengingat
+        - Pencarian
+        - AI lokal atau model
+        - Asisten perintah
+        - Cadangan atau kunci
+        - Lainnya
+  - type: textarea
+    attributes:
+      label: Model AI yang dipakai (bila terkait AI)
+      description: Nama model, Mode ringan nyala atau tidak, GPU nyala atau tidak.
