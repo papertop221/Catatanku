@@ -48,8 +48,12 @@ data class Download(val id: String, val percent: Int, val note: String)
  * Satu-satunya pemakaian jaringan di aplikasi ini ada di [startDownload], dan itu dijalankan oleh
  * DownloadManager milik Android; kode aplikasi sendiri tidak pernah membuka koneksi.
  */
-class LocalAi(private val context: Context) {
+class LocalAi private constructor(private val context: Context) {
     companion object {
+        @Volatile private var instance: LocalAi? = null
+        /** Satu mesin untuk seluruh proses: layar utama dan menu teks terpilih memakai model yang sama, tidak pernah dua salinan di RAM. */
+        fun get(context: Context): LocalAi = instance ?: synchronized(this) { instance ?: LocalAi(context.applicationContext).also { instance = it } }
+
         const val IDLE_MS = 3 * 60_000L
         // Mode ringan: jendela konteks lebih kecil (RAM lebih hemat), masukan lebih pendek, model segera dilepas.
         const val LIGHT_IDLE_MS = 20_000L

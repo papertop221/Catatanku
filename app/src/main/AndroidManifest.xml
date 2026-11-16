@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Dialog sistem "izinkan berjalan di latar": agar pengingat tidak ditahan penghemat baterai. Hanya diminta bila pengguna menekan tombolnya. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Kunci aplikasi: sidik jari/wajah lewat dialog sistem. Aplikasi tidak pernah melihat data biometrik. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <application
@@ -36,7 +38,37 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+            <!-- Tile, pintasan ikon, dan aplikasi otomasi (mis. Tasker) -->
+            <intent-filter>
+                <action android:name="com.catatanku.app.NEW_NOTE" />
+                <action android:name="com.catatanku.app.SHOW_REMINDERS" />
+                <action android:name="com.catatanku.app.SHOW_TASKS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
+        <!-- "Catatanku" di menu teks terpilih aplikasi lain: simpan, atau olah dengan AI lokal. -->
+        <activity
+            android:name=".ProcessTextActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Catatanku.Overlay"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".QuickNoteTile"
+            android:exported="true"
+            android:icon="@drawable/ic_tile"
+            android:label="@string/tile_new_note"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
         <receiver android:name=".ReminderReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

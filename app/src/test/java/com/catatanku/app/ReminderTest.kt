@@ -67,6 +67,65 @@ class ReminderTest {
         assertFalse(db.get(n.id)!!.hasReminder)
     }
 
+    @Test fun robustModeUsesAlarmClockForEveryReminder() {
+        val at = System.currentTimeMillis() + hour
+        val n = note(at)
+        Reminders.setRobust(app, false); Reminders.sync(app, n)
+        assertNull("pengingat biasa bukan alarm jam", alarms.scheduledAlarms.single().alarmClockInfo)
+        // Jenis alarm yang paling jarang ditahan penghemat baterai; setRobust menjadwal ulang semua pengingat.
+        Reminders.setRobust(app, true)
+        val a = alarms.scheduledAlarms.single()
+        assertEquals(at, a.alarmClockInfo!!.triggerTime)
+        assertEquals(at, a.triggerAtMs)
+    }
+
+    @Test fun lateReminderIsRecordedButPhoneOffIsNot() {
+        // HP "menyala" 2 jam: pengingat yang berbunyi 10 menit terlambat berarti ditahan sistem.
+        android.os.SystemClock.setCurrentTimeMillis(System.currentTimeMillis())
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofHours(2))
+        val n = note(System.currentTimeMillis() - 10 * 60_000)
+        assertEquals(0L, Reminders.lastLate(app).first)
+        receive(Reminders.ACT_FIRE, n.id)
+        assertTrue(Reminders.lastLate(app).first >= 10 * 60_000)
+        Reminders.clearLate(app)
+        // Terlewat lebih lama daripada HP menyala = HP sedang mati saat waktunya: bukan salah penghemat baterai.
+        val off = note(System.currentTimeMillis() - 30 * hour)
+        receive(Reminders.ACT_FIRE, off.id)
+        assertEquals(0L, Reminders.lastLate(app).first)
+        // Tepat waktu tidak dicatat.
+        val ok = note(System.currentTimeMillis() - 5_000)
+        receive(Reminders.ACT_FIRE, ok.id)
+        assertEquals(0L, Reminders.lastLate(app).first)
+    }
+
+    @Test fun selfTestSchedulesAndReports() {
+        val due = Reminders.startTest(app)
+        assertEquals(due, alarms.scheduledAlarms.single().triggerAtMs)
+        assertEquals(due to null, Reminders.testState(app))
+        receive(Reminders.ACT_TEST, Reminders.TEST_ID)
+        assertEquals("Uji pengingat berhasil", nm.activeNotifications.single().notification.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(0L, Reminders.testState(app).second)
+    }
+
+    @Test fun whenLabelIsRelative() {
+        val base = java.time.LocalDateTime.of(2026, 11, 16, 9, 0)
+        fun l(t: java.time.LocalDateTime) = whenLabel(t.toMillis(), base.toMillis())
+        assertEquals("Hari ini 19.00", l(base.withHour(19)))
+        assertEquals("Besok 07.00", l(base.plusDays(1).withHour(7)))
+        assertEquals("Kemarin 09.00", l(base.minusDays(1)))
+        assertEquals("Sel, 24 Nov 10.00", l(java.time.LocalDateTime.of(2026, 11, 24, 10, 0)))
+        assertEquals("2 Jan 2027 08.30", l(java.time.LocalDateTime.of(2027, 1, 2, 8, 30)))
+        assertEquals("Besok 00.15", whenLabel(java.time.LocalDateTime.of(2027, 1, 1, 0, 15).toMillis(), java.time.LocalDateTime.of(2026, 12, 31, 23, 0).toMillis()))
+    }
+
+    @Test fun noteSavedFromOutsideGetsItsAlarm() {
+        val at = System.currentTimeMillis() + hour
+        val id = saveFromOutside(app, Note(body = "Rapat besok", remindAt = at))
+        assertEquals("Rapat besok", db.get(id)!!.body)
+        assertEquals(at, alarms.scheduledAlarms.single().triggerAtMs)
+        assertTrue(app.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("dirty", false))
+    }
+
     @Test fun repeatingReminderMovesForward() {
         val at = System.currentTimeMillis() - 60_000
         val n = note(at, Repeat.Daily)

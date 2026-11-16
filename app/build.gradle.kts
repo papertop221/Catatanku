@@ -14,8 +14,8 @@ android {
         applicationId = "com.catatanku.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
         // Hanya arm64: hampir semua HP Android modern. Hapus baris ini bila perlu emulator x86_64.
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -47,6 +47,8 @@ android {
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
+    // Aplikasi ini berbahasa Indonesia; terjemahan pustaka ke puluhan bahasa lain tidak ikut dibawa.
+    androidResources { localeFilters += listOf("id", "en") }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

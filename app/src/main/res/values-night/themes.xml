@@ -2,5 +2,11 @@
     <style name="Theme.Catatanku" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/window</item>
     </style>
+    <!-- Lembar di atas aplikasi lain (menu teks terpilih): jendela tembus pandang, isinya lembar bawah. -->
+    <style name="Theme.Catatanku.Overlay" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
     <color name="window">#000000</color>
 </resources>

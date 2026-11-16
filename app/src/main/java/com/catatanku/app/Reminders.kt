@@ -29,19 +29,22 @@ import java.util.Locale
 fun LocalDateTime.toMillis(): Long = atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 fun Long.toLocal(): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(this), ZoneId.systemDefault())
 
-/** "Hari ini 19.00", "Besok 07.00", "Sel, 24 Nov 10.00"; tahun hanya ditulis bila berbeda. */
+private val WHEN_LOCALE: Locale = Locale.forLanguageTag("id-ID")
+private val WHEN_TIME = java.time.format.DateTimeFormatter.ofPattern("HH.mm", WHEN_LOCALE)
+private val WHEN_DAY = java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", WHEN_LOCALE)
+private val WHEN_FULL = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", WHEN_LOCALE)
+
+/** "Hari ini 19.00", "Besok 07.00", "Sel, 24 Nov 10.00"; tahun hanya ditulis bila berbeda. Dipanggil untuk tiap baris daftar, jadi pemformatnya dibuat sekali. */
 fun whenLabel(t: Long, now: Long = System.currentTimeMillis()): String {
-    val id = Locale.forLanguageTag("id-ID")
-    val c = Calendar.getInstance().apply { timeInMillis = t }
-    val n = Calendar.getInstance().apply { timeInMillis = now }
-    val time = SimpleDateFormat("HH.mm", id).format(Date(t))
-    fun dayIndex(x: Calendar) = x[Calendar.YEAR] * 366L + x[Calendar.DAY_OF_YEAR]
+    val at = t.toLocal()
+    val day = at.toLocalDate(); val today = now.toLocal().toLocalDate()
+    val time = WHEN_TIME.format(at)
     return when {
-        c[Calendar.YEAR] == n[Calendar.YEAR] && dayIndex(c) - dayIndex(n) == 0L -> "Hari ini $time"
-        c[Calendar.YEAR] == n[Calendar.YEAR] && dayIndex(c) - dayIndex(n) == 1L -> "Besok $time"
-        c[Calendar.YEAR] == n[Calendar.YEAR] && dayIndex(c) - dayIndex(n) == -1L -> "Kemarin $time"
-        c[Calendar.YEAR] == n[Calendar.YEAR] -> SimpleDateFormat("EEE, d MMM", id).format(Date(t)) + " $time"
-        else -> SimpleDateFormat("d MMM yyyy", id).format(Date(t)) + " $time"
+        day == today -> "Hari ini $time"
+        day == today.plusDays(1) -> "Besok $time"
+        day == today.minusDays(1) -> "Kemarin $time"
+        day.year == today.year -> WHEN_DAY.format(at) + " $time"
+        else -> WHEN_FULL.format(at) + " $time"
     }
 }
 
@@ -60,6 +63,10 @@ object Reminders {
     const val ACT_DONE = "com.catatanku.app.REMIND_DONE"
     const val ACT_SNOOZE = "com.catatanku.app.REMIND_SNOOZE"
     const val ACT_QUIET = "com.catatanku.app.REMIND_QUIET"
+    const val ACT_TEST = "com.catatanku.app.REMIND_TEST"
+    const val TEST_ID = -7L
+    const val TEST_DELAY_MS = 2 * 60_000L
+    const val LATE_MS = 3 * 60_000L      // di atas ini pengingat dianggap ditahan sistem
     const val EXTRA_ID = "note_id"
     const val EXTRA_OPEN = "open_note"
     const val SNOOZE_MINUTES = 10
@@ -118,12 +125,69 @@ object Reminders {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("ui", Context.MODE_PRIVATE)
+
+    /**
+     * "Tahan penghemat baterai": semua pengingat dijadwalkan dengan `setAlarmClock`, jenis alarm yang dipakai jam
+     * weker dan paling jarang ditahan penghemat baterai (dikecualikan dari Doze, dan sistem membangunkan HP
+     * menjelang waktunya). Konsekuensinya ikon alarm tampil di bilah status. Bawaannya aktif di HP yang dikenal
+     * agresif membatasi latar belakang (Oppo, Vivo, Realme, Xiaomi, dan sejenisnya).
+     */
+    fun robust(ctx: Context): Boolean = prefs(ctx).getBoolean("robust_alarm", Oem.aggressive)
+    fun setRobust(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("robust_alarm", on).apply(); rescheduleAll(ctx) }
+
+    /** Keterlambatan pengingat terakhir yang ditahan sistem (ms) dan kapan terjadinya; 0 = tidak ada. */
+    fun lastLate(ctx: Context): Pair<Long, Long> = prefs(ctx).getLong("late_ms", 0) to prefs(ctx).getLong("late_at", 0)
+    fun clearLate(ctx: Context) { prefs(ctx).edit().remove("late_ms").remove("late_at").apply() }
+
+    /**
+     * Mencatat pengingat yang berbunyi jauh setelah waktunya padahal HP menyala: tanda sistem menahan atau
+     * membuang alarm aplikasi ini. Yang terlewat karena HP mati tidak dihitung.
+     */
+    private fun noteLateness(ctx: Context, due: Long) {
+        val late = System.currentTimeMillis() - due
+        if (late < LATE_MS || android.os.SystemClock.elapsedRealtime() < late + 60_000L) return
+        prefs(ctx).edit().putLong("late_ms", late).putLong("late_at", System.currentTimeMillis()).apply()
+    }
+
+    // ---------- Uji pengingat: cara mengetahui apakah HP ini menahan pengingat, tanpa menunggu pengingat sungguhan ----------
+
+    /** Menjadwalkan notifikasi uji [TEST_DELAY_MS] dari sekarang, lewat jalur yang sama dengan pengingat sungguhan. */
+    fun startTest(ctx: Context): Long {
+        val due = System.currentTimeMillis() + TEST_DELAY_MS
+        prefs(ctx).edit().putLong("test_due", due).remove("test_late").apply()
+        channels(ctx)
+        setAlarm(ctx, due, broadcast(ctx, ACT_TEST, TEST_ID), false, TEST_ID)
+        return due
+    }
+
+    /** Hasil uji terakhir: (waktu jatuh tempo, keterlambatan ms atau null bila belum/tidak berbunyi). */
+    fun testState(ctx: Context): Pair<Long, Long?> =
+        prefs(ctx).getLong("test_due", 0) to prefs(ctx).getLong("test_late", -1).takeIf { it >= 0 }
+
+    internal fun fireTest(ctx: Context) {
+        val due = prefs(ctx).getLong("test_due", 0)
+        if (due == 0L) return
+        val late = (System.currentTimeMillis() - due).coerceAtLeast(0)
+        prefs(ctx).edit().putLong("test_late", late).apply()
+        channels(ctx)
+        if (!canNotify(ctx)) return
+        val n = NotificationCompat.Builder(ctx, CH_NOTIFY).setSmallIcon(R.drawable.ic_bell)
+            .setContentTitle("Uji pengingat berhasil")
+            .setContentText(if (late < 60_000L) "Berbunyi tepat waktu." else "Terlambat ${late / 60_000} menit. Buka Catatanku → Pengaturan → Pengingat.")
+            .setPriority(NotificationCompat.PRIORITY_MAX).setAutoCancel(true)
+            .setContentIntent(PendingIntent.getActivity(ctx, 2, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            .build()
+        try { nm(ctx).notify(nid(TEST_ID), n) } catch (_: SecurityException) {}
+        changed.tryEmit(TEST_ID)
+    }
+
     private fun setAlarm(ctx: Context, at: Long, pi: PendingIntent, alarmStyle: Boolean, id: Long) {
         val a = am(ctx)
         try {
             when {
                 !canExact(ctx) -> a.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)      // bisa terlambat beberapa menit
-                alarmStyle -> a.setAlarmClock(AlarmManager.AlarmClockInfo(at, openNote(ctx, id)), pi)
+                alarmStyle || robust(ctx) -> a.setAlarmClock(AlarmManager.AlarmClockInfo(at, openNote(ctx, id)), pi)
                 else -> a.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
             }
         } catch (_: SecurityException) {
@@ -159,6 +223,7 @@ object Reminders {
         val n = db.get(id) ?: return
         if (!n.hasReminder || n.inTrash) return
         channels(ctx)
+        if (!snoozed) noteLateness(ctx, n.remindAt)
         show(ctx, n, missed = false)
         if (n.remindAlarm) setAlarm(ctx, System.currentTimeMillis() + RING_MINUTES * 60_000L, broadcast(ctx, ACT_QUIET, id), false, id)
         if (snoozed) return
@@ -241,6 +306,7 @@ class ReminderReceiver : BroadcastReceiver() {
             Reminders.ACT_DONE -> Reminders.done(ctx, id)
             Reminders.ACT_SNOOZE -> Reminders.snooze(ctx, id)
             Reminders.ACT_QUIET -> Reminders.quiet(ctx, id)
+            Reminders.ACT_TEST -> Reminders.fireTest(ctx)
             // HP dinyalakan ulang, aplikasi diperbarui, atau jam/zona waktu diubah: alarm sistem hilang dan harus disetel lagi.
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> Reminders.rescheduleAll(ctx)

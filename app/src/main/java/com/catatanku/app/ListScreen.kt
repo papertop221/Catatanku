@@ -194,6 +194,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
             val showToday = view == NoteView.All && !searching && vm.tagFilter == null && !vm.askActive && (today.isNotEmpty() || vm.openTaskCount > 0)
             // Bagian "Disematkan" hanya muncul bila memang ada dan tidak sedang mencari.
             val split = !searching && shown.any { it.pinned } && shown.any { !it.pinned }
+            val (pinned, rest) = remember(shown, split) { if (split) shown.partition { it.pinned } else shown to emptyList() }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 if (vm.askActive) item(key = "ask", contentType = "ask") { AnswerBlock(vm, aiState is AiState.Loading) }
                 if (vm.aiTerms.isNotEmpty()) item(key = "terms") { Muted("Juga mencari: " + vm.aiTerms.joinToString(", "), Modifier.padding(horizontal = Gutter, vertical = 6.dp)) }
@@ -236,10 +237,10 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                     else -> {
                         if (split) item(key = "h-pin", contentType = "label") { SectionLabel("Disematkan", Modifier.padding(start = Gutter, top = 12.dp, bottom = 2.dp)) }
-                        items(if (split) shown.filter { it.pinned } else shown, key = { it.id }, contentType = { "note" }) { n -> NoteRow(vm, n, view) }
+                        items(pinned, key = { it.id }, contentType = { "note" }) { n -> NoteRow(vm, n, view) }
                         if (split) {
                             item(key = "h-rest", contentType = "label") { SectionLabel("Lainnya", Modifier.padding(start = Gutter, top = 16.dp, bottom = 2.dp)) }
-                            items(shown.filter { !it.pinned }, key = { it.id }, contentType = { "note" }) { n -> NoteRow(vm, n, view) }
+                            items(rest, key = { it.id }, contentType = { "note" }) { n -> NoteRow(vm, n, view) }
                         }
                     }
                 }

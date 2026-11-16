@@ -37,6 +37,12 @@ class MainActivity : ComponentActivity() {
             vm.openFromReminder(remindId)
             return
         }
+        // Tile Setelan Cepat, pintasan ikon, dan aplikasi otomasi.
+        when (intent?.action) {
+            Actions.NEW_NOTE -> { vm.saveDraft(); vm.open(null); return }
+            Actions.SHOW_REMINDERS -> { vm.showReminders(); return }
+            Actions.SHOW_TASKS -> { vm.showTasks(); return }
+        }
         if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
         if (text.isEmpty()) return

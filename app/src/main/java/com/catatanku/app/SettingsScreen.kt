@@ -28,6 +28,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 
 // Pengaturan: bagian-bagian datar dipisah garis tipis. Tiap baris = judul, keterangan, dan satu kontrol.
 
@@ -112,7 +114,18 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     // Izin bisa berubah di pengaturan sistem; periksa lagi tiap kali layar ini kembali tampil.
     var canNotify by remember { mutableStateOf(Reminders.canNotify(ctx)) }
     var canExact by remember { mutableStateOf(Reminders.canExact(ctx)) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { canNotify = Reminders.canNotify(ctx); canExact = Reminders.canExact(ctx) }
+    var battery by remember { mutableStateOf(Oem.batteryUnrestricted(ctx)) }
+    var robust by remember { mutableStateOf(Reminders.robust(ctx)) }
+    var test by remember { mutableStateOf(Reminders.testState(ctx)) }
+    var late by remember { mutableStateOf(Reminders.lastLate(ctx)) }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        canNotify = Reminders.canNotify(ctx); canExact = Reminders.canExact(ctx); battery = Oem.batteryUnrestricted(ctx)
+        test = Reminders.testState(ctx); late = Reminders.lastLate(ctx); now = System.currentTimeMillis()
+    }
+    // Hasil uji pengingat tiba selagi layar ini terbuka.
+    LaunchedEffect(Unit) { Reminders.changed.collect { test = Reminders.testState(ctx); now = System.currentTimeMillis() } }
+    LaunchedEffect(test) { while (test.first > 0 && test.second == null && now < test.first + 5 * 60_000L) { delay(15_000); now = System.currentTimeMillis() } }
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         canNotify = Reminders.canNotify(ctx)
         if (!granted) openAppNotificationSettings(ctx)      // sudah pernah ditolak: sistem tidak menampilkan dialog lagi
@@ -218,11 +231,46 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             if (canNotify && canExact) SettingRow(
                 "Pengingat aktif", "${vm.reminderCount} catatan punya pengingat. Tetap berbunyi saat aplikasi ditutup dan setelah HP dinyalakan ulang.",
             ) { SmallButton("Atur bunyi") { openAppNotificationSettings(ctx) } }
-            Muted(
-                "Di sebagian HP (Xiaomi, Oppo, Vivo, Realme), penghemat baterai bisa menahan pengingat. " +
-                    "Bila pengingat sering terlambat, izinkan Catatanku berjalan di latar belakang lewat pengaturan baterai HP.",
+
+            // ---------- Keandalan: penghemat baterai pabrikan ----------
+            Section(if (Oem.aggressive) "Agar pengingat tidak ditahan HP ${Oem.brand}" else "Agar pengingat tidak ditahan HP")
+            if (late.first > 0) SettingRow(
+                "Pengingat terakhir terlambat ${late.first / 60_000} menit", "Terjadi ${whenLabel(late.second)}. HP menahan Catatanku di latar; kerjakan langkah di bawah, lalu uji lagi.", error = true,
+            ) { SmallButton("Tutup pesan") { Reminders.clearLate(ctx); late = 0L to 0L } }
+            SettingRow(
+                "Jadwalkan sebagai alarm sistem",
+                "Jenis alarm yang paling jarang ditahan penghemat baterai. Ikon alarm tampil di bilah status selama ada pengingat.",
+            ) { Switch(robust, { robust = it; Reminders.setRobust(ctx, it) }) }
+            SettingRow(
+                "Pengoptimalan baterai",
+                if (battery) "Catatanku sudah dikecualikan." else "Catatanku masih dibatasi saat HP diam lama. Kecualikan agar pengingat tepat waktu.",
+                error = !battery,
+            ) { if (!battery) SmallButton("Kecualikan", primary = true) { Oem.requestBatteryUnrestricted(ctx) } }
+            if (Oem.aggressive) {
+                Column(Modifier.padding(start = Gutter, end = 12.dp, top = 8.dp, bottom = 8.dp)) {
+                    Text("Setelan khusus ${Oem.brand}", style = MaterialTheme.typography.bodyLarge)
+                    Muted("HP ini bisa menghentikan aplikasi di latar dan ikut membuang pengingatnya. Aplikasi tidak bisa mengubahnya sendiri; lakukan sekali:", Modifier.padding(top = 2.dp))
+                    Oem.steps.forEachIndexed { i, s -> Muted("${i + 1}. $s", Modifier.padding(top = 4.dp)) }
+                    Muted("Nama menu bisa sedikit berbeda antarversi.", Modifier.padding(top = 4.dp))
+                    Row(Modifier.padding(top = 8.dp)) { SmallButton("Buka setelan mulai otomatis") { if (!Oem.openAutostart(ctx)) vm.say("Halaman khususnya tidak ditemukan; dibuka info aplikasi. Cari Penggunaan baterai di sana.") } }
+                }
+            } else Muted(
+                "Sebagian HP (Oppo, Vivo, Realme, Xiaomi) punya pembatas tambahan. Bila uji di bawah gagal, cari \"mulai otomatis\" dan " +
+                    "\"aktivitas latar belakang\" untuk Catatanku di setelan HP.",
                 Modifier.padding(horizontal = Gutter, vertical = 4.dp),
             )
+            val (due, lateMs) = test
+            SettingRow(
+                "Uji pengingat",
+                when {
+                    due == 0L -> "Notifikasi uji berbunyi 2 menit lagi. Sesudah menekan, tutup Catatanku dari layar aplikasi terbaru dan kunci layar HP."
+                    lateMs != null && lateMs < 60_000L -> "Uji ${whenLabel(due)}: berbunyi tepat waktu."
+                    lateMs != null -> "Uji ${whenLabel(due)}: terlambat ${lateMs / 60_000} menit. Kerjakan langkah di atas, lalu uji lagi."
+                    now < due + 90_000L -> "Menunggu: berbunyi ${whenLabel(due)}. Tutup Catatanku dari layar aplikasi terbaru dan kunci layar HP."
+                    else -> "Uji ${whenLabel(due)} tidak berbunyi. HP menahan Catatanku; kerjakan langkah di atas, lalu uji lagi."
+                },
+                error = due != 0L && ((lateMs != null && lateMs >= 60_000L) || (lateMs == null && now >= due + 90_000L)),
+            ) { SmallButton(if (due == 0L) "Mulai uji" else "Uji lagi", enabled = canNotify) { Reminders.startTest(ctx); test = Reminders.testState(ctx); now = System.currentTimeMillis() } }
 
             // ---------- Tampilan ----------
             if (Build.VERSION.SDK_INT >= 31) {

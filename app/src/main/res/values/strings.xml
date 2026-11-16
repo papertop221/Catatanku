@@ -1,1 +1,4 @@
-<resources><string name="app_name">Catatanku</string></resources>
+<resources>
+    <string name="app_name">Catatanku</string>
+    <string name="tile_new_note">Catatan baru</string>
+</resources>

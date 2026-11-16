@@ -140,7 +140,11 @@ fun ReminderSheet(vm: AppViewModel) {
         PrimaryButton("Simpan pengingat", Modifier.fillMaxWidth().padding(top = 16.dp), enabled = valid) {
             if (Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS) else save()
         }
-        if (note.hasReminder) TextAction("Hapus pengingat", Modifier.fillMaxWidth().padding(top = 4.dp), color = MaterialTheme.colorScheme.error) { vm.removeReminder() }
+        // Cadangan untuk yang tidak boleh terlewat: kalender bawaan HP biasanya tidak dibatasi penghemat baterai.
+        TextAction("Salin juga ke Kalender HP", Modifier.fillMaxWidth().padding(top = 4.dp), enabled = valid) {
+            if (!addToCalendar(ctx, note.heading.ifBlank { "Pengingat catatan" }, note.body, at.toMillis(), repeat)) vm.say("Tidak ada aplikasi kalender di HP ini.")
+        }
+        if (note.hasReminder) TextAction("Hapus pengingat", Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.error) { vm.removeReminder() }
     }
 
     if (pickDate) {

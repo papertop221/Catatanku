@@ -113,7 +113,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val db = NoteDb.get(app)
     private val prefs = app.getSharedPreferences("ui", Context.MODE_PRIVATE)
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)      // tetap hidup saat layar ditutup (cadangan)
-    val ai = LocalAi(app)
+    val ai = LocalAi.get(app)
 
     var screen by mutableStateOf(Screen.List); private set
     var notes by mutableStateOf<List<Note>>(emptyList()); private set     // semua, termasuk sampah
@@ -210,12 +210,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { ai.events.collect { say(it) } }
         viewModelScope.launch {
             reload()        // daftar tampil dulu; beres-beres menyusul
-            val purged = withContext(Dispatchers.IO) { db.purgeOldTrash().also { Reminders.rescheduleAll(app) } }
+            val purged = withContext(Dispatchers.IO) { db.purgeOldTrash().also { Reminders.rescheduleAll(app); publishShortcuts(app) } }
             if (purged) reload()
         }
         // Alarm berbunyi atau tombol notifikasi ditekan: samakan layar dengan basis data.
         viewModelScope.launch {
             Reminders.changed.collect { id ->
+                if (id == Reminders.TEST_ID) return@collect
                 if (screen == Screen.Editor && draft.id == id) withContext(Dispatchers.IO) { db.get(id) }?.let { n ->
                     draft = draft.copy(remindAt = n.remindAt, remindRepeat = n.remindRepeat, remindAlarm = n.remindAlarm, remindFired = n.remindFired)
                     opened = opened?.copy(remindAt = n.remindAt, remindFired = n.remindFired)
@@ -1075,6 +1076,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun unlocked() { locked = false }
+    /** Dari pintasan ikon: daftar pengingat, atau daftar tugas yang belum selesai. */
+    fun showReminders() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.Reminders }
+    fun showTasks() { if (screen == Screen.Editor) closeEditor(); screen = Screen.List; view = NoteView.All; askOpenTasks() }
+
     /** Hanya untuk uji tangkapan layar. */
     internal fun debugLock() { locked = true }
 
@@ -1087,6 +1092,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onReturn() {
         if (lockEnabled && leftAt != 0L && System.currentTimeMillis() - leftAt > LOCK_GRACE_MS) locked = true
+        if (prefs.getBoolean("dirty", false)) dirty = true      // ada catatan yang disimpan dari luar layar ini
+        // Pengingat yang ditahan sistem diberitahukan sekali, dengan jalan menuju perbaikannya.
+        val (late, at) = Reminders.lastLate(ctx)
+        if (late > 0 && at != prefs.getLong("late_seen", 0)) {
+            prefs.edit().putLong("late_seen", at).apply()
+            say("Pengingat terakhir terlambat ${late / 60_000} menit: HP ini menahan Catatanku.", "Perbaiki") { screen = Screen.Settings }
+        }
         ai.onForeground()
         if (loaded) today = dueToday(notes)      // hari bisa saja sudah berganti selagi aplikasi di latar
     }
