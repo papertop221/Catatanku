@@ -1,0 +1,4 @@
+• AES-256-GCM data-at-rest encryption (Android Keystore) for notes, history, attachments, and hidden Vault notes
+• Standalone App PIN alongside BIOMETRIC_STRONG, screen-off lock & RAM scrubbing, brute-force backoff, 10x auto-wipe, and emergency panic wipe
+• Hybrid EC P-256 encrypted daily AutoBackup (CTKH) & streaming 600k PBKDF2 encrypted export (CTKE), Strict Offline mode, screen shield, incognito keyboard, 30s clipboard auto-clear, and Privacy Audit
+• More compact and practical UI/UX across Settings (collapsible advanced rows), List, Editor, Bottom Sheets, and keyboard-aware PIN lock screen

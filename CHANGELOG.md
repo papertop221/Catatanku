@@ -1,5 +1,20 @@
 # Riwayat perubahan
 
+## 1.9
+
+Keamanan data & privasi super ketat
+- Enkripsi *data-at-rest* AES-256-GCM dengan kunci pembungkus Android Keystore untuk seluruh isi catatan, tag, folder, riwayat versi, vektor semantik (skema basis data v6 + migrasi v5→v6), dan berkas lampiran (`CTKA\x01`)
+- **Brankas** tersembunyi & terenkripsi untuk catatan rahasia (`Note.vault`): terpisah dari daftar utama, pencarian biasa, widget/pintasan, serta ekspor tanpa kata sandi
+- **Kunci aplikasi menyeluruh**: dukungan biometrik `BIOMETRIC_STRONG` dan PIN/sandi mandiri Catatanku (`AppPinCrypto`), pembersihan draft/memori catatan dari RAM saat mengunci atau layar mati, penguncian `ProcessTextActivity`, serta penyembunyian judul/isi notifikasi saat aplikasi terkunci
+- Pertahanan terhadap percobaan tebak PIN: jeda tunggu bertahap (*brute-force backoff*), **hapus otomatis jika gagal 10×**, dan **hapus darurat** (*Panic Wipe*) yang memusnahkan kunci Keystore, basis data, lampiran, serta preferensi
+- Cadangan terenkripsi penuh: ekspor *streaming* `CTKE\x01` (600.000 iterasi PBKDF2-HMAC-SHA256, tanpa berkas sementara polos) dan *AutoBackup* harian hibrida kurva eliptik P-256 (`CTKH\x01`) tanpa menyimpan sandi pemulihan di perangkat
+- Kontrol privasi tambahan: *Blokir tangkapan layar* (`FLAG_SECURE` + `setRecentsScreenshotEnabled(false)`), *Keyboard penyamaran* (`IME_FLAG_NO_PERSONALIZED_LEARNING`), *Hapus papan klip otomatis 30 detik* (`EXTRA_IS_SENSITIVE`), *Mode Offline Mutlak*, *Audit privasi perangkat*, serta aturan `allowBackup="false"` dan `dataExtractionRules` Android 12+
+
+UI/UX lebih ringkas, rapi, dan praktis
+- Tata letak Pengaturan dirapikan menjadi baris 1 baris ringkas dengan kelompok lipat (`ExpandRow`) dan ringkasan status langsung; kontrol kunci cepat dan 4 sakelar privasi tetap 1 ketuk
+- Kepadatan Daftar Catatan, Editor, pratinjau gambar (`160.dp`), tag, bilah alat, dan *bottom sheet* dipadatkan agar isi catatan dominan di layar
+- Layar PIN (`LockScreen`) kini mendukung `.imePadding()` serta tombol `Done` pada papan ketik agar tombol buka kunci tidak pernah tertutup keyboard
+
 ## 1.8.1
 
 Penghapusan updater & penyelarasan UI/UX

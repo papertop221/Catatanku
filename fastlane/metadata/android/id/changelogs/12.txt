@@ -1,0 +1,4 @@
+• Enkripsi data-at-rest AES-256-GCM (Android Keystore) untuk catatan, riwayat versi, lampiran, dan fitur baru Brankas tersembunyi
+• PIN/sandi mandiri Catatanku di samping biometrik, kunci otomatis saat layar mati, hapus RAM saat terkunci, hapus otomatis 10× gagal, dan hapus darurat
+• Cadangan otomatis harian terenkripsi kurva P-256 (CTKH) & ekspor ZIP bersandi 600rb PBKDF2 (CTKE), plus Mode Offline Mutlak, anti-screenshot, keyboard penyamaran, clipboard 30 detik, dan Audit Privasi
+• UI/UX lebih ringkas dan praktis: baris lebih padat, bagian lanjutan Pengaturan dapat dilipat, dan layar PIN ramah keyboard
