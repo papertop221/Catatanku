@@ -2,8 +2,10 @@ package com.catatanku.app.ui
 
 import android.app.Application
 import android.app.KeyguardManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,6 +19,7 @@ import com.catatanku.app.ai.inference.AiText
 import com.catatanku.app.ai.performance.AiBackendKind
 import com.catatanku.app.ai.performance.AiTaskBudget
 import com.catatanku.app.ai.performance.ContextProfile
+import com.catatanku.app.data.database.NoteDb
 import com.catatanku.app.data.repository.AutoBackup
 import com.catatanku.app.data.repository.NoteRepository
 import com.catatanku.app.domain.model.AgentItem
@@ -45,6 +48,10 @@ import com.catatanku.app.reminders.Reminders
 import com.catatanku.app.reminders.toLocal
 import com.catatanku.app.reminders.toMillis
 import com.catatanku.app.reminders.whenLabel
+import com.catatanku.app.security.AppPinCrypto
+import com.catatanku.app.security.DeviceVaultKey
+import com.catatanku.app.security.LockTimeout
+import com.catatanku.app.security.SecurityPrefs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +61,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -132,10 +140,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var reminderFor by mutableStateOf<Note?>(null); private set
     var reminderSeed by mutableStateOf<Long?>(null); private set
 
-    // Pengaturan
-    var lockEnabled by mutableStateOf(prefs.getBoolean("lock", false)); private set
-    var locked by mutableStateOf(prefs.getBoolean("lock", false)); private set
+    // Pengaturan keamanan & privasi
+    var lockEnabled by mutableStateOf(SecurityPrefs.isLockEnabled(app)); private set
+    var locked by mutableStateOf(SecurityPrefs.isLockEnabled(app)); private set
+    var vaultUnlocked by mutableStateOf(false); private set
+    var vaultUnlockRequested by mutableStateOf(false); private set
+    var pendingVaultNoteId by mutableStateOf(0L); private set
+    var vaultCount by mutableStateOf(0); private set
+    var lockTimeout by mutableStateOf(SecurityPrefs.lockTimeout(app)); private set
+    var screenShield by mutableStateOf(SecurityPrefs.isScreenShieldEnabled(app)); private set
+    var incognitoKeyboard by mutableStateOf(SecurityPrefs.isIncognitoKeyboardEnabled(app)); private set
+    var clipboardAutoClear by mutableStateOf(SecurityPrefs.isClipboardAutoClearEnabled(app)); private set
+    var strictOffline by mutableStateOf(SecurityPrefs.isStrictOffline(app)); private set
+    var hasAppPin by mutableStateOf(SecurityPrefs.hasAppPin(app)); private set
+    var wipeAfterFailures by mutableStateOf(SecurityPrefs.isWipeAfterFailuresEnabled(app)); private set
+    var failedUnlocks by mutableStateOf(SecurityPrefs.failedAttempts(app)); private set
+    var lockoutRemainingMs by mutableStateOf(SecurityPrefs.remainingLockoutMs(app)); private set
+    var autoBackupEncrypted by mutableStateOf(SecurityPrefs.hasAutoBackupEncryption(app)); private set
     private var leftAt = 0L
+    private var pickerExemptUntil = 0L
     var autoOrganize by mutableStateOf(prefs.getBoolean("auto_organize", false)); private set
     var backupTree by mutableStateOf(prefs.getString("backup_tree", null)); private set
     var backupAt by mutableStateOf(prefs.getLong("backup_at", 0)); private set
@@ -185,23 +208,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch {
-            reload()
-            val purged = withContext(Dispatchers.IO) {
-                repo.purgeOldTrash().also {
-                    Reminders.rescheduleAll(app)
-                    publishShortcuts(app)
-                    Attachments.cleanup(app, repo.allNotes())
-                }
+            withContext(Dispatchers.IO) {
+                Attachments.sweepStaleTempFiles(app)
+                repo.purgeOldTrash()
+                Reminders.rescheduleAll(app)
+                publishShortcuts(app)
+                Attachments.cleanup(app, repo.allNotes(includeVault = true))
             }
-            refreshAttachmentNames()
-            if (purged) reload()
+            if (!locked) {
+                reload()
+                withContext(Dispatchers.IO) { Attachments.migrateLegacyAttachments(app) }
+                refreshAttachmentNames()
+            }
         }
         viewModelScope.launch {
             Reminders.changed.collect { id ->
-                if (id == Reminders.TEST_ID) return@collect
+                if (id == Reminders.TEST_ID || locked) return@collect
                 if (screen == Screen.Editor && draft.id == id) withContext(Dispatchers.IO) { repo.getNote(id) }?.let { n ->
-                    draft = draft.copy(remindAt = n.remindAt, remindRepeat = n.remindRepeat, remindAlarm = n.remindAlarm, remindFired = n.remindFired)
-                    opened = opened?.copy(remindAt = n.remindAt, remindFired = n.remindFired)
+                    if (!n.vault || vaultUnlocked) {
+                        draft = draft.copy(remindAt = n.remindAt, remindRepeat = n.remindRepeat, remindAlarm = n.remindAlarm, remindFired = n.remindFired)
+                        opened = opened?.copy(remindAt = n.remindAt, remindFired = n.remindFired)
+                    }
                 }
                 reload()
             }
@@ -225,22 +252,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun applyNotes(list: List<Note>) {
         listStale = false
-        notes = list
-        stats = Stats(list, AiText::openTaskCount)
-        notesById = stats.byId
-        today = dueToday(list)
+        val scoped = if (vaultUnlocked) list else list.filter { !it.vault }
+        val publicList = scoped.filter { !it.vault }
+        notes = scoped
+        stats = Stats(publicList, AiText::openTaskCount)
+        notesById = scoped.associateBy { it.id }
+        today = dueToday(publicList)
         openTaskCount = stats.openTaskCount
         refreshShown()
         indexJob?.cancel()
         indexJob = viewModelScope.launch {
             val prev = index
             val idx = withContext(Dispatchers.Default) {
-                val live = list.filter { !it.inTrash }
+                val live = publicList.filter { !it.inTrash }
                 prev.update(live.map { SearchIndex.Doc(it.id, it.title, it.body, it.tags) })
             }
             index = idx
             if (query.isNotBlank()) refreshShown()
-            scheduleIncrementalEmbeddings(list)
+            scheduleIncrementalEmbeddings(publicList)
         }
     }
 
@@ -282,10 +311,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun reload() {
+        if (locked) return
         while (true) {
             val gen = writeGen
-            val read = withContext(Dispatchers.IO) { repo.allNotes() }
+            val (read, vCount) = withContext(Dispatchers.IO) {
+                repo.allNotes(includeVault = vaultUnlocked) to repo.vaultCount()
+            }
             if (gen != writeGen) continue
+            vaultCount = vCount
+            if (locked) return
             val old = notesById
             applyNotes(read.map { n -> old[n.id]?.takeIf { it == n } ?: n })
             loaded = true
@@ -314,7 +348,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun dueToday(list: List<Note>): List<Note> {
         val end = LocalDate.now().plusDays(1).atStartOfDay().toMillis()
-        return list.filter { !it.inTrash && it.hasReminder && (it.remindFired || it.remindAt < end) }.sortedBy { it.remindAt }
+        return list.filter { !it.vault && !it.inTrash && it.hasReminder && (it.remindFired || it.remindAt < end) }.sortedBy { it.remindAt }
     }
 
     val allTags: List<String> get() = stats.tags
@@ -324,12 +358,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun refreshShown() {
         val v = view; val q = query; val tag = tagFilter; val list = notes
+        if (v == NoteView.Vault) {
+            if (!vaultUnlocked) {
+                shown = emptyList()
+                return
+            }
+            searchJob?.cancel(); searchJob = null
+            val needle = q.trim()
+            val base = list.filter { it.vault && !it.inTrash }.let { items ->
+                if (needle.isBlank()) items
+                else items.filter {
+                    it.title.contains(needle, ignoreCase = true) ||
+                        it.body.contains(needle, ignoreCase = true) ||
+                        it.tags.any { t -> t.contains(needle, ignoreCase = true) }
+                }
+            }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.updated })
+            shown = base
+            return
+        }
         val inView: (Note) -> Boolean = when (v) {
-            NoteView.All -> { n -> !n.inTrash && !n.archived }
-            is NoteView.Folder -> { n -> !n.inTrash && !n.archived && n.folder == v.name }
-            NoteView.Reminders -> { n -> !n.inTrash && n.hasReminder }
-            NoteView.Archive -> { n -> !n.inTrash && n.archived }
-            NoteView.Trash -> { n -> n.inTrash }
+            NoteView.All -> { n -> !n.vault && !n.inTrash && !n.archived }
+            is NoteView.Folder -> { n -> !n.vault && !n.inTrash && !n.archived && n.folder == v.name }
+            NoteView.Reminders -> { n -> !n.vault && !n.inTrash && n.hasReminder }
+            NoteView.Archive -> { n -> !n.vault && !n.inTrash && n.archived }
+            NoteView.Trash -> { n -> !n.vault && n.inTrash }
+            NoteView.Vault -> { _ -> false }
         }
         fun show(base: List<Note>) { shown = if (tag == null) base else base.filter { tag in it.tags } }
         searchJob?.cancel(); searchJob = null
@@ -344,7 +397,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 )
             ))
-            v == NoteView.Trash -> show(list.filter { it.inTrash && (it.title + " " + it.body).contains(q.trim(), ignoreCase = true) })
+            v == NoteView.Trash -> show(list.filter { !it.vault && it.inTrash && (it.title + " " + it.body).contains(q.trim(), ignoreCase = true) })
             else -> {
                 val idx = index; val sem = semanticIndex; val terms = aiTerms; val byId = stats.byId
                 searchJob = viewModelScope.launch {
@@ -352,7 +405,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         val qVec = if (embeddings.isAvailable && !sem.isEmpty) embeddings.embedQuery(q) else null
                         HybridSearch.search(idx, sem, q, qVec, terms)
                     }
-                    show(hits.mapNotNull { byId[it.id] }.filter { if (v == NoteView.All) !it.inTrash else inView(it) })
+                    show(hits.mapNotNull { byId[it.id] }.filter { !it.vault && if (v == NoteView.All) !it.inTrash else inView(it) })
                 }
             }
         }
@@ -365,7 +418,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         query = q; aiTerms = emptyList()
         refreshShown()
     }
-    fun go(s: Screen) { if (s != Screen.Editor) flushListIfStale(); screen = s }
+    fun go(s: Screen) {
+        if (s != Screen.Editor) flushListIfStale()
+        if (s == Screen.Settings && vaultUnlocked) lockVault()
+        screen = s
+    }
+
+    fun switchView(v: NoteView) {
+        if (v != NoteView.Vault && vaultUnlocked) lockVault()
+        view = v
+        tagFilter = null
+    }
 
     fun expandQueryWithAi() {
         val q = query.trim()
@@ -385,8 +448,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ============================== Editor ==============================
 
     fun open(note: Note?) {
+        if (note != null && note.vault && !vaultUnlocked) return
         stopAi()
-        draft = note ?: Note(folder = (view as? NoteView.Folder)?.name ?: "")
+        val inVault = view == NoteView.Vault && vaultUnlocked
+        draft = note ?: Note(folder = (view as? NoteView.Folder)?.name ?: "", vault = inVault)
         opened = note?.takeIf { it.id != 0L }; snapshotDone = false
         fresh = draft.id == 0L
         clean = draft.takeIf { it.id != 0L }
@@ -397,8 +462,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openFromReminder(id: Long) {
         if (screen == Screen.Editor) saveDraft()
+        val target = repo.getNote(id) ?: return
+        if (target.vault && !vaultUnlocked) {
+            pendingVaultNoteId = id
+            vaultUnlockRequested = true
+            return
+        }
         Reminders.done(ctx, id)
-        repo.getNote(id)?.let { open(it) }
+        open(target)
         viewModelScope.launch { reload() }
     }
 
@@ -438,7 +509,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             appScope.launch { repo.deleteForever(d.id) }
         } else {
             flushListIfStale()
-            if (autoOrganize) organizeInBackground(d.id)
+            if (autoOrganize && !d.vault) organizeInBackground(d.id)
         }
     }
     fun openRelated(note: Note) { saveDraft(); flushListIfStale(); open(note) }
@@ -450,7 +521,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         draft = draft.copy(deletedAt = System.currentTimeMillis(), pinned = false)
         saveDraft(); screen = Screen.List; flushListIfStale()
         val id = draft.id
-        say("Dipindah ke Sampah.", "Urungkan") { stats.byId[id]?.let { update(it.copy(deletedAt = 0, pinned = pinned)) } }
+        say("Dipindah ke Sampah.", "Urungkan") { notesById[id]?.let { update(it.copy(deletedAt = 0, pinned = pinned)) } }
     }
 
     fun restoreDraft() { draft = draft.copy(deletedAt = 0); saveDraft(); say("Catatan dipulihkan.") }
@@ -694,19 +765,68 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!nowArchived) { say("Dikeluarkan dari arsip."); return }
         screen = Screen.List
         val id = draft.id
-        say("Diarsipkan.", "Urungkan") { stats.byId[id]?.let { update(it.copy(archived = false, pinned = pinned)) } }
+        say("Diarsipkan.", "Urungkan") { notesById[id]?.let { update(it.copy(archived = false, pinned = pinned)) } }
     }
 
     fun emptyTrash() = viewModelScope.launch {
-        withContext(Dispatchers.IO) { repo.emptyTrash() }; reload()
+        val vaultOnly = view == NoteView.Vault
+        withContext(Dispatchers.IO) { repo.emptyTrash(vaultOnly = vaultOnly) }; reload()
         refreshAttachmentNames()
         markDirty()
         say("Sampah dikosongkan.")
     }
 
+    fun moveDraftToVault(intoVault: Boolean) {
+        if (!intoVault && !vaultUnlocked) return
+        stopAi()
+        if (draft.id == 0L && draft.isBlank) return
+        val next = draft.copy(
+            vault = intoVault,
+            pinned = if (intoVault) false else draft.pinned,
+            folder = if (intoVault) "" else draft.folder,
+            archived = if (intoVault) false else draft.archived,
+            updated = System.currentTimeMillis(),
+        )
+        draft = next
+        saveDraft()
+        if (intoVault && !vaultUnlocked) {
+            draft = Note()
+            clean = null
+            opened = null
+            dropLocal(next.id)
+            vaultCount++
+            screen = Screen.List
+            say("Dipindahkan ke Brankas.")
+        } else {
+            viewModelScope.launch { reload() }
+            say(if (intoVault) "Dipindahkan ke Brankas." else "Dikeluarkan dari Brankas.")
+        }
+    }
+
+    fun moveNoteToVault(n: Note, intoVault: Boolean) {
+        if (!intoVault && !vaultUnlocked) return
+        val updated = n.copy(
+            vault = intoVault,
+            pinned = if (intoVault) false else n.pinned,
+            folder = if (intoVault) "" else n.folder,
+            archived = if (intoVault) false else n.archived,
+            updated = System.currentTimeMillis(),
+        )
+        persist(updated, n)
+        if (intoVault && !vaultUnlocked) {
+            dropLocal(n.id)
+            vaultCount++
+        } else {
+            putLocal(updated)
+            viewModelScope.launch { reload() }
+        }
+        say(if (intoVault) "Dipindahkan ke Brankas." else "Dikeluarkan dari Brankas.")
+    }
+
     fun relatedTo(d: Note): List<Note> {
+        if (d.vault) return emptyList()
         val byId = notesById
-        return index.related(d.title, d.body, d.tags, d.id).mapNotNull { byId[it.id] }
+        return index.related(d.title, d.body, d.tags, d.id).mapNotNull { byId[it.id]?.takeIf { !it.vault } }
     }
 
     fun suggestTags() {
@@ -900,7 +1020,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun organizeAll() {
         if (batch != null) return
-        val targets = notes.filter(::needsOrganizing)
+        val targets = notes.filter { !it.vault && needsOrganizing(it) }
         if (targets.isEmpty()) { say("Semua catatan sudah punya judul dan tag."); return }
         batch = 0 to targets.size
         batchJob = viewModelScope.launch {
@@ -953,7 +1073,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun askOpenTasks() {
         if (askRunning) return
         askQuery = "Tugas yang belum selesai"; askByAi = false
-        val withTasks = notes.filter { !it.inTrash && !it.archived }.sortedByDescending { it.updated }
+        val withTasks = notes.filter { !it.vault && !it.inTrash && !it.archived }.sortedByDescending { it.updated }
             .mapNotNull { n -> AiText.openTasks(n.body).takeIf { it.isNotEmpty() }?.let { n to it } }
         openTasksList = withTasks
         askSources = withTasks.map { it.first }
@@ -980,7 +1100,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (askRunning) return
         askQuery = "Rekap 7 hari terakhir"; askByAi = false
         val since = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
-        askSources = notes.filter { !it.inTrash && !it.archived && it.updated >= since && it.body.isNotBlank() }
+        askSources = notes.filter { !it.vault && !it.inTrash && !it.archived && it.updated >= since && it.body.isNotBlank() }
             .sortedByDescending { it.updated }.take(if (AiText.maxInput > 4000) 8 else 5)
         askAnswer = ""
         if (askSources.isEmpty()) { askAnswer = "Tidak ada catatan yang ditulis atau diubah dalam 7 hari terakhir."; return }
@@ -1154,13 +1274,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleArchive(n: Note) {
         update(n.copy(archived = !n.archived, pinned = false))
         say(if (n.archived) "Dikeluarkan dari arsip." else "Diarsipkan.", "Urungkan") {
-            stats.byId[n.id]?.let { update(it.copy(archived = n.archived, pinned = n.pinned)) }
+            notesById[n.id]?.let { update(it.copy(archived = n.archived, pinned = n.pinned)) }
         }
     }
 
     fun trash(n: Note) {
         update(n.copy(deletedAt = System.currentTimeMillis(), pinned = false))
-        say("Dipindah ke Sampah.", "Urungkan") { stats.byId[n.id]?.let { update(it.copy(deletedAt = 0, pinned = n.pinned)) } }
+        say("Dipindah ke Sampah.", "Urungkan") { notesById[n.id]?.let { update(it.copy(deletedAt = 0, pinned = n.pinned)) } }
     }
 
     fun restore(n: Note) { update(n.copy(deletedAt = 0)); say("Catatan dipulihkan.") }
@@ -1253,6 +1373,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportTo(uri: Uri, passphrase: CharArray? = null) {
         if (backupJob?.isActive == true) return
+        val encrypted = passphrase != null && passphrase.isNotEmpty()
         backupJob = viewModelScope.launch {
             try {
                 val count = withContext(Dispatchers.IO) {
@@ -1265,7 +1386,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         onProgress = { p -> backupProgress = p },
                     )
                 }
-                say("$count catatan (beserta lampiran) diekspor.")
+                val suffix = if (!encrypted && vaultCount > 0) " (catatan Brankas dilewati karena tanpa sandi)" else ""
+                say("$count catatan (beserta lampiran) diekspor$suffix.")
             } catch (_: CancellationException) {
                 say("Ekspor cadangan dibatalkan.")
             } catch (e: Throwable) {
@@ -1354,40 +1476,305 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---------- Kunci aplikasi ----------
+    // ---------- Keamanan, Kunci aplikasi & Privasi ketat ----------
+
+    enum class PinResult { SUCCESS, LOCKED_OUT, WRONG, WIPED }
+
+    fun suppressNextLeaveLock() {
+        pickerExemptUntil = SystemClock.elapsedRealtime() + 180_000L
+    }
+
+    private fun isPickerExempt(): Boolean =
+        pickerExemptUntil != 0L && SystemClock.elapsedRealtime() <= pickerExemptUntil
 
     fun updateLock(on: Boolean): Boolean {
-        if (on && ctx.getSystemService(KeyguardManager::class.java)?.isDeviceSecure != true) {
-            say("Setel dulu kunci layar HP (PIN, pola, atau sidik jari).")
+        if (on && !hasAppPin && ctx.getSystemService(KeyguardManager::class.java)?.isDeviceSecure != true) {
+            say("Setel kunci layar HP atau buat PIN Catatanku lebih dulu.")
             return false
         }
+        if (!on && hasAppPin) {
+            SecurityPrefs.clearAppPin(ctx)
+            hasAppPin = false
+        }
         lockEnabled = on; locked = false; leftAt = 0L
-        prefs.edit().putBoolean("lock", on).apply()
+        SecurityPrefs.setLockEnabled(ctx, on)
         return true
     }
 
-    fun unlocked() { locked = false; leftAt = 0L }
-    fun shouldDeferForLock(): Boolean { enforceLockIfExpired(); return locked }
-    private fun enforceLockIfExpired() {
-        if (lockEnabled && leftAt != 0L && System.currentTimeMillis() - leftAt > LOCK_GRACE_MS) locked = true
+    fun updateLockTimeout(t: LockTimeout) {
+        lockTimeout = t
+        SecurityPrefs.setLockTimeout(ctx, t)
     }
 
-    fun showReminders() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; view = NoteView.Reminders }
-    fun showTasks() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; view = NoteView.All; askOpenTasks() }
-    fun openAssist() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; view = NoteView.All; searchFocusTick++ }
+    fun updateScreenShield(on: Boolean) {
+        screenShield = on
+        SecurityPrefs.setScreenShieldEnabled(ctx, on)
+    }
+
+    fun updateIncognitoKeyboard(on: Boolean) {
+        incognitoKeyboard = on
+        SecurityPrefs.setIncognitoKeyboardEnabled(ctx, on)
+    }
+
+    fun updateClipboardAutoClear(on: Boolean) {
+        clipboardAutoClear = on
+        SecurityPrefs.setClipboardAutoClearEnabled(ctx, on)
+    }
+
+    fun updateStrictOffline(on: Boolean) {
+        strictOffline = on
+        SecurityPrefs.setStrictOffline(ctx, on)
+        if (on) ai.cancelDownload()
+    }
+
+    fun updateWipeAfterFailures(on: Boolean) {
+        wipeAfterFailures = on
+        SecurityPrefs.setWipeAfterFailuresEnabled(ctx, on)
+    }
+
+    fun setAppPin(pin: CharArray) {
+        try {
+            SecurityPrefs.setAppPin(ctx, pin)
+            hasAppPin = true
+            lockEnabled = true
+            locked = false
+            failedUnlocks = 0
+            lockoutRemainingMs = 0L
+            say("PIN Catatanku disimpan dan Kunci Aplikasi diaktifkan.")
+        } finally {
+            pin.fill('\u0000')
+        }
+    }
+
+    fun removeAppPin() {
+        SecurityPrefs.clearAppPin(ctx)
+        hasAppPin = false
+        failedUnlocks = 0
+        lockoutRemainingMs = 0L
+        if (ctx.getSystemService(KeyguardManager::class.java)?.isDeviceSecure != true) {
+            lockEnabled = false
+            SecurityPrefs.setLockEnabled(ctx, false)
+        }
+        say("PIN Catatanku dihapus.")
+    }
+
+    fun setAutoBackupPassphrase(passphrase: CharArray) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { SecurityPrefs.setAutoBackupPassphrase(ctx, passphrase) }
+                autoBackupEncrypted = true
+                dirty = true
+                say("Enkripsi Cadangan Otomatis diaktifkan.")
+                backupNow(announce = backupTree != null)
+            } catch (e: Throwable) {
+                say("Gagal menyetel sandi cadangan: ${e.message}")
+            } finally {
+                passphrase.fill('\u0000')
+            }
+        }
+    }
+
+    fun clearAutoBackupEncryption() {
+        SecurityPrefs.clearAutoBackupEncryption(ctx)
+        autoBackupEncrypted = false
+        say("Enkripsi Cadangan Otomatis dimatikan.")
+    }
+
+    fun verifyPinAndUnlock(pin: CharArray, forVaultOnly: Boolean = false): PinResult {
+        return try {
+            val rem = SecurityPrefs.remainingLockoutMs(ctx)
+            if (rem > 0L) {
+                lockoutRemainingMs = rem
+                return PinResult.LOCKED_OUT
+            }
+            if (SecurityPrefs.verifyAppPin(ctx, pin)) {
+                SecurityPrefs.resetFailures(ctx)
+                failedUnlocks = 0
+                lockoutRemainingMs = 0L
+                if (forVaultOnly) onVaultAuthenticated() else unlocked()
+                PinResult.SUCCESS
+            } else {
+                val fails = SecurityPrefs.recordUnlockFailure(ctx)
+                failedUnlocks = fails
+                lockoutRemainingMs = SecurityPrefs.remainingLockoutMs(ctx)
+                if (AppPinCrypto.shouldTriggerWipe(fails, wipeAfterFailures)) {
+                    panicWipe()
+                    PinResult.WIPED
+                } else {
+                    PinResult.WRONG
+                }
+            }
+        } finally {
+            pin.fill('\u0000')
+        }
+    }
+
+    fun refreshLockoutState() {
+        failedUnlocks = SecurityPrefs.failedAttempts(ctx)
+        lockoutRemainingMs = SecurityPrefs.remainingLockoutMs(ctx)
+    }
+
+    fun requestOpenVault() {
+        if (vaultUnlocked) {
+            view = NoteView.Vault
+            tagFilter = null
+        } else {
+            vaultUnlockRequested = true
+        }
+    }
+
+    fun cancelVaultUnlockRequest() {
+        vaultUnlockRequested = false
+        pendingVaultNoteId = 0L
+    }
+
+    fun onVaultAuthenticated() {
+        vaultUnlockRequested = false
+        vaultUnlocked = true
+        view = NoteView.Vault
+        tagFilter = null
+        val targetId = pendingVaultNoteId
+        pendingVaultNoteId = 0L
+        viewModelScope.launch {
+            reload()
+            if (targetId != 0L) {
+                val note = withContext(Dispatchers.IO) { repo.getNote(targetId) }
+                if (note != null) {
+                    Reminders.done(ctx, targetId)
+                    open(note)
+                }
+            }
+        }
+    }
+
+    fun lockVault() {
+        vaultUnlockRequested = false
+        pendingVaultNoteId = 0L
+        if (!vaultUnlocked) return
+        if (draft.vault) {
+            saveDraft()
+            draft = Note(); clean = null; opened = null; undoAi = null; aiJob = null; aiSheet = false; versions = null; reminderFor = null
+            if (screen == Screen.Editor) screen = Screen.List
+        }
+        vaultUnlocked = false
+        if (view == NoteView.Vault) view = NoteView.All
+        if (askActive) closeAsk()
+        agent = null; agentUndo = null
+        applyNotes(notes.filter { !it.vault })
+    }
+
+    private fun scrubSensitiveMemory() {
+        indexJob?.cancel(); indexJob = null
+        embeddingJob?.cancel(); embeddingJob = null
+        searchJob?.cancel(); searchJob = null
+        running?.cancel(); running = null
+        batchJob?.cancel(); batchJob = null
+
+        vaultUnlocked = false
+        vaultUnlockRequested = false
+        pendingVaultNoteId = 0L
+        if (view == NoteView.Vault) view = NoteView.All
+        screen = Screen.List
+        notes = emptyList()
+        shown = emptyList()
+        today = emptyList()
+        stats = Stats(emptyList())
+        notesById = emptyMap()
+        openTaskCount = 0
+        index = SearchIndex(emptyList())
+        semanticIndex = SemanticIndex()
+        draft = Note(); clean = null; opened = null; undoAi = null; aiJob = null; aiSheet = false; versions = null
+        reminderFor = null; reminderSeed = null
+        askQuery = ""; askAnswer = ""; askSources = emptyList(); openTasksList = emptyList(); askRunning = false
+        agent = null; agentUndo = null; pendingEncryptedRestoreUri = null
+        loaded = false
+        DeviceVaultKey.clearMemoryCache()
+        ai.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
+        appScope.launch { embeddings.release() }
+    }
+
+    fun lockNow() {
+        if (!locked && screen == Screen.Editor) saveDraft()
+        locked = true
+        leftAt = 0L
+        pickerExemptUntil = 0L
+        scrubSensitiveMemory()
+        appScope.launch {
+            Attachments.sweepStaleTempFiles(ctx)
+            repo.flush()
+        }
+    }
+
+    fun unlocked() {
+        locked = false
+        leftAt = 0L
+        pickerExemptUntil = 0L
+        SecurityPrefs.resetFailures(ctx)
+        failedUnlocks = 0
+        lockoutRemainingMs = 0L
+        viewModelScope.launch {
+            reload()
+            withContext(Dispatchers.IO) { Attachments.migrateLegacyAttachments(ctx) }
+            refreshAttachmentNames()
+        }
+    }
+
+    fun shouldDeferForLock(): Boolean { enforceLockIfExpired(); return locked }
+
+    private fun enforceLockIfExpired() {
+        if (!lockEnabled || locked) return
+        if (leftAt != 0L && System.currentTimeMillis() - leftAt >= lockTimeout.ms) {
+            locked = true
+            scrubSensitiveMemory()
+        }
+    }
+
+    fun showReminders() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; switchView(NoteView.Reminders) }
+    fun showTasks() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; switchView(NoteView.All); askOpenTasks() }
+    fun openAssist() { if (screen == Screen.Editor) closeEditor() else flushListIfStale(); screen = Screen.List; switchView(NoteView.All); searchFocusTick++ }
 
     internal fun debugLock() { locked = true }
 
     fun onLeave() {
-        leftAt = System.currentTimeMillis()
         backupNow()
-        appScope.launch { repo.flush() }
+        if (isPickerExempt()) {
+            leftAt = System.currentTimeMillis()
+            appScope.launch { repo.flush() }
+            return
+        }
+        if (vaultUnlocked) lockVault()
+        if (lockEnabled) {
+            if (lockTimeout == LockTimeout.IMMEDIATE) {
+                lockNow()
+            } else {
+                leftAt = System.currentTimeMillis()
+                appScope.launch { repo.flush() }
+            }
+        } else {
+            appScope.launch { repo.flush() }
+        }
+    }
+
+    fun onScreenOff() {
+        pickerExemptUntil = 0L
+        if (vaultUnlocked) lockVault()
+        if (lockEnabled && !locked) lockNow()
     }
 
     fun onReturn() {
-        enforceLockIfExpired()
+        val wasExempt = isPickerExempt()
+        pickerExemptUntil = 0L
+        if (!wasExempt) enforceLockIfExpired()
         leftAt = 0L
-        flushListIfStale()
+        if (locked) {
+            refreshLockoutState()
+            return
+        }
+        if (!loaded) {
+            viewModelScope.launch { reload(); refreshAttachmentNames() }
+        } else {
+            flushListIfStale()
+        }
         if (prefs.getBoolean("dirty", false)) dirty = true
         val (late, at) = Reminders.lastLate(ctx)
         if (late > 0 && at != prefs.getLong("late_seen", 0)) {
@@ -1398,12 +1785,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (loaded) today = dueToday(notes)
     }
 
+    /** Hapus darurat seluruh data catatan, lampiran, basis data, dan kunci perangkat keras secara permanen. */
+    fun panicWipe() {
+        scrubSensitiveMemory()
+        backupJob?.cancel(); backupJob = null
+        ai.cancelDownload()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { ai.unload() }
+                runCatching { embeddings.release() }
+                runCatching {
+                    repo.allNotes(includeVault = true).forEach { Reminders.clear(ctx, it.id) }
+                }
+                SecurityPrefs.wipeStorageNow(ctx)
+            }
+            lockEnabled = false
+            locked = false
+            hasAppPin = false
+            wipeAfterFailures = false
+            failedUnlocks = 0
+            lockoutRemainingMs = 0L
+            autoBackupEncrypted = false
+            lockTimeout = SecurityPrefs.lockTimeout(ctx)
+            screenShield = SecurityPrefs.isScreenShieldEnabled(ctx)
+            incognitoKeyboard = SecurityPrefs.isIncognitoKeyboardEnabled(ctx)
+            clipboardAutoClear = SecurityPrefs.isClipboardAutoClearEnabled(ctx)
+            strictOffline = SecurityPrefs.isStrictOffline(ctx)
+            backupTree = null
+            backupAt = 0L
+            backupError = null
+            vaultCount = 0
+            existingAttachments = emptySet()
+            loaded = true
+            say("Seluruh data catatan dan kunci telah dihapus permanen.")
+        }
+    }
+
     fun onTrimMemory(level: Int) {
         ai.onTrimMemory(level)
         if (level >= com.catatanku.app.ai.performance.MemoryPolicy.TRIM_RUNNING_LOW) {
             appScope.launch { embeddings.release() }
         }
     }
-
-    companion object { const val LOCK_GRACE_MS = 60_000L }
 }

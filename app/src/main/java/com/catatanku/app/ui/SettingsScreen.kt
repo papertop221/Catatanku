@@ -3,9 +3,14 @@ package com.catatanku.app.ui
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.ContextCompat
+import com.catatanku.app.security.AppPinCrypto
+import com.catatanku.app.security.DeviceVaultKey
+import com.catatanku.app.security.LockTimeout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -82,6 +87,12 @@ private fun openAppNotificationSettings(ctx: Context) {
     }
 }
 
+private fun openAppDetailsSettings(ctx: Context) {
+    runCatching {
+        ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
 @Composable
 private fun ModelRow(
     name: String, badge: String?, meta: String, open: Boolean, onToggle: () -> Unit, progress: Download?, detail: String,
@@ -121,6 +132,11 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     var confirmDownload by remember { mutableStateOf<ModelSpec?>(null) }
     var askExportPass by remember { mutableStateOf(false) }
     var pendingExportPass by remember { mutableStateOf<CharArray?>(null) }
+    var askPinDialog by remember { mutableStateOf(false) }
+    var askAutoBackupPass by remember { mutableStateOf(false) }
+    var confirmDisableAutoBackupEnc by remember { mutableStateOf(false) }
+    var confirmEnableAutoWipe by remember { mutableStateOf(false) }
+    var confirmPanicWipe by remember { mutableStateOf(false) }
 
     val pickModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::importModel) }
     val pickEmbModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::importEmbeddingModel) }
@@ -135,13 +151,16 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
     var canNotify by remember { mutableStateOf(Reminders.canNotify(ctx)) }
     var canExact by remember { mutableStateOf(Reminders.canExact(ctx)) }
+    var canMic by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
     var battery by remember { mutableStateOf(Oem.batteryUnrestricted(ctx)) }
     var robust by remember { mutableStateOf(Reminders.robust(ctx)) }
     var test by remember { mutableStateOf(Reminders.testState(ctx)) }
     var late by remember { mutableStateOf(Reminders.lastLate(ctx)) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        canNotify = Reminders.canNotify(ctx); canExact = Reminders.canExact(ctx); battery = Oem.batteryUnrestricted(ctx)
+        canNotify = Reminders.canNotify(ctx); canExact = Reminders.canExact(ctx)
+        canMic = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        battery = Oem.batteryUnrestricted(ctx)
         test = Reminders.testState(ctx); late = Reminders.lastLate(ctx); now = System.currentTimeMillis()
     }
     LaunchedEffect(Unit) { Reminders.changed.collect { test = Reminders.testState(ctx); now = System.currentTimeMillis() } }
@@ -197,10 +216,14 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         dl != null -> SmallButton("Batalkan") { vm.ai.cancelDownload() }
                         isActive -> {}
                         installed -> SmallButton("Pakai", primary = true, enabled = !busy) { vm.activateModel(spec.id) }
-                        else -> SmallButton("Unduh", primary = spec == recommended && ram > 0, enabled = download == null) { confirmDownload = spec }
+                        else -> SmallButton("Unduh", primary = spec == recommended && ram > 0, enabled = download == null && !vm.strictOffline) { confirmDownload = spec }
                     }
                 }
             }
+            if (vm.strictOffline) Muted(
+                "Mode Offline Mutlak aktif: unduhan jaringan dinonaktifkan. Pakai Dari berkas untuk memasang model lokal.",
+                Modifier.padding(horizontal = Gutter, vertical = 4.dp),
+            )
             val importInstalled = revision.let { vm.ai.isInstalled(ModelCatalog.IMPORT_ID) }
             val importActive = active == ModelCatalog.IMPORT_ID
             ModelRow(
@@ -209,7 +232,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 "Sudah punya berkas model di HP? Impor saja, tanpa mengunduh ulang.", importInstalled && !busy, { confirmDelete = ModelCatalog.IMPORT_ID },
             ) {
                 if (importInstalled && !importActive) SmallButton("Pakai", primary = true, enabled = !busy) { vm.activateModel(ModelCatalog.IMPORT_ID) }
-                else SmallButton(if (importInstalled) "Ganti berkas" else "Pilih berkas", enabled = !busy) { pickModel.launch(arrayOf("*/*")) }
+                else SmallButton(if (importInstalled) "Ganti berkas" else "Pilih berkas", enabled = !busy) { vm.suppressNextLeaveLock(); pickModel.launch(arrayOf("*/*")) }
             }
             if (download != null) Muted("Unduhan berjalan di latar; aplikasi boleh ditutup.", Modifier.padding(horizontal = Gutter))
 
@@ -270,7 +293,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 if (embInstalled) "Aktif. Pencarian menggabungkan kecocokan kata dan kemiripan makna di perangkat."
                 else "Belum dipasang. Pencarian kata bawaan tetap instan tanpa model ini.",
             ) {
-                SmallButton(if (embInstalled) "Ganti berkas" else "Pilih berkas") { pickEmbModel.launch(arrayOf("*/*")) }
+                SmallButton(if (embInstalled) "Ganti berkas" else "Pilih berkas") { vm.suppressNextLeaveLock(); pickEmbModel.launch(arrayOf("*/*")) }
             }
             if (embInstalled) TextAction(
                 "Hapus model",
@@ -282,19 +305,21 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             Section("Pengingat")
             if (!canNotify) SettingRow("Notifikasi dimatikan", "Tanpa izin ini pengingat tidak akan muncul.", error = true) {
                 SmallButton("Izinkan", primary = true) {
+                    vm.suppressNextLeaveLock()
                     if (Build.VERSION.SDK_INT >= 33) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS) else openAppNotificationSettings(ctx)
                 }
             }
             if (!canExact) SettingRow("Alarm tepat waktu dimatikan", "Pengingat bisa terlambat beberapa menit.", error = true) {
                 SmallButton("Izinkan") {
                     if (Build.VERSION.SDK_INT >= 31) runCatching {
+                        vm.suppressNextLeaveLock()
                         ctx.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + ctx.packageName)))
                     }
                 }
             }
             if (canNotify && canExact) SettingRow(
                 "Pengingat aktif", "${vm.reminderCount} catatan punya pengingat. Tetap berbunyi saat aplikasi ditutup dan setelah HP dinyalakan ulang.",
-            ) { SmallButton("Atur bunyi") { openAppNotificationSettings(ctx) } }
+            ) { SmallButton("Atur bunyi") { vm.suppressNextLeaveLock(); openAppNotificationSettings(ctx) } }
 
             // ---------- Keandalan ----------
             Section(if (Oem.aggressive) "Agar pengingat tidak ditahan HP ${Oem.brand}" else "Agar pengingat tidak ditahan HP")
@@ -309,14 +334,14 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 "Pengoptimalan baterai",
                 if (battery) "Catatanku sudah dikecualikan." else "Catatanku masih dibatasi saat HP diam lama. Kecualikan agar pengingat tepat waktu.",
                 error = !battery,
-            ) { if (!battery) SmallButton("Kecualikan", primary = true) { Oem.requestBatteryUnrestricted(ctx) } }
+            ) { if (!battery) SmallButton("Kecualikan", primary = true) { vm.suppressNextLeaveLock(); Oem.requestBatteryUnrestricted(ctx) } }
             if (Oem.aggressive) {
                 Column(Modifier.padding(start = Gutter, end = 12.dp, top = 8.dp, bottom = 8.dp)) {
                     Text("Setelan khusus ${Oem.brand}", style = MaterialTheme.typography.bodyLarge)
                     Muted("HP ini bisa menghentikan aplikasi di latar dan ikut membuang pengingatnya. Aplikasi tidak bisa mengubahnya sendiri; lakukan sekali:", Modifier.padding(top = 2.dp))
                     Oem.steps.forEachIndexed { i, s -> Muted("${i + 1}. $s", Modifier.padding(top = 4.dp)) }
                     Muted("Nama menu bisa sedikit berbeda antarversi.", Modifier.padding(top = 4.dp))
-                    Row(Modifier.padding(top = 8.dp)) { SmallButton("Buka setelan mulai otomatis") { if (!Oem.openAutostart(ctx)) vm.say("Halaman khususnya tidak ditemukan; dibuka info aplikasi. Cari Penggunaan baterai di sana.") } }
+                    Row(Modifier.padding(top = 8.dp)) { SmallButton("Buka setelan mulai otomatis") { vm.suppressNextLeaveLock(); if (!Oem.openAutostart(ctx)) vm.say("Halaman khususnya tidak ditemukan; dibuka info aplikasi. Cari Penggunaan baterai di sana.") } }
                 }
             } else Muted(
                 "Sebagian HP (Oppo, Vivo, Realme, Xiaomi) punya pembatas tambahan. Bila uji di bawah gagal, cari \"mulai otomatis\" dan " +
@@ -346,8 +371,50 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
 
             // ---------- Keamanan ----------
             Section("Keamanan")
-            SettingRow("Kunci aplikasi", "Buka dengan sidik jari atau PIN layar HP. Isi notifikasi pengingat ikut disembunyikan.") {
+            SettingRow(
+                "Kunci aplikasi",
+                "Mengunci seluruh aplikasi, membersihkan catatan dari RAM, mengunci menu teks terpilih, dan menyembunyikan isi notifikasi.",
+            ) {
                 Switch(vm.lockEnabled, { vm.updateLock(it) })
+            }
+            if (vm.lockEnabled) {
+                Column(Modifier.padding(horizontal = Gutter, vertical = 6.dp)) {
+                    Text("Waktu kunci otomatis", style = MaterialTheme.typography.bodyLarge)
+                    Muted("Mengunci otomatis saat berpindah aplikasi; mematikan layar HP selalu mengunci seketika.", Modifier.padding(bottom = 6.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LockTimeout.entries.forEach { t ->
+                            Choice(t.label, selected = vm.lockTimeout == t) { vm.updateLockTimeout(t) }
+                        }
+                    }
+                }
+                SettingRow("Kunci sekarang", "Mengunci aplikasi dan membersihkan data sementara dari memori seketika.") {
+                    SmallButton("Kunci sekarang") { vm.lockNow() }
+                }
+            }
+            SettingRow(
+                "PIN / sandi khusus Catatanku",
+                if (vm.hasAppPin) "Aktif. Dapat dipakai terpisah atau melengkapi kunci layar HP untuk membuka aplikasi dan Brankas."
+                else "Opsional: buat PIN atau sandi mandiri (4–64 karakter) untuk membuka aplikasi dan Brankas.",
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (vm.hasAppPin) TextAction("Hapus PIN", color = MaterialTheme.colorScheme.error) { vm.removeAppPin() }
+                    SmallButton(if (vm.hasAppPin) "Ubah PIN" else "Pasang PIN") { askPinDialog = true }
+                }
+            }
+            SettingRow(
+                "Hapus otomatis jika gagal 10×",
+                "Pengaman ekstrem: menghancurkan kunci enkripsi dan seluruh catatan bila PIN salah 10 kali berturut-turut.",
+            ) {
+                Switch(
+                    vm.wipeAfterFailures,
+                    { on -> if (on) confirmEnableAutoWipe = true else vm.updateWipeAfterFailures(false) },
+                )
+            }
+            SettingRow(
+                "Hapus darurat",
+                "Menghancurkan kunci Android Keystore, basis data, lampiran, dan preferensi secara permanen.",
+            ) {
+                TextAction("Hapus semua data", color = MaterialTheme.colorScheme.error) { confirmPanicWipe = true }
             }
 
             // ---------- Cadangan ----------
@@ -356,15 +423,31 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             SettingRow(
                 "Cadangan otomatis",
                 when {
-                    folder == null -> "Pilih folder; cadangan ZIP (termasuk lampiran) ditulis tiap ada perubahan, ${AutoBackup.KEEP} berkas terakhir disimpan."
-                    vm.backupError != null -> "Gagal menulis ke $folder: ${vm.backupError}. Pilih ulang foldernya."
+                    folder == null -> "Pilih folder; cadangan ditulis tiap ada perubahan, ${AutoBackup.KEEP} berkas terakhir disimpan."
+                    vm.backupError != null -> "Gagal menulis ke $folder: ${vm.backupError}."
                     vm.backupAt > 0 -> "$folder  ·  terakhir ${whenLabel(vm.backupAt)}"
                     else -> folder
                 },
                 error = vm.backupError != null,
             ) {
-                if (folder == null || vm.backupError != null) SmallButton("Pilih folder", primary = true) { pickFolder.launch(null) }
+                if (folder == null || vm.backupError != null) SmallButton("Pilih folder", primary = true) { vm.suppressNextLeaveLock(); pickFolder.launch(null) }
                 else SmallButton("Matikan") { vm.setBackupFolder(null) }
+            }
+            SettingRow(
+                "Enkripsi cadangan otomatis",
+                when {
+                    vm.autoBackupEncrypted -> "Aktif (.enc.zip). Arsip harian dienkripsi di latar hanya dengan kunci publik; hanya sandi pemulihan Anda yang dapat membukanya."
+                    vm.lockEnabled && folder != null -> "Wajib disetel saat Kunci Aplikasi aktif agar cadangan di folder bersama tidak tersimpan polos."
+                    else -> "Atur sandi pemulihan agar cadangan otomatis harian terenkripsi penuh (termasuk isi Brankas)."
+                },
+                error = vm.lockEnabled && folder != null && !vm.autoBackupEncrypted,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (vm.autoBackupEncrypted) TextAction("Matikan", color = MaterialTheme.colorScheme.error) { confirmDisableAutoBackupEnc = true }
+                    SmallButton(if (vm.autoBackupEncrypted) "Ubah sandi" else "Atur sandi", primary = vm.lockEnabled && folder != null && !vm.autoBackupEncrypted) {
+                        askAutoBackupPass = true
+                    }
+                }
             }
             vm.backupProgress?.let { bp ->
                 Column(Modifier.padding(horizontal = Gutter, vertical = 6.dp)) {
@@ -378,19 +461,64 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
             }
             SettingRow(
                 "Ekspor dan impor lengkap",
-                "Arsip ZIP membawa semua catatan, Sampah, pengingat, riwayat versi, serta lampiran gambar dan suara (bisa dilindungi kata sandi). Tetap mendukung berkas JSON lama.",
+                "Arsip ZIP membawa catatan, Sampah, pengingat, riwayat versi, serta lampiran (catatan Brankas hanya ikut bila diekspor bersandi). Tetap mendukung JSON lama.",
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallButton("Impor", enabled = vm.backupProgress == null) { importFrom.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) }
+                    SmallButton("Impor", enabled = vm.backupProgress == null) {
+                        vm.suppressNextLeaveLock()
+                        importFrom.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*"))
+                    }
                     SmallButton("Ekspor", enabled = vm.backupProgress == null) { askExportPass = true }
                 }
             }
 
             // ---------- Privasi ----------
             Section("Privasi")
+            SettingRow(
+                "Blokir tangkapan layar",
+                "Mencegah screenshot, perekaman layar, dan pratinjau isi catatan di layar aplikasi terbaru (aktif otomatis saat Kunci/Brankas aktif).",
+            ) {
+                Switch(vm.screenShield, vm::updateScreenShield)
+            }
+            SettingRow(
+                "Keyboard penyamaran",
+                "Meminta papan ketik HP tidak merekam atau mempelajari kata-kata pribadi yang Anda ketik.",
+            ) {
+                Switch(vm.incognitoKeyboard, vm::updateIncognitoKeyboard)
+            }
+            SettingRow(
+                "Hapus otomatis papan klip",
+                "Menandai salinan teks sebagai sensitif dan menghapusnya otomatis dari papan klip setelah 30 detik.",
+            ) {
+                Switch(vm.clipboardAutoClear, vm::updateClipboardAutoClear)
+            }
+            SettingRow(
+                "Mode Offline Mutlak",
+                "Memblokir seluruh unduhan jaringan termasuk pengunduhan model AI. Fitur tetap berjalan penuh lewat impor berkas lokal.",
+            ) {
+                Switch(vm.strictOffline, vm::updateStrictOffline)
+            }
+
+            val hasKeystore = remember(vm.locked) { DeviceVaultKey.hasHardwareOrKeystoreBacking(ctx) }
+            val modelAudit = if (!vm.ai.hasModel) "Belum ada model AI terpasang"
+            else "${vm.ai.activeName}: ${if (vm.ai.isActiveModelInPrivateStorage()) "ruang privat" else "penyimpanan aplikasi luar"}" +
+                (vm.ai.activeModelVerifiedShaPrefix()?.let { " · SHA-256 $it…" } ?: "")
+            val permList = listOfNotNull(
+                if (canMic) "Mikrofon" else null,
+                if (canNotify) "Notifikasi" else null,
+                if (canExact) "Alarm tepat waktu" else null,
+            ).ifEmpty { listOf("Tidak ada izin sensitif aktif") }.joinToString(", ")
+
+            SettingRow(
+                "Audit privasi perangkat",
+                "Penyimpanan: AES-256-GCM (${if (hasKeystore) "Android Keystore" else "kunci lokal"}) · Brankas: ${vm.vaultCount} catatan\n" +
+                    "Model AI: $modelAudit\n" +
+                    "Izin aktif: $permList",
+            ) {
+                SmallButton("Atur izin HP") { vm.suppressNextLeaveLock(); openAppDetailsSettings(ctx) }
+            }
             Muted(
-                "Catatan, pengingat, dan pemrosesan AI tetap di perangkat. Internet hanya dipakai saat kamu menekan Unduh, " +
-                    "untuk mengambil berkas model dari huggingface.co.",
+                "Nol akun, nol server, nol pelacak, nol SDK tertutup. Catatan, pengingat, dan AI tetap di perangkat.",
                 Modifier.padding(horizontal = Gutter),
             )
             Muted(
@@ -428,6 +556,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     pendingExportPass = chars
                     val defName = if (chars != null) "catatanku-cadangan.enc.zip" else "catatanku-cadangan.zip"
                     pass = ""
+                    vm.suppressNextLeaveLock()
                     exportTo.launch(defName)
                 }
             },
@@ -502,5 +631,158 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
         ) {
             if (isEmbedding) vm.deleteEmbeddingModel() else vm.deleteModel(id)
         }
+    }
+
+    if (askPinDialog) {
+        var pin1 by remember { mutableStateOf("") }
+        var pin2 by remember { mutableStateOf("") }
+        val validFormat = pin1.length in AppPinCrypto.MIN_PIN_LEN..AppPinCrypto.MAX_PIN_LEN && pin1.any { !it.isWhitespace() }
+        val matches = validFormat && pin1 == pin2
+        AlertDialog(
+            onDismissRequest = { pin1 = ""; pin2 = ""; askPinDialog = false },
+            title = { Text(if (vm.hasAppPin) "Ubah PIN Catatanku" else "Pasang PIN Catatanku", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Muted("Minimal ${AppPinCrypto.MIN_PIN_LEN} karakter. Jika lupa PIN ini, catatan terkunci tidak bisa dibuka.")
+                    OutlinedTextField(
+                        value = pin1,
+                        onValueChange = { pin1 = it.take(AppPinCrypto.MAX_PIN_LEN) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        placeholder = { Text("PIN atau sandi baru") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = SmallShape,
+                    )
+                    OutlinedTextField(
+                        value = pin2,
+                        onValueChange = { pin2 = it.take(AppPinCrypto.MAX_PIN_LEN) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        placeholder = { Text("Ulangi PIN atau sandi") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = SmallShape,
+                    )
+                    if (pin2.isNotEmpty() && !matches) {
+                        Text(
+                            if (!validFormat) "Minimal ${AppPinCrypto.MIN_PIN_LEN} karakter non-spasi." else "Kedua isian belum sama.",
+                            Modifier.padding(top = 6.dp),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextAction("Simpan PIN", enabled = matches) {
+                    val chars = pin1.toCharArray()
+                    pin1 = ""; pin2 = ""
+                    askPinDialog = false
+                    vm.setAppPin(chars)
+                }
+            },
+            dismissButton = { TextAction("Batal") { pin1 = ""; pin2 = ""; askPinDialog = false } },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        )
+    }
+
+    if (askAutoBackupPass) {
+        var pass1 by remember { mutableStateOf("") }
+        var pass2 by remember { mutableStateOf("") }
+        val valid = pass1.length >= 6 && pass1 == pass2
+        AlertDialog(
+            onDismissRequest = { pass1 = ""; pass2 = ""; askAutoBackupPass = false },
+            title = { Text("Sandi cadangan otomatis", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Muted("Sandi ini tidak disimpan di HP; arsip harian dienkripsi dengan kunci publik dan hanya bisa dipulihkan memakai sandi ini.")
+                    OutlinedTextField(
+                        value = pass1,
+                        onValueChange = { pass1 = it.take(128) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        placeholder = { Text("Sandi pemulihan (min. 6 karakter)") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = SmallShape,
+                    )
+                    OutlinedTextField(
+                        value = pass2,
+                        onValueChange = { pass2 = it.take(128) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        placeholder = { Text("Ulangi sandi pemulihan") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = SmallShape,
+                    )
+                    if (pass2.isNotEmpty() && !valid) {
+                        Text(
+                            if (pass1.length < 6) "Gunakan minimal 6 karakter." else "Kedua isian sandi belum sama.",
+                            Modifier.padding(top = 6.dp),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextAction("Simpan sandi", enabled = valid) {
+                    val chars = pass1.toCharArray()
+                    pass1 = ""; pass2 = ""
+                    askAutoBackupPass = false
+                    vm.setAutoBackupPassphrase(chars)
+                }
+            },
+            dismissButton = { TextAction("Batal") { pass1 = ""; pass2 = ""; askAutoBackupPass = false } },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        )
+    }
+
+    if (confirmDisableAutoBackupEnc) Confirm(
+        "Matikan enkripsi cadangan otomatis?",
+        "Cadangan otomatis berikutnya akan ditulis sebagai ZIP biasa (tanpa isi Brankas), dan ditahan bila Kunci Aplikasi aktif.",
+        "Matikan enkripsi",
+        destructive = true,
+        onDismiss = { confirmDisableAutoBackupEnc = false },
+    ) { vm.clearAutoBackupEncryption() }
+
+    if (confirmEnableAutoWipe) Confirm(
+        "Aktifkan hapus otomatis?",
+        "Bila PIN salah dimasukkan ${AppPinCrypto.DEFAULT_WIPE_ATTEMPTS} kali berturut-turut, seluruh catatan, lampiran, dan kunci enkripsi dihapus permanen tanpa bisa dipulihkan.",
+        "Aktifkan hapus otomatis",
+        destructive = true,
+        onDismiss = { confirmEnableAutoWipe = false },
+    ) { vm.updateWipeAfterFailures(true) }
+
+    if (confirmPanicWipe) {
+        var typed by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { typed = ""; confirmPanicWipe = false },
+            title = { Text("Hapus semua data?", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Muted("Tindakan ini menghancurkan kunci Keystore, seluruh catatan, lampiran, pengingat, dan PIN secara permanen. Tidak ada cara membatalkan.")
+                    OutlinedTextField(
+                        value = typed,
+                        onValueChange = { typed = it.take(16) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        placeholder = { Text("Ketik HAPUS untuk konfirmasi") },
+                        singleLine = true,
+                        shape = SmallShape,
+                    )
+                }
+            },
+            confirmButton = {
+                TextAction(
+                    "Hapus semua data",
+                    enabled = typed.trim().equals("HAPUS", ignoreCase = true),
+                    color = MaterialTheme.colorScheme.error,
+                ) {
+                    typed = ""
+                    confirmPanicWipe = false
+                    vm.panicWipe()
+                }
+            },
+            dismissButton = { TextAction("Batal") { typed = ""; confirmPanicWipe = false } },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        )
     }
 }

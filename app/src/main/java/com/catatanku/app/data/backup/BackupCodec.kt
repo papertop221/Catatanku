@@ -41,6 +41,7 @@ object BackupCodec {
                 w.name("created").value(n.created)
                 w.name("updated").value(n.updated)
                 if (n.inTrash) w.name("deleted").value(n.deletedAt)
+                if (n.vault) w.name("vault").value(true)
                 if (n.hasReminder) {
                     w.name("remindAt").value(n.remindAt)
                     w.name("remindRepeat").value(n.remindRepeat.name)
@@ -99,6 +100,7 @@ object BackupCodec {
                 remindAlarm = bool(o["remindAlarm"]),
                 remindFired = bool(o["remindFired"]),
                 attachments = rawAtt.take(20).map { str(it) }.filter { SAFE_ATTACHMENT.matches(it) }.distinct(),
+                vault = bool(o["vault"]),
             )
             val versions = rawVer.take(MAX_VERSIONS_PER_NOTE).mapNotNull { vItem ->
                 @Suppress("UNCHECKED_CAST")

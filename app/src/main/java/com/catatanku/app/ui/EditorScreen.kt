@@ -280,7 +280,7 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 ) {
                     Tool(AppIcons.CheckBox, "Centang") { prefix(true) }
                     Tool(AppIcons.Bullets, "Poin") { prefix(false) }
-                    Tool(AppIcons.Image, "Gambar") { pickImage.launch("image/*") }
+                    Tool(AppIcons.Image, "Gambar") { vm.suppressNextLeaveLock(); pickImage.launch("image/*") }
                     Tool(
                         if (recorder.recording) AppIcons.Stop else AppIcons.Mic,
                         if (recorder.recording) "Selesai" else "Suara",
@@ -292,10 +292,11 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                             player.stop()
                             if (!recorder.start()) vm.say("Mikrofon tidak bisa dimulai.")
                         } else {
+                            vm.suppressNextLeaveLock()
                             askAudio.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     }
-                    Tool(AppIcons.Folder, "Folder") { folderDialog = true }
+                    if (!d.vault) Tool(AppIcons.Folder, "Folder") { folderDialog = true }
                     Tool(AppIcons.Pen, if (vm.aiBusy) "Bekerja…" else "Bantu tulis") { vm.aiSheet = true }
                 }
             }
@@ -321,14 +322,22 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         val plain = (if (d.title.isNotBlank()) d.title + "\n\n" else "") + d.body
                         DropdownMenuItem({ Text("Bagikan") }, {
                             menu = false
+                            vm.suppressNextLeaveLock()
                             ctx.startActivity(Intent.createChooser(
                                 Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, d.title).putExtra(Intent.EXTRA_TEXT, plain), null))
                         }, enabled = !d.isBlank)
                         DropdownMenuItem({ Text("Salin teks") }, { menu = false; copyText(ctx, plain); vm.say("Teks disalin.") }, enabled = !d.isBlank)
                         DropdownMenuItem({ Text("Riwayat versi") }, { menu = false; vm.openVersions() }, enabled = d.id != 0L)
+                        if (!d.inTrash) {
+                            DropdownMenuItem(
+                                { Text(if (d.vault) "Keluarkan dari Brankas" else "Pindahkan ke Brankas") },
+                                { menu = false; vm.moveDraftToVault(!d.vault) },
+                                enabled = !d.isBlank || d.id != 0L,
+                            )
+                        }
                         Hairline()
-                        if (d.inTrash) {
-                            DropdownMenuItem({ Text("Pulihkan") }, { menu = false; vm.restoreDraft() })
+                        if (d.inTrash || d.vault) {
+                            if (d.inTrash) DropdownMenuItem({ Text("Pulihkan") }, { menu = false; vm.restoreDraft() })
                             DropdownMenuItem({ Text("Hapus permanen", color = MaterialTheme.colorScheme.error) }, { menu = false; confirmForever = true })
                         } else {
                             DropdownMenuItem({ Text(if (d.archived) "Keluarkan dari arsip" else "Arsipkan") }, { menu = false; vm.toggleArchive() }, enabled = !d.isBlank)

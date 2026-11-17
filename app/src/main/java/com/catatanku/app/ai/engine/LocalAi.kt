@@ -18,6 +18,7 @@ import com.catatanku.app.ai.performance.MemoryPolicy
 import com.catatanku.app.ai.performance.PerformanceProfileStore
 import com.catatanku.app.ai.performance.ProfileSource
 import com.catatanku.app.media.Attachments
+import com.catatanku.app.security.SecurityPrefs
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -26,6 +27,8 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
+import com.google.ai.edge.litertlm.ModelInfo
+import com.google.ai.edge.litertlm.ModelType
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.SpeculativeDecodingConfig
 import com.google.ai.edge.litertlm.SpeculativeDecodingMode
@@ -85,7 +88,8 @@ class LocalAi private constructor(private val context: Context) {
     private val prefs = context.getSharedPreferences("ai", Context.MODE_PRIVATE)
     private val monitor = AndroidPerfMonitor(context)
     private val profileStore = PerformanceProfileStore(context)
-    private val importFile = File(context.filesDir, "models/model.litertlm")
+    private val privateModelsDir: File get() = File(context.filesDir, "models")
+    private val importFile = File(privateModelsDir, "model.litertlm")
     private val dlDir: File? get() = context.getExternalFilesDir("models")
     private val dm get() = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -167,7 +171,22 @@ class LocalAi private constructor(private val context: Context) {
     fun fileFor(id: String?): File? = when (id) {
         null -> null
         ModelCatalog.IMPORT_ID -> importFile
-        else -> ModelCatalog.byId(id)?.let { s -> dlDir?.let { File(it, s.fileName) } }
+        else -> ModelCatalog.byId(id)?.let { s ->
+            val priv = File(privateModelsDir, s.fileName)
+            if (priv.exists()) priv else dlDir?.let { File(it, s.fileName) }
+        }
+    }
+
+    fun isActiveModelInPrivateStorage(): Boolean {
+        val f = modelFile ?: return false
+        return f.canonicalPath.startsWith(context.filesDir.canonicalPath)
+    }
+
+    fun activeModelVerifiedShaPrefix(): String? {
+        val id = activeId ?: return null
+        val spec = activeSpec
+        if (spec != null) return spec.sha256.take(12)
+        return prefs.getString("import_sha256", null)?.take(12)
     }
 
     fun isInstalled(id: String) = fileFor(id)?.exists() == true
@@ -222,6 +241,12 @@ class LocalAi private constructor(private val context: Context) {
         if (id == activeId) unload()
         withContext(Dispatchers.IO) {
             fileFor(id)?.delete()
+            ModelCatalog.byId(id)?.let { s ->
+                File(privateModelsDir, s.fileName).delete()
+                dlDir?.let { File(it, s.fileName).delete() }
+            }
+            prefs.edit().remove("verified_meta_$id").apply()
+            if (id == ModelCatalog.IMPORT_ID) prefs.edit().remove("import_sha256").apply()
             context.cacheDir.listFiles()?.forEach { f ->
                 if (f.name.contains("litert", ignoreCase = true) || f.name.endsWith(".xnnpack_cache") || f.name.endsWith(".bin")) f.delete()
             }
@@ -235,6 +260,10 @@ class LocalAi private constructor(private val context: Context) {
     fun freeSpaceFor(spec: ModelSpec): Boolean = (dlDir?.usableSpace ?: 0) > spec.bytes + 300L * 1024 * 1024
 
     fun startDownload(spec: ModelSpec, wifiOnly: Boolean) {
+        if (SecurityPrefs.isStrictOffline(context)) {
+            events.tryEmit(AiEvent.Message("Mode Offline Mutlak aktif; matikan dulu di Pengaturan → Privasi untuk mengunduh model."))
+            return
+        }
         if (_download.value != null) return
         val dir = dlDir
         if (dir == null) { events.tryEmit(AiEvent.Message("Penyimpanan tidak tersedia.")); return }
@@ -303,18 +332,64 @@ class LocalAi private constructor(private val context: Context) {
     private suspend fun finish(dlId: Long, spec: ModelSpec, part: File) {
         _download.value = Download(spec.id, 100, "Memeriksa keutuhan berkas…")
         val ok = part.length() == spec.bytes && sha256(part) == spec.sha256
-        val target = fileFor(spec.id)
-        if (!ok || target == null) {
+        if (!ok) {
             runCatching { dm.remove(dlId) }; part.delete(); clearDownload()
             events.tryEmit(AiEvent.ModelVerifyFailed(spec.name))
             return
         }
-        target.delete()
-        val moved = part.renameTo(target)
-        prefs.edit().remove("dl_id").remove("dl_spec").apply()
+        val privTarget = File(privateModelsDir.apply { mkdirs() }, spec.fileName)
+        var finalTarget: File? = null
+        if (context.filesDir.usableSpace >= spec.bytes + 250L * 1024 * 1024) {
+            _download.value = Download(spec.id, 100, "Memindahkan model ke ruang privat…")
+            val privTmp = File(privateModelsDir, "${spec.fileName}.tmp")
+            val copiedOk = runCatching {
+                val md = MessageDigest.getInstance("SHA-256")
+                part.inputStream().use { inp ->
+                    privTmp.outputStream().use { out ->
+                        val buf = ByteArray(1 shl 20)
+                        while (true) {
+                            val n = inp.read(buf)
+                            if (n < 0) break
+                            md.update(buf, 0, n)
+                            out.write(buf, 0, n)
+                        }
+                    }
+                }
+                val hash = md.digest().joinToString("") { "%02x".format(it) }
+                hash == spec.sha256
+            }.getOrDefault(false)
+            if (copiedOk) {
+                privTarget.delete()
+                if (privTmp.renameTo(privTarget)) {
+                    part.delete()
+                    finalTarget = privTarget
+                } else {
+                    privTmp.delete()
+                }
+            } else {
+                privTmp.delete()
+            }
+        }
+        if (finalTarget == null) {
+            val extTarget = dlDir?.let { File(it, spec.fileName) }
+            if (extTarget == null) {
+                runCatching { dm.remove(dlId) }; part.delete(); clearDownload()
+                events.tryEmit(AiEvent.Message("Gagal menyimpan ${spec.name}."))
+                return
+            }
+            extTarget.delete()
+            if (!part.renameTo(extTarget)) {
+                runCatching { dm.remove(dlId) }; part.delete(); clearDownload()
+                events.tryEmit(AiEvent.Message("Gagal menyimpan ${spec.name}."))
+                return
+            }
+            finalTarget = extTarget
+        }
+        prefs.edit()
+            .putString("verified_meta_${spec.id}", "${finalTarget.length()}:${finalTarget.lastModified()}:${spec.sha256}")
+            .remove("dl_id").remove("dl_spec").apply()
         runCatching { dm.remove(dlId) }
         _download.value = null
-        if (!moved) { events.tryEmit(AiEvent.Message("Gagal menyimpan ${spec.name}.")); return }
         activate(spec.id)
         events.tryEmit(AiEvent.ModelInstalled(spec.name))
     }
@@ -355,8 +430,14 @@ class LocalAi private constructor(private val context: Context) {
                 }
             }
             if (tmp.length() < 10L * 1024 * 1024) error("Berkas terlalu kecil untuk sebuah model LLM.")
+            val modelType = runCatching {
+                ModelInfo.from(tmp.absolutePath).use { it.modelType }
+            }.getOrElse { error("Berkas ini bukan format model LiteRT-LM yang sah.") }
+            if (modelType == ModelType.EMBEDDING) error("Berkas ini model embedding; impor melalui bagian Pencarian makna.")
+            val hash = sha256(tmp)
             importFile.delete()
             if (!tmp.renameTo(importFile)) error("Gagal menyimpan model.")
+            prefs.edit().putString("import_sha256", hash).apply()
             unload(); activeId = ModelCatalog.IMPORT_ID; applyActive()
         } catch (e: Exception) {
             tmp.delete()
@@ -442,12 +523,29 @@ class LocalAi private constructor(private val context: Context) {
         ).also { it.initialize() }
     }
 
+    private fun verifyExternalModelIntegrity(file: File) {
+        val spec = activeSpec ?: return
+        if (file.canonicalPath.startsWith(context.filesDir.canonicalPath)) return
+        if (file.length() != spec.bytes) {
+            error("Ukuran berkas model berubah di penyimpanan luar. Hapus lalu unduh ulang.")
+        }
+        val expectedMeta = "${file.length()}:${file.lastModified()}:${spec.sha256}"
+        val savedMeta = prefs.getString("verified_meta_${spec.id}", null)
+        if (savedMeta != expectedMeta) {
+            if (sha256(file) != spec.sha256) {
+                error("Verifikasi integritas SHA-256 model gagal; berkas mungkin diubah oleh aplikasi lain.")
+            }
+            prefs.edit().putString("verified_meta_${spec.id}", expectedMeta).apply()
+        }
+    }
+
     private fun ensureLoaded(
         force: Boolean = false,
         wantVision: Boolean = false,
         wantAudio: Boolean = false,
     ): Pair<Engine, Double> {
         val file = checkNotNull(modelFile) { "Model belum dipasang." }
+        verifyExternalModelIntegrity(file)
         val baseProfile = currentProfile()
         val estBytes = activeSpec?.workingBytes(lightMode) ?: (file.length() * 3 / 4)
         val snap = monitor.memorySnapshot(
@@ -559,20 +657,29 @@ class LocalAi private constructor(private val context: Context) {
                 ),
             )
             val c = e.createConversation(convConfig)
-            val tempOcrFile = if (imageFile != null && ocrDerivative) {
-                Attachments.createOcrDerivative(context, imageFile.name, Attachments.OCR_DERIVATIVE_PX)
-            } else null
-            val effectiveImage = tempOcrFile ?: imageFile
+            var imageBytes: ByteArray? = null
+            var audioBytes: ByteArray? = null
             val startNs = System.nanoTime()
             var ok = false
             try {
+                if (imageFile != null) {
+                    imageBytes = if (ocrDerivative) {
+                        Attachments.createOcrDerivativeBytes(context, imageFile.name, Attachments.OCR_DERIVATIVE_PX)
+                            ?: Attachments.readDecryptedBytes(context, imageFile.name)
+                    } else {
+                        Attachments.readDecryptedBytes(context, imageFile.name)
+                    }
+                }
+                if (audioFile != null) {
+                    audioBytes = Attachments.readDecryptedBytes(context, audioFile.name)
+                }
                 var acc = ""
-                val flow = if (effectiveImage == null && audioFile == null) {
+                val flow = if (imageBytes == null && audioBytes == null) {
                     c.sendMessageAsync(prompt)
                 } else {
                     val parts = buildList<Content> {
-                        if (effectiveImage != null) add(Content.ImageFile(effectiveImage.absolutePath))
-                        if (audioFile != null) add(Content.AudioFile(audioFile.absolutePath))
+                        imageBytes?.let { add(Content.ImageBytes(it)) }
+                        audioBytes?.let { add(Content.AudioBytes(it)) }
                         add(Content.Text(prompt))
                     }
                     c.sendMessageAsync(Contents.of(parts))
@@ -614,7 +721,8 @@ class LocalAi private constructor(private val context: Context) {
                     success = ok,
                 )
                 _metrics.value = (_metrics.value + metric).takeLast(MAX_METRICS_HISTORY)
-                tempOcrFile?.delete()
+                imageBytes?.let { java.util.Arrays.fill(it, 0.toByte()) }
+                audioBytes?.let { java.util.Arrays.fill(it, 0.toByte()) }
                 runCatching { c.close() }
                 touch()
             }

@@ -238,7 +238,12 @@ object BoundedJson {
                 while (peek() in '0'.code..'9'.code) sb.append(next().toChar())
             }
             val s = sb.toString()
-            return if (isFloat) s.toDouble() else s.toLongOrNull() ?: s.toDouble()
+            if (isFloat) {
+                val d = s.toDouble()
+                if (!d.isFinite()) error("Angka JSON tidak valid.")
+                return d
+            }
+            return s.toLongOrNull() ?: s.toDouble().also { if (!it.isFinite()) error("Angka JSON di luar batas.") }
         }
 
         private fun expect(lit: String) {

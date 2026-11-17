@@ -41,6 +41,7 @@ data class Note(
     val remindAlarm: Boolean = false, // berdering seperti alarm sampai ditanggapi
     val remindFired: Boolean = false, // sudah berbunyi tetapi belum ditandai selesai
     val attachments: List<String> = emptyList(), // berkas lampiran di filesDir/attachments (img_*, aud_*)
+    val vault: Boolean = false,       // catatan rahasia Brankas: tersembunyi dari daftar & pencarian biasa
 ) {
     val isBlank get() = title.isBlank() && body.isBlank() && attachments.isEmpty()
     val inTrash get() = deletedAt != 0L
@@ -76,6 +77,7 @@ sealed interface NoteView {
     data object Reminders : NoteView
     data object Archive : NoteView
     data object Trash : NoteView
+    data object Vault : NoteView
 }
 
 /** Aksi bantu-tulis. [replaces] = hasilnya wajar menggantikan isi (bukan ditambahkan). */
@@ -166,10 +168,11 @@ class Stats(notes: List<Note>, openTaskCounter: (String) -> Int = { defaultOpenT
     val openTaskCount: Int
 
     init {
-        val live = notes.filter { !it.inTrash }
+        val publicNotes = notes.filter { !it.vault }
+        val live = publicNotes.filter { !it.inTrash }
         tags = live.flatMap { it.tags }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
         folders = live.map { it.folder }.filter { it.isNotBlank() }.distinct().sortedBy { it.lowercase() }
-        trashCount = notes.size - live.size
+        trashCount = publicNotes.size - live.size
         reminderCount = live.count { it.hasReminder }
         organizable = live.count { needsOrganizing(it, folders.isNotEmpty()) }
         openTaskCount = live.sumOf { if (it.archived) 0 else openTaskCounter(it.body) }

@@ -293,12 +293,20 @@ object Reminders {
     private fun show(ctx: Context, n: Note, missed: Boolean) {
         if (!canNotify(ctx)) return
         val ringing = n.remindAlarm && !missed
-        val locked = ctx.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("lock", false)
-        val title = n.heading.take(80).ifBlank { "Pengingat catatan" }
-        val rest = n.body.trim().lines().filter { it.isNotBlank() }.let { if (n.title.isBlank()) it.drop(1) else it }.joinToString("\n").take(400)
+        val locked = com.catatanku.app.security.SecurityPrefs.isLockEnabled(ctx)
+        val private = locked || n.vault
+        val title = when {
+            n.vault -> if (missed) "Pengingat Brankas terlewat" else "Pengingat Brankas"
+            locked -> if (missed) "Pengingat Catatanku terlewat" else "Pengingat Catatanku"
+            else -> {
+                val base = n.heading.take(80).ifBlank { "Pengingat catatan" }
+                if (missed) "Terlewat: $base" else base
+            }
+        }
+        val rest = if (private) "" else n.body.trim().lines().filter { it.isNotBlank() }.let { if (n.title.isBlank()) it.drop(1) else it }.joinToString("\n").take(400)
         val b = NotificationCompat.Builder(ctx, if (ringing) CH_ALARM else CH_NOTIFY)
             .setSmallIcon(R.drawable.ic_bell)
-            .setContentTitle(if (missed) "Terlewat: $title" else title)
+            .setContentTitle(title)
             .setContentIntent(openNote(ctx, n.id))
             .setCategory(if (ringing) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -308,7 +316,8 @@ object Reminders {
             .setOngoing(ringing)
             .addAction(0, "Selesai", broadcast(ctx, ACT_DONE, n.id))
             .addAction(0, "Tunda $SNOOZE_MINUTES mnt", broadcast(ctx, ACT_SNOOZE, n.id))
-        if (locked) b.setContentText("Ketuk untuk membuka catatan")
+        if (n.vault) b.setContentText("Buka Brankas untuk melihat isi catatan")
+        else if (locked) b.setContentText("Ketuk untuk membuka catatan")
         else if (rest.isNotBlank()) b.setContentText(rest.lineSequence().first()).setStyle(NotificationCompat.BigTextStyle().bigText(rest))
         else b.setContentText("Pengingat " + whenLabel(n.remindAt))
         val notification = b.build()

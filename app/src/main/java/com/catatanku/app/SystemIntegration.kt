@@ -1,17 +1,22 @@
 package com.catatanku.app
 
+import android.app.KeyguardManager
 import android.app.PendingIntent
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.Intent
+import android.hardware.biometrics.BiometricManager
+import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.service.quicksettings.TileService
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.clickable
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,8 +50,13 @@ import com.catatanku.app.domain.usecase.TimeParse
 import com.catatanku.app.reminders.saveFromOutside
 import com.catatanku.app.reminders.toMillis
 import com.catatanku.app.reminders.whenLabel
+import com.catatanku.app.security.AppPinCrypto
+import com.catatanku.app.security.InputSecurity
+import com.catatanku.app.security.SecurityPrefs
+import com.catatanku.app.ui.AppViewModel
 import com.catatanku.app.ui.CatatankuTheme
 import com.catatanku.app.ui.Hairline
+import com.catatanku.app.ui.LockScreen
 import com.catatanku.app.ui.Muted
 import com.catatanku.app.ui.NoteType
 import com.catatanku.app.ui.PrimaryButton
@@ -94,8 +105,7 @@ class QuickNoteTile : TileService() {
  * Muncul sebagai "Catatanku" di menu teks terpilih aplikasi mana pun (browser, obrolan, PDF). Teksnya bisa
  * disimpan sebagai catatan, atau diolah AI lokal lalu dikembalikan ke aplikasi asal. Teks tidak pernah keluar dari HP.
  *
- * Layar ini hanya menerima teks dan menulis catatan baru; ia tidak menampilkan catatan yang ada, jadi aman
- * dipakai walau kunci aplikasi aktif.
+ * Saat Kunci Aplikasi aktif, pintu ini ikut menuntut verifikasi sebelum menampilkan atau menyimpan teks.
  */
 class ProcessTextActivity : ComponentActivity() {
     private var result by mutableStateOf<String?>(null)     // null = belum ada aksi AI yang dijalankan
@@ -103,10 +113,83 @@ class ProcessTextActivity : ComponentActivity() {
     private var label by mutableStateOf("")
     private var error by mutableStateOf<String?>(null)
     private var detectedRemindAt by mutableStateOf<Long?>(null)
+    private var unlocked by mutableStateOf(true)
+    private var failedAttempts by mutableStateOf(0)
+    private var lockoutMs by mutableStateOf(0L)
     private var job: Job? = null
     private val ai by lazy { LocalAi.get(this) }
 
+    private val confirmCredential = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == RESULT_OK) {
+            SecurityPrefs.resetFailures(this)
+            unlocked = true
+        }
+    }
+
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+
+    private fun requestUnlock() {
+        val km = getSystemService(KeyguardManager::class.java)
+        val deviceSecure = km?.isDeviceSecure == true
+        if (!deviceSecure) {
+            if (!SecurityPrefs.hasAppPin(this)) unlocked = true
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            val b = BiometricPrompt.Builder(this).setTitle("Buka Catatanku")
+            if (Build.VERSION.SDK_INT >= 30) {
+                b.setAllowedAuthenticators(
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                )
+            } else {
+                @Suppress("DEPRECATION") b.setDeviceCredentialAllowed(true)
+            }
+            b.build().authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                    SecurityPrefs.resetFailures(this@ProcessTextActivity)
+                    unlocked = true
+                }
+            })
+        } else {
+            @Suppress("DEPRECATION")
+            val i = km.createConfirmDeviceCredentialIntent("Buka Catatanku", null)
+            if (i != null) confirmCredential.launch(i)
+            else if (!SecurityPrefs.hasAppPin(this)) unlocked = true
+        }
+    }
+
+    private fun verifyPin(pin: CharArray): AppViewModel.PinResult {
+        return try {
+            val rem = SecurityPrefs.remainingLockoutMs(this)
+            if (rem > 0L) {
+                lockoutMs = rem
+                return AppViewModel.PinResult.LOCKED_OUT
+            }
+            if (SecurityPrefs.verifyAppPin(this, pin)) {
+                SecurityPrefs.resetFailures(this)
+                failedAttempts = 0
+                lockoutMs = 0L
+                unlocked = true
+                AppViewModel.PinResult.SUCCESS
+            } else {
+                val fails = SecurityPrefs.recordUnlockFailure(this)
+                failedAttempts = fails
+                lockoutMs = SecurityPrefs.remainingLockoutMs(this)
+                if (AppPinCrypto.shouldTriggerWipe(fails, SecurityPrefs.isWipeAfterFailuresEnabled(this))) {
+                    toast("Percobaan gagal melampaui batas; seluruh data dihapus.")
+                    val appCtx = applicationContext
+                    kotlin.concurrent.thread(name = "catatanku-wipe") { SecurityPrefs.wipeStorageNow(appCtx) }
+                    finish()
+                    AppViewModel.PinResult.WIPED
+                } else {
+                    AppViewModel.PinResult.WRONG
+                }
+            }
+        } finally {
+            pin.fill('\u0000')
+        }
+    }
 
     private fun run(action: AiAction, text: String) {
         label = action.label; result = ""; error = null; detectedRemindAt = null; running = true
@@ -154,15 +237,46 @@ class ProcessTextActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
-        if (prefs.getBoolean("lock", false)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-        val text = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.trim().orEmpty().take(100_000)
+        val lockOn = SecurityPrefs.isLockEnabled(this)
+        val shield = SecurityPrefs.isScreenShieldEnabled(this) || lockOn
+        if (shield) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
+        }
+        unlocked = !lockOn
+        failedAttempts = SecurityPrefs.failedAttempts(this)
+        lockoutMs = SecurityPrefs.remainingLockoutMs(this)
+
+        val text = InputSecurity.sanitizeExternalText(
+            intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(),
+            100_000,
+        )
         val readOnly = intent?.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true) != false
         if (text.isEmpty()) { finish(); return }
         val time = TimeParse.best(text)?.at?.toMillis()
+        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
         val dynamic = prefs.getBoolean("dynamic_color", false)
+        val incognito = SecurityPrefs.isIncognitoKeyboardEnabled(this)
+        val hasPin = SecurityPrefs.hasAppPin(this)
+        val canDevice = getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
+        val wipeOnFail = SecurityPrefs.isWipeAfterFailuresEnabled(this)
+
         setContent {
-            CatatankuTheme(dynamic) {
+            CatatankuTheme(dynamic, incognitoKeyboard = incognito) {
+                if (!unlocked) {
+                    LockScreen(
+                        onUnlock = ::requestUnlock,
+                        title = "Catatanku terkunci",
+                        hasAppPin = hasPin,
+                        canDeviceUnlock = canDevice,
+                        failedAttempts = failedAttempts,
+                        lockoutRemainingMs = lockoutMs,
+                        wipeAfterFailures = wipeOnFail,
+                        onPinSubmit = ::verifyPin,
+                        onCancel = ::finish,
+                    )
+                    return@CatatankuTheme
+                }
                 val aiState by ai.state.collectAsStateWithLifecycle()
                 val hasModel = aiState !is AiState.NoModel
                 val out = result

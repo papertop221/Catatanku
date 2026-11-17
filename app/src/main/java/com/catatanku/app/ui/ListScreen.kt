@@ -86,8 +86,8 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
         if (vm.searchFocusTick > 0) runCatching { searchFocus.requestFocus() }
     }
     val steps = remember(vm.query) { vm.commandSteps(vm.query) }
-    val isCommand = steps != null
-    val canCreate = view == NoteView.All || view is NoteView.Folder
+    val isCommand = steps != null && view != NoteView.Vault
+    val canCreate = view == NoteView.All || view is NoteView.Folder || view == NoteView.Vault
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -96,7 +96,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
             Column(Modifier.background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
                 Hairline()
                 val tags = vm.allTags
-                if (tags.isNotEmpty() && view != NoteView.Trash && !searching) LazyRow(
+                if (tags.isNotEmpty() && view != NoteView.Trash && view != NoteView.Vault && !searching) LazyRow(
                     contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     items(tags, key = { it }) { t ->
@@ -113,8 +113,8 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }
                     }
                 }
-                val offerAgent = isCommand || (hasModel && vm.query.trim().split(WORDS).size >= 3)
-                if (searching && view != NoteView.Trash && (hasModel || isCommand)) Row(Modifier.padding(horizontal = 8.dp)) {
+                val offerAgent = isCommand || (hasModel && view != NoteView.Vault && vm.query.trim().split(WORDS).size >= 3)
+                if (searching && view != NoteView.Trash && view != NoteView.Vault && (hasModel || isCommand)) Row(Modifier.padding(horizontal = 8.dp)) {
                     if (offerAgent) TextAction("Jalankan perintah") { vm.startAgent(vm.query) }
                     if (hasModel) {
                         TextAction("Tanya catatan") { vm.ask(vm.query) }
@@ -129,10 +129,15 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         Icon(AppIcons.Search, null, Modifier.size(20.dp), muted)
                         Spacer(Modifier.width(10.dp))
                         PlainField(
-                            vm.query, vm::updateQuery, if (hasModel) "Cari, tanya, atau beri perintah" else "Cari atau beri perintah",
+                            vm.query, vm::updateQuery,
+                            when {
+                                view == NoteView.Vault -> "Cari di Brankas"
+                                hasModel -> "Cari, tanya, atau beri perintah"
+                                else -> "Cari atau beri perintah"
+                            },
                             Modifier.weight(1f).focusRequester(searchFocus), ime = ImeAction.Search,
                         ) {
-                            if (steps != null && steps.none { it is AgentStep.Trash || it is AgentStep.Archive }) vm.startAgent(vm.query)
+                            if (isCommand && steps.none { it is AgentStep.Trash || it is AgentStep.Archive }) vm.startAgent(vm.query)
                         }
                         if (vm.query.isNotEmpty()) IconAction(AppIcons.Close, "Hapus teks pencarian", muted, 18.dp) { vm.updateQuery("") }
                     }
@@ -161,13 +166,14 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                                 NoteView.Reminders -> "Pengingat"
                                 NoteView.Archive -> "Arsip"
                                 NoteView.Trash -> "Sampah"
+                                NoteView.Vault -> "Brankas"
                             },
                             style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                         Icon(AppIcons.ChevronDown, "Ganti tampilan", Modifier.padding(start = 4.dp).size(20.dp), muted)
                     }
                     Menu(viewMenu, { viewMenu = false }) {
-                        fun pick(v: NoteView) { vm.view = v; vm.tagFilter = null; viewMenu = false }
+                        fun pick(v: NoteView) { vm.switchView(v); viewMenu = false }
                         DropdownMenuItem({ Text("Semua catatan") }, { pick(NoteView.All) })
                         vm.folders.forEach { f ->
                             DropdownMenuItem({ Text(f) }, { pick(NoteView.Folder(f)) }, leadingIcon = { Icon(AppIcons.Folder, null, Modifier.size(18.dp)) })
@@ -176,7 +182,16 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         DropdownMenuItem({ Text("Pengingat" + if (vm.reminderCount > 0) " (${vm.reminderCount})" else "") }, { pick(NoteView.Reminders) })
                         DropdownMenuItem({ Text("Arsip") }, { pick(NoteView.Archive) })
                         DropdownMenuItem({ Text("Sampah" + if (vm.trashCount > 0) " (${vm.trashCount})" else "") }, { pick(NoteView.Trash) })
+                        Hairline()
+                        DropdownMenuItem(
+                            { Text("Brankas" + if (vm.vaultCount > 0) " (${vm.vaultCount})" else "") },
+                            { viewMenu = false; vm.requestOpenVault() },
+                            leadingIcon = { Icon(AppIcons.Lock, null, Modifier.size(18.dp)) },
+                        )
                     }
+                }
+                if (view == NoteView.Vault) {
+                    TextAction("Kunci Brankas") { vm.lockVault() }
                 }
                 Box {
                     IconAction(AppIcons.More, "Menu") { moreMenu = true }
@@ -200,6 +215,10 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                             DropdownMenuItem({ Text("Bubarkan folder") }, { moreMenu = false; dissolveFolderTarget = view.name })
                         }
                         if (view == NoteView.Trash) DropdownMenuItem({ Text("Kosongkan Sampah") }, { moreMenu = false; confirmEmpty = true }, enabled = vm.trashCount > 0)
+                        if (vm.lockEnabled) {
+                            Hairline()
+                            DropdownMenuItem({ Text("Kunci sekarang") }, { moreMenu = false; vm.lockNow() }, leadingIcon = { Icon(AppIcons.Lock, null, Modifier.size(18.dp)) })
+                        }
                         Hairline()
                         DropdownMenuItem({ Text("Pengaturan") }, { moreMenu = false; vm.go(Screen.Settings) })
                     }
@@ -235,6 +254,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
                 if (showToday) item(key = "today", contentType = "today") { TodayBlock(vm, today) }
                 if (view == NoteView.Trash) item(key = "trash-note") { Muted("Catatan di Sampah dihapus permanen setelah 30 hari.", Modifier.padding(horizontal = Gutter, vertical = 8.dp)) }
+                if (view == NoteView.Vault) item(key = "vault-note") { Muted("Brankas terenkripsi dan tersembunyi dari daftar, pencarian biasa, serta ekspor tanpa sandi.", Modifier.padding(horizontal = Gutter, vertical = 8.dp)) }
 
                 when {
                     !vm.loaded -> item(key = "loading") { Skeleton() }
@@ -246,6 +266,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                                 view == NoteView.Trash -> "Sampah kosong." to null
                                 view == NoteView.Archive -> "Arsip kosong." to "Geser catatan ke kanan di daftar untuk mengarsipkannya."
                                 view == NoteView.Reminders -> "Belum ada pengingat." to "Geser catatan ke kiri di daftar, atau tulis “ingatkan saya … besok jam 7” di kolom cari."
+                                view == NoteView.Vault -> "Brankas masih kosong." to "Ketuk tombol + untuk menulis catatan rahasia, atau pindahkan catatan lewat menu tekan-lama."
                                 else -> "Belum ada catatan." to "Ketuk tombol + di kanan bawah untuk mulai menulis."
                             }
                         )
@@ -452,7 +473,7 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
             shortDate(n.updated),
         ).joinToString("  ·  ")
     }
-    val canSwipe = !n.inTrash
+    val canSwipe = !n.inTrash && !n.vault
     Box {
         SwipeRow(
             startLabel = if (!canSwipe) null else if (n.archived) "Keluarkan dari arsip" else "Arsipkan",
@@ -488,11 +509,19 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
             if (n.inTrash) {
                 DropdownMenuItem({ Text("Pulihkan") }, { menu = false; vm.restore(n) })
                 DropdownMenuItem({ Text("Hapus permanen", color = MaterialTheme.colorScheme.error) }, { menu = false; onDeleteForever() })
+            } else if (n.vault) {
+                DropdownMenuItem({ Text(if (n.pinned) "Lepas sematan" else "Sematkan") }, { menu = false; vm.togglePin(n) })
+                if (n.hasReminder && n.remindFired) DropdownMenuItem({ Text("Tandai pengingat selesai") }, { menu = false; vm.finishReminder(n) })
+                DropdownMenuItem({ Text(if (n.hasReminder) "Ubah pengingat" else "Setel pengingat") }, { menu = false; vm.openReminder(n) })
+                DropdownMenuItem({ Text("Keluarkan dari Brankas") }, { menu = false; vm.moveNoteToVault(n, false) })
+                Hairline()
+                DropdownMenuItem({ Text("Hapus permanen", color = MaterialTheme.colorScheme.error) }, { menu = false; onDeleteForever() })
             } else {
                 if (!n.archived) DropdownMenuItem({ Text(if (n.pinned) "Lepas sematan" else "Sematkan") }, { menu = false; vm.togglePin(n) })
                 if (n.hasReminder && n.remindFired) DropdownMenuItem({ Text("Tandai pengingat selesai") }, { menu = false; vm.finishReminder(n) })
                 DropdownMenuItem({ Text(if (n.hasReminder) "Ubah pengingat" else "Setel pengingat") }, { menu = false; vm.openReminder(n) })
                 DropdownMenuItem({ Text("Pindahkan ke folder") }, { menu = false; onMoveFolder() })
+                DropdownMenuItem({ Text("Pindahkan ke Brankas") }, { menu = false; vm.moveNoteToVault(n, true) })
                 DropdownMenuItem({ Text(if (n.archived) "Keluarkan dari arsip" else "Arsipkan") }, { menu = false; vm.toggleArchive(n) })
                 DropdownMenuItem({ Text("Pindahkan ke Sampah") }, { menu = false; vm.trash(n) })
             }

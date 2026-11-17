@@ -5,7 +5,11 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PersistableBundle
+import com.catatanku.app.security.SecurityPrefs
+import java.security.MessageDigest
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -206,12 +210,37 @@ internal fun Notices(state: SnackbarHostState) = SnackbarHost(state) { data ->
     Snackbar(data, shape = SmallShape, actionColor = MaterialTheme.colorScheme.inversePrimary)
 }
 
+private val clipboardHandler by lazy { Handler(Looper.getMainLooper()) }
+private var pendingClipClear: Runnable? = null
+
 internal fun copyText(ctx: Context, text: String) {
+    val appCtx = ctx.applicationContext
+    val cm = appCtx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText("Catatan", text)
-    if (Build.VERSION.SDK_INT >= 33 && ctx.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("lock", false)) {
+    val autoClear = SecurityPrefs.isClipboardAutoClearEnabled(appCtx)
+    val locked = SecurityPrefs.isLockEnabled(appCtx)
+    if (Build.VERSION.SDK_INT >= 33 && (autoClear || locked)) {
         clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
     }
-    (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+    cm.setPrimaryClip(clip)
+    pendingClipClear?.let { clipboardHandler.removeCallbacks(it) }
+    if (autoClear) {
+        val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
+        val task = Runnable {
+            runCatching {
+                val cur = cm.primaryClip?.getItemAt(0)?.text?.toString()
+                if (cur != null) {
+                    val curDigest = MessageDigest.getInstance("SHA-256").digest(cur.toByteArray(Charsets.UTF_8))
+                    if (MessageDigest.isEqual(digest, curDigest)) {
+                        if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip()
+                        else cm.setPrimaryClip(ClipData.newPlainText("", ""))
+                    }
+                }
+            }
+        }
+        pendingClipClear = task
+        clipboardHandler.postDelayed(task, 30_000L)
+    }
 }
 
 internal fun reminderText(n: Note): String = listOfNotNull(

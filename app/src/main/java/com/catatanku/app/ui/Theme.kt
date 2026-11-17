@@ -1,6 +1,7 @@
 package com.catatanku.app.ui
 
 import android.os.Build
+import android.view.inputmethod.EditorInfo
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -12,13 +13,18 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.PlatformTextInputInterceptor
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -104,16 +110,37 @@ private val Type = Typography().run {
 
 val SmallShape = RoundedCornerShape(8.dp)
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun CatatankuTheme(dynamic: Boolean = false, content: @Composable () -> Unit) = MaterialTheme(
+private fun IncognitoKeyboardHost(enabled: Boolean, content: @Composable () -> Unit) {
+    if (!enabled) {
+        content()
+        return
+    }
+    val interceptor = remember {
+        PlatformTextInputInterceptor { request, nextHandler ->
+            val wrapped = PlatformTextInputMethodRequest { outAttrs ->
+                val ic = request.createInputConnection(outAttrs)
+                outAttrs.imeOptions = outAttrs.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                ic
+            }
+            nextHandler.startInputMethod(wrapped)
+        }
+    }
+    InterceptPlatformTextInput(interceptor, content)
+}
+
+@Composable
+fun CatatankuTheme(dynamic: Boolean = false, incognitoKeyboard: Boolean = true, content: @Composable () -> Unit) = MaterialTheme(
     colorScheme = scheme(dynamic),
     typography = Type,
     shapes = Shapes(
         extraSmall = RoundedCornerShape(8.dp), small = SmallShape, medium = SmallShape,
         large = RoundedCornerShape(16.dp), extraLarge = RoundedCornerShape(16.dp),
     ),
-    content = content,
-)
+) {
+    IncognitoKeyboardHost(incognitoKeyboard, content)
+}
 
 object AppIcons {
     private fun icon(name: String, vararg strokes: String, fills: List<String> = emptyList()) =
@@ -149,6 +176,7 @@ object AppIcons {
     val Pen = icon("pen", "M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5z", "M14.5 6L18 9.5")
     val Clock = icon("clock", "M20.5 12a8.5 8.5 0 1 1-17 0a8.5 8.5 0 0 1 17 0z", "M12 7.5V12l3 2")
     val Lock = icon("lock", "M7 11h10a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 7 11z", "M8.5 11V8a3.5 3.5 0 0 1 7 0v3")
+    val Shield = icon("shield", "M12 3.5l7 3v5.5c0 4.5-3 7.8-7 9.5-4-1.7-7-5-7-9.5V6.5z")
     val Undo = icon("undo", "M9 8L5 12l4 4", "M5 12h9a5 5 0 1 1 0 10h-2")
     val Redo = icon("redo", "M15 8l4 4-4 4", "M19 12h-9a5 5 0 1 0 0 10h2")
     val Image = icon("image", "M4.5 6A1.5 1.5 0 0 1 6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18z", "M4.5 16l4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5", fills = listOf(dot(9f, 8.5f, 1.4f)))

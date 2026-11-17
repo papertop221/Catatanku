@@ -20,7 +20,8 @@ import java.util.zip.ZipOutputStream
 
 /**
  * Pembaca dan penulis arsip cadangan lengkap (`catatanku-backup.zip`) dengan validasi SHA-256,
- * perlindungan ZIP path traversal & ZIP bomb, ekstraksi ke direktori staging, serta kompatibilitas JSON lama.
+ * perlindungan ZIP path traversal & ZIP bomb, ekstraksi ke direktori staging, enkripsi streaming tanpa
+ * berkas sementara polos, serta kompatibilitas JSON lama.
  */
 object BackupArchive {
     const val ENTRY_MANIFEST = "manifest.json"
@@ -33,6 +34,11 @@ object BackupArchive {
     const val MAX_JSON_ENTRY_BYTES = 64L * 1024 * 1024
     const val MAX_ATTACHMENT_ENTRY_BYTES = 32L * 1024 * 1024
     const val MAX_TOTAL_UNCOMPRESSED_BYTES = 512L * 1024 * 1024
+
+    data class HybridEncryption(
+        val publicKeyBase64: String,
+        val wrappedPrivateKeyBase64: String,
+    )
 
     data class StagedRestore(
         val manifest: BackupManifest?,
@@ -65,8 +71,9 @@ object BackupArchive {
     }
 
     /**
-     * Menulis arsip `catatanku-backup.zip` secara streaming ke [out].
-     * Bila [passphrase] disediakan, seluruh arsip ZIP dienkripsi menggunakan AES-256-GCM ([BackupCrypto]).
+     * Menulis arsip `catatanku-backup.zip` secara streaming ke [out] tanpa menulis berkas ZIP polos sementara.
+     * Bila [passphrase] atau [hybridEncryption] disediakan, seluruh arsip dienkripsi streaming AES-256-GCM.
+     * Catatan Brankas (`vault = true`) otomatis dikecualikan bila arsip tidak terenkripsi.
      */
     fun exportZip(
         records: List<BackupNoteRecord>,
@@ -74,15 +81,25 @@ object BackupArchive {
         out: OutputStream,
         appVersion: String = "",
         passphrase: CharArray? = null,
+        hybridEncryption: HybridEncryption? = null,
+        excludeVaultWhenPlain: Boolean = true,
+        attachmentOpener: (File) -> InputStream = { FileInputStream(it) },
         onCheckCancelled: () -> Unit = {},
         onProgress: (BackupProgress) -> Unit = {},
     ) {
-        val attachmentNames = records.flatMap { it.note.attachments }
+        val isPasswordEncrypted = passphrase != null && passphrase.isNotEmpty()
+        val isEncrypted = isPasswordEncrypted || hybridEncryption != null
+        val exportRecords = if (!isEncrypted && excludeVaultWhenPlain) {
+            records.filter { !it.note.vault }
+        } else {
+            records
+        }
+        val attachmentNames = exportRecords.flatMap { it.note.attachments }
             .filter { BackupCodec.SAFE_ATTACHMENT.matches(it) }
             .distinct()
             .filter { File(attachmentsDir, it).isFile }
         val totalSteps = attachmentNames.size + 3
-        onProgress(BackupProgress(BackupPhase.PREPARING, 0, totalSteps, "Menyiapkan ${records.size} catatan…"))
+        onProgress(BackupProgress(BackupPhase.PREPARING, 0, totalSteps, "Menyiapkan ${exportRecords.size} catatan…"))
 
         val writePlainZip: (OutputStream) -> Unit = { zipTarget ->
             val checksums = LinkedHashMap<String, String>()
@@ -90,7 +107,7 @@ object BackupArchive {
             ZipOutputStream(BufferedOutputStream(zipTarget, 32 * 1024)).use { zos ->
                 onCheckCancelled()
                 // 1. notes.json
-                val notesBytes = ByteArrayOutputStream().also { BackupCodec.writeRecordsJson(records, it, pretty = false) }.toByteArray()
+                val notesBytes = ByteArrayOutputStream().also { BackupCodec.writeRecordsJson(exportRecords, it, pretty = false) }.toByteArray()
                 checksums[ENTRY_NOTES] = sha256(notesBytes)
                 writeZipBytes(zos, ENTRY_NOTES, notesBytes)
                 done++
@@ -100,11 +117,11 @@ object BackupArchive {
                 val manifest = BackupManifest(
                     appVersion = appVersion,
                     createdAt = System.currentTimeMillis(),
-                    noteCount = records.size,
+                    noteCount = exportRecords.size,
                     attachmentCount = attachmentNames.size,
-                    versionCount = records.sumOf { it.versions.size },
+                    versionCount = exportRecords.sumOf { it.versions.size },
                     includesVersions = true,
-                    encrypted = passphrase != null && passphrase.isNotEmpty(),
+                    encrypted = isEncrypted,
                 )
                 val manifestBytes = ByteArrayOutputStream().also { BackupCodec.writeManifestJson(manifest, it) }.toByteArray()
                 checksums[ENTRY_MANIFEST] = sha256(manifestBytes)
@@ -119,7 +136,7 @@ object BackupArchive {
                     if (!file.isFile) continue
                     val entryPath = attachmentEntryPath(name)
                     zos.putNextEntry(ZipEntry(entryPath))
-                    val digest = streamFileAndHash(file, zos, onCheckCancelled)
+                    val digest = streamInputAndHash(attachmentOpener(file), zos, onCheckCancelled)
                     zos.closeEntry()
                     checksums[entryPath] = digest
                     done++
@@ -135,26 +152,29 @@ object BackupArchive {
             }
         }
 
-        if (passphrase != null && passphrase.isNotEmpty()) {
-            // Gunakan file/piped streaming? Untuk menghindari deadlock pipe pada satu thread, pakai temp file atau chunked pipe.
-            // Di Android, temp file dihapus segera dalam finally; di JVM tanpa tempDir, buat temp file sistem.
-            val tmpZip = File.createTempFile("catatanku_enc_", ".zip")
-            try {
-                FileOutputStream(tmpZip).use { writePlainZip(it) }
-                onCheckCancelled()
-                FileInputStream(tmpZip).use { plainIn -> BackupCrypto.encrypt(passphrase, plainIn, out) }
-            } finally {
-                tmpZip.delete()
+        when {
+            hybridEncryption != null -> {
+                BackupCrypto.openHybridEncryptingStream(
+                    hybridEncryption.publicKeyBase64,
+                    hybridEncryption.wrappedPrivateKeyBase64,
+                    out,
+                ).use { encOut -> writePlainZip(encOut) }
+                out.flush()
             }
-        } else {
-            writePlainZip(out)
+            isPasswordEncrypted -> {
+                BackupCrypto.openEncryptingStream(passphrase, out).use { encOut ->
+                    writePlainZip(encOut)
+                }
+                out.flush()
+            }
+            else -> writePlainZip(out)
         }
     }
 
     /**
-     * Membaca dan memverifikasi cadangan (ZIP baru, ZIP terenkripsi, atau JSON lama) ke [stagingDir]
-     * tanpa mengubah data live. Apabila ada checksum gagal, ZIP bomb, path traversal, atau pembatalan,
-     * [stagingDir] dibersihkan bersih sebelum melempar pengecualian.
+     * Membaca dan memverifikasi cadangan (ZIP baru, ZIP terenkripsi `CTKE`/`CTKH`, atau JSON lama) ke [stagingDir]
+     * secara streaming di RAM tanpa menulis berkas dekripsi sementara. Apabila ada checksum gagal, ZIP bomb,
+     * path traversal, kata sandi salah, atau pembatalan, [stagingDir] dibersihkan bersih sebelum melempar pengecualian.
      */
     fun stageRestore(
         input: InputStream,
@@ -164,7 +184,7 @@ object BackupArchive {
         onProgress: (BackupProgress) -> Unit = {},
     ): StagedRestore {
         stagingDir.mkdirs()
-        var decryptedTemp: File? = null
+        var decryptStream: InputStream? = null
         try {
             val buffered = BufferedInputStream(input, 32 * 1024)
             buffered.mark(16)
@@ -175,12 +195,10 @@ object BackupArchive {
             val streamToParse: InputStream = if (BackupCrypto.isEncryptedHeader(header.copyOf(nRead))) {
                 val pass = passphraseProvider?.invoke()
                     ?: throw IllegalStateException("Cadangan ini terenkripsi; masukkan kata sandi untuk membukanya.")
-                val tmp = File(stagingDir, "_decrypted.tmp")
-                decryptedTemp = tmp
-                FileOutputStream(tmp).use { out -> BackupCrypto.decrypt(pass, buffered, out) }
-                BufferedInputStream(FileInputStream(tmp), 32 * 1024).also {
-                    it.mark(16)
-                }
+                val dec = BufferedInputStream(BackupCrypto.openDecryptingStream(pass, buffered), 32 * 1024)
+                decryptStream = dec
+                dec.mark(16)
+                dec
             } else {
                 buffered
             }
@@ -201,10 +219,10 @@ object BackupArchive {
                 onProgress(BackupProgress(BackupPhase.VERIFYING, 1, 1))
                 StagedRestore(manifest = null, records = records, stagedFiles = emptyMap())
             }
-            decryptedTemp?.delete()
+            decryptStream?.close()
             return result
         } catch (t: Throwable) {
-            decryptedTemp?.delete()
+            runCatching { decryptStream?.close() }
             stagingDir.deleteRecursively()
             throw t
         }
@@ -271,6 +289,17 @@ object BackupArchive {
                 }
                 zis.closeEntry()
             }
+            // Pastikan seluruh aliran (termasuk Central Directory, EOCD, dan blok AEAD penutup) selesai terverifikasi.
+            val drainBuf = ByteArray(8192)
+            var drained = 0L
+            val maxTrailingDirBytes = 32L * 1024 * 1024
+            while (true) {
+                onCheckCancelled()
+                val n = zipStream.read(drainBuf)
+                if (n < 0) break
+                drained += n
+                if (drained > maxTrailingDirBytes) error("Arsip memuat data tambahan melebihi batas aman.")
+            }
         }
 
         onCheckCancelled()
@@ -313,10 +342,10 @@ object BackupArchive {
         zos.closeEntry()
     }
 
-    private fun streamFileAndHash(file: File, out: OutputStream, onCheckCancelled: () -> Unit): String {
+    private fun streamInputAndHash(input: InputStream, out: OutputStream, onCheckCancelled: () -> Unit): String {
         val md = MessageDigest.getInstance("SHA-256")
         val buf = ByteArray(16 * 1024)
-        FileInputStream(file).use { inp ->
+        input.use { inp ->
             while (true) {
                 onCheckCancelled()
                 val n = inp.read(buf)

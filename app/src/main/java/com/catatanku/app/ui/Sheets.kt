@@ -49,7 +49,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import com.catatanku.app.ai.inference.Agent
 import com.catatanku.app.ai.inference.AiText
 import com.catatanku.app.data.database.NoteDb
@@ -74,13 +76,88 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Date
 
 @Composable
-fun LockScreen(onUnlock: () -> Unit) {
-    LaunchedEffect(Unit) { onUnlock() }
+fun LockScreen(
+    onUnlock: () -> Unit,
+    title: String = "Catatanku terkunci",
+    hasAppPin: Boolean = false,
+    canDeviceUnlock: Boolean = true,
+    failedAttempts: Int = 0,
+    lockoutRemainingMs: Long = 0L,
+    wipeAfterFailures: Boolean = false,
+    onPinSubmit: ((CharArray) -> AppViewModel.PinResult)? = null,
+    onCancel: (() -> Unit)? = null,
+) {
+    if (!hasAppPin) {
+        LaunchedEffect(Unit) { onUnlock() }
+    }
+    var pin by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    var remMs by remember(lockoutRemainingMs) { mutableStateOf(lockoutRemainingMs) }
+    LaunchedEffect(remMs) {
+        while (remMs > 0L) {
+            delay(1000L)
+            remMs = (remMs - 1000L).coerceAtLeast(0L)
+        }
+    }
+    fun submitPin() {
+        val cb = onPinSubmit ?: return
+        if (pin.isEmpty() || remMs > 0L) return
+        val chars = pin.toCharArray()
+        pin = ""
+        when (cb(chars)) {
+            AppViewModel.PinResult.SUCCESS -> errorMsg = null
+            AppViewModel.PinResult.LOCKED_OUT -> errorMsg = "Tunggu sebentar sebelum mencoba lagi."
+            AppViewModel.PinResult.WRONG -> {
+                errorMsg = if (wipeAfterFailures) {
+                    val left = (com.catatanku.app.security.AppPinCrypto.DEFAULT_WIPE_ATTEMPTS - (failedAttempts + 1)).coerceAtLeast(0)
+                    "PIN/sandi salah. Sisa $left percobaan sebelum data dihapus."
+                } else {
+                    "PIN/sandi salah (${failedAttempts + 1} kali)."
+                }
+            }
+            AppViewModel.PinResult.WIPED -> errorMsg = "Seluruh data telah dihapus."
+        }
+    }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.padding(horizontal = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(AppIcons.Lock, null, Modifier.size(32.dp), muted)
-            Text("Catatanku terkunci", Modifier.padding(top = 14.dp, bottom = 18.dp), style = MaterialTheme.typography.titleMedium)
-            PrimaryButton("Buka kunci", onClick = onUnlock)
+            Text(title, Modifier.padding(top = 14.dp, bottom = 18.dp), style = MaterialTheme.typography.titleMedium)
+            if (hasAppPin) {
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it.take(com.catatanku.app.security.AppPinCrypto.MAX_PIN_LEN) },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    placeholder = { Text("Masukkan PIN atau sandi") },
+                    singleLine = true,
+                    enabled = remMs <= 0L,
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = SmallShape,
+                )
+                if (remMs > 0L) {
+                    Text(
+                        "Terkunci sementara (${(remMs + 999) / 1000} detik).",
+                        Modifier.padding(bottom = 10.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        Modifier.padding(bottom = 10.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                PrimaryButton("Buka dengan PIN", Modifier.fillMaxWidth(), enabled = pin.isNotEmpty() && remMs <= 0L, onClick = ::submitPin)
+                if (canDeviceUnlock) {
+                    TextAction("Pakai sidik jari / kunci layar HP", Modifier.padding(top = 6.dp), onClick = onUnlock)
+                }
+            } else {
+                PrimaryButton("Buka kunci", onClick = onUnlock)
+            }
+            if (onCancel != null) {
+                TextAction("Batal", Modifier.padding(top = 4.dp), onClick = onCancel)
+            }
         }
     }
 }
@@ -144,9 +221,13 @@ fun ReminderSheet(vm: AppViewModel) {
             Switch(alarm, { alarm = it })
         }
         PrimaryButton("Simpan pengingat", Modifier.fillMaxWidth().padding(top = 16.dp), enabled = valid) {
-            if (Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS) else save()
+            if (Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) {
+                vm.suppressNextLeaveLock()
+                askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else save()
         }
         TextAction("Salin juga ke Kalender HP", Modifier.fillMaxWidth().padding(top = 4.dp), enabled = valid) {
+            vm.suppressNextLeaveLock()
             if (!addToCalendar(ctx, note.heading.ifBlank { "Pengingat catatan" }, note.body, at.toMillis(), repeat)) vm.say("Tidak ada aplikasi kalender di HP ini.")
         }
         if (note.hasReminder) TextAction("Hapus pengingat", Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.error) { vm.removeReminder() }
@@ -263,8 +344,10 @@ fun AgentSheet(vm: AppViewModel) {
                     }
                 }
                 PrimaryButton(if (run.items.size > 1) "Jalankan ${run.items.size} langkah" else "Jalankan rencana", Modifier.fillMaxWidth().padding(top = 14.dp), enabled = vm.agentReady) {
-                    if (vm.agentSetsReminder && Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    else vm.runAgent()
+                    if (vm.agentSetsReminder && Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) {
+                        vm.suppressNextLeaveLock()
+                        askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else vm.runAgent()
                 }
                 TextAction("Batalkan", Modifier.fillMaxWidth().padding(top = 4.dp), onClick = vm::closeAgent)
             }
