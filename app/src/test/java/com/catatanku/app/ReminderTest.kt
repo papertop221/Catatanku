@@ -22,6 +22,10 @@ import com.catatanku.app.reminders.Reminders
 import com.catatanku.app.reminders.saveFromOutside
 import com.catatanku.app.reminders.toMillis
 import com.catatanku.app.reminders.whenLabel
+import com.catatanku.app.security.DeviceVaultKey
+import com.catatanku.app.security.InMemoryKeyProvider
+import com.catatanku.app.security.SecurityPrefs
+import com.catatanku.app.security.VaultCrypto
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,12 +56,17 @@ class ReminderTest {
 
     @Before fun setUp() {
         NoteDb.resetForTest()
+        DeviceVaultKey.setTestProviderForUnitTest(InMemoryKeyProvider())
         app.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().clear().commit()
+        app.getSharedPreferences("sec_prefs", Context.MODE_PRIVATE).edit().clear().commit()
         org.robolectric.shadows.ShadowAlarmManager.setCanScheduleExactAlarms(true)
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         Reminders.channels(app)
     }
-    @After fun tearDown() = NoteDb.resetForTest()
+    @After fun tearDown() {
+        NoteDb.resetForTest()
+        DeviceVaultKey.setTestProviderForUnitTest(null)
+    }
 
     @Test fun schedulesFiresAndCompletes() {
         val at = System.currentTimeMillis() + hour
@@ -191,11 +200,69 @@ class ReminderTest {
     }
 
     @Test fun lockHidesNoteTextInNotification() {
-        app.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().putBoolean("lock", true).commit()
+        SecurityPrefs.setLockEnabled(app, true)
         val n = note(System.currentTimeMillis() - 1000)
         receive(Reminders.ACT_FIRE, n.id)
-        val text = nm.activeNotifications.single().notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        val extras = nm.activeNotifications.single().notification.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE).toString()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        assertFalse(title.contains("Bayar listrik"))
         assertFalse(text.contains("Token"))
+    }
+
+    @Test fun vaultNoteHidesTitleAndBodyInNotificationEvenWhenUnlocked() {
+        SecurityPrefs.setLockEnabled(app, false)
+        val vn = Note(title = "PIN Bank Rahasia", body = "Kode 998877", remindAt = System.currentTimeMillis() - 1000, vault = true)
+        val id = db.upsert(vn)
+        receive(Reminders.ACT_FIRE, id)
+        val extras = nm.activeNotifications.single().notification.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE).toString()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        assertFalse(title.contains("Bank"))
+        assertFalse(text.contains("998877"))
+        assertTrue(title.contains("Brankas"))
+    }
+
+    @Test fun notesAreEncryptedAtRestAndLegacyV5MigratesToV6Encrypted() {
+        val id = db.upsert(Note(title = "Rahasia Besar", body = "Isi sangat sensitif", tags = listOf("privasi"), folder = "Pribadi", vault = true))
+        val rawCursor = db.readableDatabase.rawQuery("SELECT title,body,tags,folder,vault FROM notes WHERE id=?", arrayOf(id.toString()))
+        rawCursor.use { c ->
+            assertTrue(c.moveToFirst())
+            assertTrue(VaultCrypto.isEncryptedString(c.getString(0)))
+            assertTrue(VaultCrypto.isEncryptedString(c.getString(1)))
+            assertTrue(VaultCrypto.isEncryptedString(c.getString(2)))
+            assertTrue(VaultCrypto.isEncryptedString(c.getString(3)))
+            assertFalse(c.getString(0).contains("Rahasia"))
+            assertFalse(c.getString(1).contains("sensitif"))
+            assertEquals(1, c.getInt(4))
+        }
+
+        // Uji migrasi v5 polos -> v6 terenkripsi otomatis saat onOpen.
+        NoteDb.resetForTest()
+        val path = app.getDatabasePath("catatan.db").apply { parentFile!!.mkdirs(); delete() }
+        SQLiteDatabase.openOrCreateDatabase(path, null).use { old ->
+            old.execSQL(
+                "CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT NOT NULL, " +
+                    "tags TEXT NOT NULL, pinned INTEGER NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, " +
+                    "folder TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, " +
+                    "remind_at INTEGER NOT NULL DEFAULT 0, remind_repeat INTEGER NOT NULL DEFAULT 0, " +
+                    "remind_alarm INTEGER NOT NULL DEFAULT 0, remind_fired INTEGER NOT NULL DEFAULT 0, " +
+                    "attachments TEXT NOT NULL DEFAULT '')"
+            )
+            old.execSQL("CREATE TABLE versions(id INTEGER PRIMARY KEY AUTOINCREMENT, note_id INTEGER NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, saved INTEGER NOT NULL)")
+            old.execSQL("CREATE TABLE embeddings(note_id INTEGER PRIMARY KEY, content_hash TEXT NOT NULL, model_id TEXT NOT NULL, vec BLOB NOT NULL, updated INTEGER NOT NULL)")
+            old.execSQL("INSERT INTO notes(title,body,tags,pinned,created,updated,folder) VALUES('Polos Lama','isi polos v5','tag1',0,10,20,'Kerja')")
+            old.version = 5
+        }
+        val migrated = db.all().single()
+        assertEquals("Polos Lama", migrated.title)
+        assertEquals("isi polos v5", migrated.body)
+        assertFalse(migrated.vault)
+        db.readableDatabase.rawQuery("SELECT title,body FROM notes", null).use { c ->
+            assertTrue(c.moveToFirst())
+            assertTrue(VaultCrypto.isEncryptedString(c.getString(0)))
+            assertTrue(VaultCrypto.isEncryptedString(c.getString(1)))
+        }
     }
 
     @Test fun versionsAreKeptAndTrimmed() {

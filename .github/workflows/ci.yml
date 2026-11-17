@@ -73,6 +73,7 @@ jobs:
             --tests '*TimeParseTest*' \
             --tests '*AgentTest*' \
             --tests '*BackupArchiveTest*' \
+            --tests '*SecurityHardeningTest*' \
             --tests '*PerformanceAndMemoryTest*' \
             --tests '*HybridSearchTest*' \
             --tests '*AiQualityTest*' \

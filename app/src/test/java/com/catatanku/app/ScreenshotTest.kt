@@ -11,9 +11,13 @@ import com.catatanku.app.domain.model.Repeat
 import com.catatanku.app.domain.model.Screen
 import com.catatanku.app.reminders.toLocal
 import com.catatanku.app.reminders.toMillis
+import com.catatanku.app.security.DeviceVaultKey
+import com.catatanku.app.security.InMemoryKeyProvider
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
+import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -27,7 +31,16 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 abstract class Shots(private val suffix: String) {
-    @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+    private val vaultRule = object : ExternalResource() {
+        override fun before() {
+            DeviceVaultKey.setTestProviderForUnitTest(InMemoryKeyProvider())
+        }
+        override fun after() {
+            DeviceVaultKey.setTestProviderForUnitTest(null)
+        }
+    }
+    val rule = createAndroidComposeRule<MainActivity>()
+    @get:Rule val chain: RuleChain = RuleChain.outerRule(vaultRule).around(rule)
     private val vm get() = rule.activity.vm
 
     /** Indeks pencarian dan hasil cari dihitung di thread latar; tunggu sampai tenang. */
