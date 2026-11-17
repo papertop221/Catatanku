@@ -1,13 +1,14 @@
 # Peta jalan dan keputusan
 
-Diperbarui 16 November 2026, mencakup penyelesaian seluruh tahap PRD v1.1 pada cabang `prd-1.8`.
+Diperbarui 17 November 2026, mencakup penguatan keamanan & privasi ketat pada cabang `keamanan-ketat`.
 
 ## Keadaan sekarang
 
 - **Panduan wajib aktif:** seluruh pengembangan mengikuti lima pilar di [FILOSOFI.md](FILOSOFI.md) (**Praktis, Efektif & Efisien, Canggih, 100% Privasi, Aman**) dan [AGENTS.md](../AGENTS.md).
 - **1.7 & 1.7.1:** APK rilis bertanda tangan di `releases/Catatanku-1.7.apk` (beserta pembaruan 1.7.1 dari GitHub Releases).
-- **`prd-1.8`:** Menjalankan benchmark AI lokal langsung di Moto G86 Power 5G (`mt6878` Dimensity 7300, lihat [BENCHMARK.md](BENCHMARK.md)), memperbarui arsitektur menjadi modular (31 berkas Kotlin), menambah cadangan lengkap `catatanku-backup.zip` beserta enkripsi opsional AES-256-GCM, mengoptimalkan profil AI (`CPU-4` + KV 2.048 + MTP per-tugas + GPU vision 1024px) & `MemoryPolicy`, memperkuat keandalan pengingat (`EXTRA_DUE`, perubahan izin exact alarm, perubahan jam), menambah pencarian semantik hibrida (`HybridSearch`), dokumentasi audit [KEAMANAN.md](KEAMANAN.md), serta CI GitHub Actions (`.github/workflows/ci.yml`).
-- Pengujian APK interaktif langsung pada HP OEM agresif (Oppo, Vivo, Xiaomi, Huawei, Transsion) untuk alarm latar belakang dan alur sentuh penuh masih perlu diuji pada masing-masing merek perangkat.
+- **`prd-1.8` & `1.8.1`:** Benchmark AI lokal pada Moto G86 Power 5G (`mt6878`), arsitektur modular, cadangan ZIP lengkap + enkripsi opsional AES-256-GCM, pencarian hibrida, dan penghapusan *updater* mandiri demi kepatuhan F-Droid.
+- **`keamanan-ketat`:** Enkripsi data-at-rest AES-256-GCM berbasis Android Keystore (`NoteDb` v6 + lampiran `CTKA\x01`), **Brankas** catatan tersembunyi, kunci seketika & pembersihan RAM (`scrubSensitiveMemory`), penguncian `ProcessTextActivity`, PIN mandiri + *backoff* + *panic wipe*, perisai layar (`FLAG_SECURE` + `setRecentsScreenshotEnabled`), keyboard penyamaran (`IME_FLAG_NO_PERSONALIZED_LEARNING`), hapus otomatis papan klip, **Mode Offline Mutlak**, Audit Privasi perangkat, serta enkripsi hibrida EC P-256 `CTKH\x01` untuk `AutoBackup` dan streaming cadangan tanpa berkas sementara polos.
+- Pengujian APK interaktif langsung pada HP OEM agresif (Oppo, Vivo, Xiaomi, Huawei, Transsion) dan uji runtime Robolectric penuh (membutuhkan `glibc` CI) masih perlu diverifikasi sesudah perubahan.
 
 ## Status tahapan PRD (`prd-1.8`)
 

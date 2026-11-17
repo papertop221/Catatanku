@@ -13,15 +13,15 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 | `domain/model/` (`NoteModels.kt`, `BackupModels.kt`) | Model domain (`Note`, `Version`, `Repeat`, `AiAction`, `AgentStep`, model manifest/progres cadangan) | Ya |
 | `domain/usecase/` (`SearchEngine.kt`, `HybridSearch.kt`, `TimeParse.kt`) | Indeks TF-IDF + trigram, pencarian hibrida (TF-IDF + kemiripan vektor embedding lokal), pengenal waktu bahasa Indonesia | Ya |
 | `data/backup/` (`BackupArchive.kt`, `BackupCodec.kt`, `JsonStream.kt`) | Ekspor/impor ZIP lengkap (`catatanku-backup.zip`), SHA-256 `checksums.json`, pelindung traversal/ZIP bomb, JSON streaming O(1) | Ya |
-| `data/database/NoteDb.kt` | SQLite (`catatan.db`, skema v5: tabel `notes`, `versions`, `embeddings`), migrasi v1→v5, impor transaksional | Tidak |
-| `data/repository/NoteRepository.kt` | Repositori tunggal, pemulihan atomik berbasis *staging* + rollback, dan `AutoBackup` harian ZIP | Tidak |
+| `data/database/NoteDb.kt` | SQLite terenkripsi AES-256-GCM (`catatan.db`, skema v6: tabel `notes`, `versions`, `embeddings`), migrasi v1→v6, kolom `vault`, impor transaksional | Tidak |
+| `data/repository/NoteRepository.kt` | Repositori tunggal, pemulihan atomik berbasis *staging* + rollback, dan `AutoBackup` harian terenkripsi | Tidak |
 | `ai/modelcatalog/Models.kt` | Katalog model dengan URL terkunci revisi, SHA-256, kapabilitas (`supportsVision`, `supportsAudio`, `isEmbedding`), perkiraan RAM | Ya |
 | `ai/performance/` (`AiPerformance.kt`, `AndroidPerfMonitor.kt`) | Profil runtime per SoC/SDK/runtime/model, kebijakan MTP & anggaran token per tugas, `MemoryPolicy`, metrik thermal/RSS (`VmHWM`) | Sebagian (`AiPerformance.kt` ya) |
-| `ai/inference/` (`AiText.kt`, `Agent.kt`) | Prompt teks/multimodal, sanitisasi input, pembersih keluaran, perencana & pengurai perintah asisten | Ya |
-| `ai/engine/` (`LocalAi.kt`, `LocalEmbeddingProvider.kt`) | Unduh/impor model, `Engine` LiteRT-LM (CPU-4/GPU, `SpeculativeDecodingMode.ADAPTIVE` per percakapan, benchmark in-app), `EmbeddingEngine` opsional | Tidak |
-| `security/` (`BackupCrypto.kt`, `InputSecurity.kt`) | Enkripsi cadangan streaming AES-256-GCM + PBKDF2WithHmacSHA256, validasi URI eksternal | Ya |
-| `reminders/Reminders.kt` | Alarm tahan hemat baterai (`AlarmManager`), pelindung duplikat/jam berubah (`EXTRA_DUE`), `Oem`, kalender sistem | Tidak |
-| `media/Media.kt` | Lampiran gambar (≤ 1600px) & turunan OCR ≤ 1024px di `cacheDir`, perekam WAV 16 kHz (`VoiceRecorder`), pemutar audio | Tidak |
+| `ai/inference/` (`AiText.kt`, `Agent.kt`) | Prompt teks/multimodal, sanitisasi input & karakter Bidi/token model, pembersih keluaran, perencana & pengurai perintah asisten | Ya |
+| `ai/engine/` (`LocalAi.kt`, `LocalEmbeddingProvider.kt`) | Unduh/impor model, cek Mode Offline Mutlak & integritas model, `Engine` LiteRT-LM (`Content.ImageBytes`/`AudioBytes`), `EmbeddingEngine` opsional | Tidak |
+| `security/` (`VaultCrypto.kt`, `AppPinCrypto.kt`, `BackupCrypto.kt`, `InputSecurity.kt`, `DeviceVaultKey.kt`, `SecurityPrefs.kt`) | Enkripsi data-at-rest AES-256-GCM, PBKDF2 600k, enkripsi cadangan streaming `CTKE` & hibrida EC P-256 `CTKH`, PIN aplikasi, validasi URI/teks/gambar, kunci Android Keystore, *panic wipe* | Sebagian (`VaultCrypto`, `AppPinCrypto`, `BackupCrypto`, `InputSecurity` ya) |
+| `reminders/Reminders.kt` | Alarm tahan hemat baterai (`AlarmManager`), pelindung duplikat/jam berubah (`EXTRA_DUE`), penyamaran notifikasi kunci/Brankas, `Oem`, kalender sistem | Tidak |
+| `media/Media.kt` | Lampiran gambar & audio terenkripsi `CTKA\x01`, tolak bom piksel, transkode paksa WAV 16 kHz tanpa metadata, pemutaran `MediaDataSource` & OCR di RAM tanpa berkas temp polos | Tidak |
 | `ui/` (`AppViewModel.kt`, `ListScreen.kt`, `EditorScreen.kt`, `SettingsScreen.kt`, `Sheets.kt`, `UiKit.kt`, `Theme.kt`) | State aplikasi, layar utama/editor/pengaturan, dialog progres/sandi cadangan, komponen & tema "Kertas & Tinta" | Tidak |
 
 Seluruh logika domain, pencarian, pengurai waktu, asisten, prompt AI, pembungkus JSON/ZIP, enkripsi cadangan, kebijakan memori, dan profil performa sengaja murni Kotlin agar cepat diuji di JVM tanpa perangkat.
@@ -227,27 +227,18 @@ pengguna di lembar pengingat.
 
 ## Keamanan dan cadangan
 
-- **Kunci aplikasi** memakai `BiometricPrompt` sistem dengan PIN layar sebagai cadangan (Android 8–9: layar konfirmasi
-  kredensial). Aplikasi tidak menyimpan sandi. Jeda di bawah 60 detik (pemilih berkas, dialog izin) tidak mengunci
-  ulang, dan masa tenggang juga dicek di `onNewIntent` sebelum menjalankan aksi luar. `FLAG_SECURE` diterapkan di layar
-  utama maupun `ProcessTextActivity`, salinan papan klip ditandai `EXTRA_IS_SENSITIVE` (Android 13+) saat kunci aktif,
-  dan `EXTRA_OPEN` dilindungi token acak 128-bit per pemasangan (`SecureRandom`). Ini gerbang akses, bukan enkripsi: basis
-  data mengandalkan enkripsi penyimpanan bawaan Android.
-- **Validasi masukan & media**: `network_security_config.xml` menolak lalu lintas cleartext; semua pintu masuk URI menolak
-  `file://` dan otoritas paket internal; impor JSON dibatasi 32 MB dengan sanitasi nama lampiran (`img_*`/`aud_*`); transkode
-  audio membatasi laju sampel (`8–192 kHz`), kanal (`1–8`), serta batas waktu 10 detik; dan `AiText.sanitizeInput` membuang
-  token kendali templat model.
-- **Cadangan lengkap ZIP & terenkripsi**: `BackupArchive` mengekspor dan mengimpor `catatanku-backup.zip` (`manifest.json`, `notes.json` beserta riwayat versi, `attachments/image/`, `attachments/audio/`, dan `checksums.json` SHA-256), mendukung pembatalan aman & pemulihan *staging* atomik lewat transaksi SQLite (`NoteRepository`), kompatibel mundur dengan JSON v1–v3, serta mendukung enkripsi opsional AES-256-GCM streaming (`BackupCrypto`, PBKDF2WithHmacSHA256 120.000 iterasi). `AutoBackup` harian ikut menulis arsip ZIP ke folder SAF pengguna.
-- **Riwayat versi**: sekali per sesi sunting, keadaan catatan saat dibuka disimpan ke tabel `versions` sebelum isinya
-  berubah. 20 versi terakhir per catatan, dan ikut diekspor/dipulihkan pada cadangan ZIP.
+- **Enkripsi penyimpanan & Brankas**: `DeviceVaultKey` membungkus DEK AES-256 di Android Keystore (`catatanku_vault_kek_v1`) untuk mengenkripsi isi catatan, riwayat versi, vektor embedding, serta lampiran (`CTKA\x01`, AES-256-GCM per blok 64 KB) lewat `VaultCrypto`. Catatan **Brankas** (`vault = true`) terisolasi dari daftar, pencarian, *Hari ini*, AI Q&A, serta ekspor tak terenkripsi, dan hanya dimuat saat Brankas dibuka ulang.
+- **Kunci aplikasi & privasi perangkat**: `BiometricPrompt` (`BIOMETRIC_STRONG` + kredensial perangkat) serta PIN mandiri `AppPinCrypto` (PBKDF2 600k + *backoff* & opsi *wipe* 10× gagal), waktu kunci otomatis (Segera / 15 detik / 1 menit), kunci seketika saat layar mati (`ACTION_SCREEN_OFF`), pembersihan RAM (`scrubSensitiveMemory`), penguncian `ProcessTextActivity`, perisai layar (`FLAG_SECURE` + `setRecentsScreenshotEnabled(false)`), keyboard penyamaran (`IME_FLAG_NO_PERSONALIZED_LEARNING`), hapus otomatis papan klip (30 detik + `EXTRA_IS_SENSITIVE`), serta **Mode Offline Mutlak**.
+- **Cadangan lengkap ZIP & AutoBackup terenkripsi**: `BackupArchive` mengekspor/mengimpor `catatanku-backup.zip` dengan SHA-256 `checksums.json`, enkripsi kata sandi streaming `CTKE\x01` (PBKDF2 600k, tanpa berkas polos sementara), dan enkripsi hibrida EC P-256 `CTKH\x01` agar `AutoBackup` harian tetap berjalan otomatis terenkripsi tanpa menyimpan sandi pemulihan di perangkat.
 
 ## Penyimpanan
 
-SQLite lewat `SQLiteOpenHelper` (`NoteDb`): tabel `notes`, `versions`, dan `embeddings` (skema v5). Tag dan nama berkas lampiran disimpan sebagai teks berpemisah `U+001F`.
+SQLite lewat `SQLiteOpenHelper` (`NoteDb`): tabel `notes`, `versions`, dan `embeddings` (skema v6). Kolom teks (`title`, `body`, `tags`, `folder`, `versions.title`, `versions.body`, `embeddings.content_hash`, `embeddings.vec`) disimpan terenkripsi `CTKV1:`/`CTKB\x01`.
 Skema v2 menambah `folder`, `archived`, `deleted`.
 Skema v3 menambah kolom pengingat (`remind_at`, `remind_repeat`, `remind_alarm`, `remind_fired`) dan tabel `versions`.
 Skema v4 menambah kolom `attachments` untuk lampiran gambar (`img_*.jpg`) dan catatan suara (`aud_*.wav`) di `filesDir/attachments/`.
 Skema v5 menambah tabel `embeddings` untuk pencarian semantik lokal bertanda model + hash konten inkremental.
+Skema v6 menambah kolom `vault` untuk catatan tersembunyi Brankas dan migrasi enkripsi otomatis di `onOpen`.
 
 ## AI lokal & Pencarian Semantik Hibrida
 
@@ -283,6 +274,7 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 | `HybridSearchTest` | `EmbeddingCodec`, fallback TF-IDF, evaluasi pencarian hibrida bahasa Indonesia (persis vs parafrasa) |
 | `AiTextTest` & `AiQualityTest` | Pengurai keluaran model, pembersih Markdown, tombol centang, anggaran prompt 2048/3072/4096, pemotongan catatan panjang, mutu bahasa Indonesia |
 | `BackupArchiveTest` | Ekspor/impor `catatanku-backup.zip` (100 catatan + gambar/audio + versi), enkripsi AES-256-GCM + salah sandi/terpotong, verifikasi SHA-256, anti-traversal/ZIP bomb, JSON lama, pembatalan |
+| `SecurityHardeningTest` | Enkripsi `VaultCrypto` & lampiran `CTKA\x01`, `AppPinCrypto`, `BackupCrypto` streaming `CTKE`/`CTKH` hibrida, isolasi Brankas saat ekspor polos, sanitisasi Bidi/LLM & bom piksel |
 | `PerformanceAndMemoryTest` | Pemilihan profil SoC (`mt6878` vs konservatif vs cache), kebijakan MTP per tugas, `MemoryPolicy`, `BenchmarkStats` median/p95, `InputSecurity` |
 | `TimeParseTest` | 40-an frasa waktu, termasuk yang BUKAN waktu ("pace 6:30", "km 24.500"), dan pengulangan |
 | `AgentTest` | Pengurai perintah asisten, penerapan langkah, dan pengaman keluaran model |
