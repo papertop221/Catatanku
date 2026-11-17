@@ -435,7 +435,7 @@ class ReminderTest {
         assertEquals(1, db.embeddings("gemma-emb").size)
 
         db.writableDatabase.execSQL(
-            "CREATE TEMP TRIGGER abort_fail_ver BEFORE INSERT ON versions WHEN NEW.title='__ABORT__' " +
+            "CREATE TEMP TRIGGER abort_fail_ver BEFORE INSERT ON versions WHEN NEW.saved=11 " +
                 "BEGIN SELECT RAISE(ABORT, 'simulated error'); END"
         )
         val attempt = runCatching {

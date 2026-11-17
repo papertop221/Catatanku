@@ -101,6 +101,9 @@ class NoteDb private constructor(context: Context) : SQLiteOpenHelper(context.ap
             db.execSQL(EMBEDDINGS_SQL)
         }
         if (oldVersion < 6) {
+            db.execSQL(VERSIONS_SQL)
+            db.execSQL("CREATE INDEX IF NOT EXISTS versions_note ON versions(note_id)")
+            db.execSQL(EMBEDDINGS_SQL)
             db.execSQL("ALTER TABLE notes ADD COLUMN vault INTEGER NOT NULL DEFAULT 0")
         }
     }
