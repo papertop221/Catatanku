@@ -90,11 +90,11 @@ import kotlinx.coroutines.withContext
 
 @Composable
 private fun Tool(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) = Row(
-    Modifier.clip(SmallShape).clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 9.dp),
+    Modifier.clip(SmallShape).clickable(role = Role.Button, onClick = onClick).heightIn(min = 44.dp).padding(horizontal = 7.dp),
     verticalAlignment = Alignment.CenterVertically,
 ) {
-    Icon(icon, null, Modifier.size(20.dp), tint)
-    Text(label, Modifier.padding(start = 5.dp), style = MaterialTheme.typography.labelLarge, color = tint)
+    Icon(icon, null, Modifier.size(18.dp), tint)
+    Text(label, Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelLarge, color = tint)
 }
 
 private fun checklistStyle(mutedColor: Color) = VisualTransformation { src ->
@@ -303,7 +303,7 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(scroll)) {
-            Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.height(44.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconAction(AppIcons.Back, "Kembali ke daftar", onClick = ::closeWithFlush)
                 Muted(
                     when { d.isBlank && d.id == 0L -> ""; vm.draftSaved -> "Tersimpan"; else -> "Menyimpan…" },
@@ -359,21 +359,22 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 )
                 Muted(
                     listOfNotNull(
+                        if (d.vault) "Brankas" else null,
                         d.folder.ifBlank { null }, if (d.id != 0L) "Diubah ${shortDate(d.updated)}" else "Catatan baru",
                         remember(d.body) { AiText.wordCount(d.body) }.takeIf { it > 0 }?.let { "$it kata" },
                     ).joinToString("  ·  "),
-                    Modifier.padding(top = 4.dp, bottom = 6.dp), MaterialTheme.typography.labelSmall,
+                    Modifier.padding(top = 2.dp, bottom = 4.dp), MaterialTheme.typography.labelSmall,
                 )
                 if (d.hasReminder && !d.inTrash) Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(
-                        Modifier.weight(1f, fill = false).clip(SmallShape).clickable(role = Role.Button) { vm.openReminder() }.heightIn(min = 44.dp),
+                        Modifier.weight(1f, fill = false).clip(SmallShape).clickable(role = Role.Button) { vm.openReminder() }.heightIn(min = 38.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val tint = if (d.remindFired) MaterialTheme.colorScheme.error else timeColor
                         Icon(AppIcons.Bell, null, Modifier.size(14.dp), tint)
                         Text(reminderText(d), Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelLarge, color = tint)
                     }
-                    if (d.remindFired) TextAction("Selesai", Modifier.padding(start = 8.dp)) { vm.finishReminder(d) }
+                    if (d.remindFired) TextAction("Selesai", Modifier.padding(start = 6.dp)) { vm.finishReminder(d) }
                 } else hint?.takeIf { !hintDismissed && !d.hasReminder }?.let { h ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(AppIcons.Bell, null, Modifier.size(14.dp), timeColor)
@@ -384,7 +385,7 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
 
                 if (d.attachments.isNotEmpty()) {
-                    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         d.attachments.forEach { name ->
                             val exists = name in vm.existingAttachments
                             if (Attachments.isImage(name)) {
@@ -414,34 +415,33 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
 
                 BasicTextField(
-                    bodyField, ::setBody, Modifier.fillMaxWidth().heightIn(min = 160.dp).padding(top = 8.dp).focusRequester(bodyFocus),
+                    bodyField, ::setBody, Modifier.fillMaxWidth().heightIn(min = 120.dp).padding(top = 4.dp).focusRequester(bodyFocus),
                     textStyle = NoteType.body.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     visualTransformation = bodyVisual,
                     decorationBox = { inner -> Box { if (bodyField.text.isEmpty()) Text("Mulai menulis…", style = NoteType.body, color = muted); inner() } },
                 )
-                if (vm.canUndoAi) TextAction("Urungkan perubahan AI", Modifier.padding(top = 4.dp), onClick = vm::undoAiChange)
+                if (vm.canUndoAi) TextAction("Urungkan perubahan AI", Modifier.padding(top = 2.dp), onClick = vm::undoAiChange)
                 if (d.body.length > AiText.maxInput && hasModel) Muted(
-                    "Catatan panjang: Ringkas, Ambil daftar tugas, dan Perbaiki ejaan memproses seluruh isi bagian demi bagian. " +
-                        "Aksi AI lain hanya membaca ±${AiText.maxInput} huruf pertama.",
-                    Modifier.padding(top = 8.dp),
+                    "Catatan panjang: Ringkas, Tugas & Ejaan memproses penuh; aksi lain ±${AiText.maxInput} huruf.",
+                    Modifier.padding(top = 4.dp),
                 )
 
-                Hairline(Modifier.padding(top = 20.dp))
+                Hairline(Modifier.padding(top = 10.dp))
                 FlowRow(
-                    Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically,
+                    Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     d.tags.forEach { t ->
                         Row(
-                            Modifier.clip(SmallShape).clickable(role = Role.Button, onClickLabel = "Hapus tag $t") { vm.edit { it.copy(tags = it.tags - t) } }.heightIn(min = 44.dp).padding(horizontal = 6.dp),
+                            Modifier.clip(SmallShape).clickable(role = Role.Button, onClickLabel = "Hapus tag $t") { vm.edit { it.copy(tags = it.tags - t) } }.heightIn(min = 36.dp).padding(horizontal = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text("#$t", style = MaterialTheme.typography.labelLarge)
                             Icon(AppIcons.Close, null, Modifier.padding(start = 4.dp).size(12.dp), muted)
                         }
                     }
-                    Box(Modifier.heightIn(min = 44.dp).widthIn(min = 72.dp, max = 180.dp).padding(horizontal = 6.dp), Alignment.CenterStart) {
+                    Box(Modifier.heightIn(min = 36.dp).widthIn(min = 72.dp, max = 180.dp).padding(horizontal = 6.dp), Alignment.CenterStart) {
                         PlainField(
                             tagInput,
                             { raw ->
@@ -462,10 +462,10 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 if (aiState is AiState.Loading) Muted("Memuat model ke memori…", Modifier.padding(top = 8.dp))
 
                 if (related.isNotEmpty()) {
-                    SectionLabel("Catatan terkait", Modifier.padding(top = 20.dp, bottom = 2.dp))
+                    SectionLabel("Catatan terkait", Modifier.padding(top = 12.dp, bottom = 2.dp))
                     related.forEach { n -> SourceRow(n) { flushPendingTag(); vm.openRelated(n) } }
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
@@ -516,7 +516,7 @@ private fun AttachmentImageRow(
         if (exists && bmp != null) {
             Image(
                 bmp, "Gambar lampiran",
-                Modifier.fillMaxWidth().heightIn(max = 220.dp).clickable(role = Role.Button, onClickLabel = "Lihat gambar penuh", onClick = onOpen),
+                Modifier.fillMaxWidth().heightIn(max = 160.dp).clickable(role = Role.Button, onClickLabel = "Lihat gambar penuh", onClick = onOpen),
                 contentScale = ContentScale.Crop,
             )
         }

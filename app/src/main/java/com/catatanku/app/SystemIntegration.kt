@@ -282,27 +282,27 @@ class ProcessTextActivity : ComponentActivity() {
                 val out = result
                 Sheet(if (out == null) "Catatanku" else label, onDismiss = ::finish) {
                     if (out == null) {
-                        Text(text, Modifier.padding(top = 6.dp, bottom = 10.dp), style = NoteType.rowSnippet, color = muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text(text, Modifier.padding(top = 4.dp, bottom = 6.dp), style = NoteType.rowSnippet, color = muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         @androidx.compose.runtime.Composable
                         fun Option(title: String, hint: String, enabled: Boolean = true, hintColor: androidx.compose.ui.graphics.Color = muted, onClick: () -> Unit) = Row(
-                            Modifier.fillMaxWidth().clip(SmallShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick).heightIn(min = 48.dp),
+                            Modifier.fillMaxWidth().clip(SmallShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick).heightIn(min = 44.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else muted.copy(alpha = 0.5f))
-                            Text(hint, Modifier.padding(start = 12.dp), color = hintColor, style = MaterialTheme.typography.bodySmall)
+                            Text(hint, Modifier.padding(start = 10.dp), color = hintColor, style = MaterialTheme.typography.bodySmall)
                         }
                         Option("Simpan sebagai catatan", "Tanpa AI") { save(text) }
                         // Waktu yang disebut di teks dikenali tanpa model.
                         if (time != null) Option("Simpan dan ingatkan", whenLabel(time), hintColor = timeColor) { save(text, time) }
-                        Hairline(Modifier.padding(vertical = 4.dp))
-                        Option("Ringkas", "Menjadi 3–5 poin", hasModel) { run(AiAction.Summarize, text) }
+                        Hairline(Modifier.padding(vertical = 2.dp))
+                        Option("Ringkas", "3–5 poin", hasModel) { run(AiAction.Summarize, text) }
                         Option("Perbaiki ejaan", "Makna tetap", hasModel) { run(AiAction.Fix, text) }
-                        Option("Ambil daftar tugas", "Menjadi daftar centang", hasModel) { run(AiAction.Tasks, text) }
-                        if (!hasModel) Muted("Aksi AI butuh model. Buka Catatanku → Pengaturan → Model AI untuk mengunduhnya.", Modifier.padding(top = 6.dp))
-                        else if (text.length > AiText.maxInput) Muted("Teks panjang: AI hanya membaca ±${AiText.maxInput} huruf pertama.", Modifier.padding(top = 6.dp))
+                        Option("Ambil daftar tugas", "Daftar centang", hasModel) { run(AiAction.Tasks, text) }
+                        if (!hasModel) Muted("Butuh model AI di Pengaturan.", Modifier.padding(top = 4.dp))
+                        else if (text.length > AiText.maxInput) Muted("AI membaca ±${AiText.maxInput} huruf pertama.", Modifier.padding(top = 4.dp))
                     } else {
-                        if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-                        Column(Modifier.heightIn(min = 80.dp, max = 340.dp).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
+                        if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp))
+                        Column(Modifier.heightIn(min = 60.dp, max = 300.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                             if (running && out.isEmpty()) Muted(if (aiState is AiState.Loading) "Memuat model ke memori…" else "Menulis…", style = MaterialTheme.typography.bodyMedium)
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                             if (out.isNotEmpty()) Text(out, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)

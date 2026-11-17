@@ -66,7 +66,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal val ID: Locale = Locale.forLanguageTag("id-ID")
-internal val Gutter = 20.dp
+internal val Gutter = 16.dp
 
 private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH.mm", ID)
 private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM", ID)
@@ -96,33 +96,33 @@ internal fun SectionLabel(text: String, modifier: Modifier = Modifier) =
 internal fun Hairline(modifier: Modifier = Modifier) = HorizontalDivider(modifier, thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
 @Composable
-internal fun IconAction(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, size: Dp = 22.dp, enabled: Boolean = true, onClick: () -> Unit) =
+internal fun IconAction(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, size: Dp = 20.dp, enabled: Boolean = true, onClick: () -> Unit) =
     IconButton(onClick, enabled = enabled) { Icon(icon, label, Modifier.size(size), if (enabled) tint else tint.copy(alpha = 0.38f)) }
 
 @Composable
 internal fun TextAction(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, color: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) =
-    TextButton(onClick, modifier, enabled = enabled, shape = SmallShape, colors = ButtonDefaults.textButtonColors(contentColor = color), contentPadding = PaddingValues(horizontal = 12.dp)) {
+    TextButton(onClick, modifier.heightIn(min = 40.dp), enabled = enabled, shape = SmallShape, colors = ButtonDefaults.textButtonColors(contentColor = color), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
         Text(text, style = MaterialTheme.typography.labelLarge)
     }
 
 @Composable
 internal fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
-    Button(onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = SmallShape) { Text(text) }
+    Button(onClick, modifier.heightIn(min = 44.dp), enabled = enabled, shape = SmallShape, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) { Text(text) }
 
 @Composable
 internal fun SecondaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
-    OutlinedButton(onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = SmallShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text(text) }
+    OutlinedButton(onClick, modifier.heightIn(min = 44.dp), enabled = enabled, shape = SmallShape, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text(text) }
 
 @Composable
 internal fun SmallButton(text: String, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val pad = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
-    if (primary) Button(onClick, Modifier.height(40.dp), enabled = enabled, shape = SmallShape, contentPadding = pad) { Text(text) }
-    else OutlinedButton(onClick, Modifier.height(40.dp), enabled = enabled, shape = SmallShape, contentPadding = pad, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text(text) }
+    val pad = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+    if (primary) Button(onClick, Modifier.heightIn(min = 36.dp), enabled = enabled, shape = SmallShape, contentPadding = pad) { Text(text) }
+    else OutlinedButton(onClick, Modifier.heightIn(min = 36.dp), enabled = enabled, shape = SmallShape, contentPadding = pad, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text(text) }
 }
 
 @Composable
 internal fun Choice(text: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) = Box(
-    Modifier.heightIn(min = 40.dp).clip(SmallShape)
+    Modifier.heightIn(min = 36.dp).clip(SmallShape)
         .background(
             when {
                 selected && enabled -> MaterialTheme.colorScheme.primary
@@ -130,7 +130,7 @@ internal fun Choice(text: String, selected: Boolean = false, enabled: Boolean = 
                 else -> MaterialTheme.colorScheme.surfaceContainerHigh
             }
         )
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 12.dp),
+        .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 10.dp),
     Alignment.Center,
 ) {
     Text(
@@ -149,7 +149,7 @@ internal fun Badge(text: String, strong: Boolean = false) = Text(
     text,
     Modifier.clip(RoundedShape4).then(
         if (strong) Modifier.background(MaterialTheme.colorScheme.primary) else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, RoundedShape4)
-    ).padding(horizontal = 6.dp, vertical = 2.dp),
+    ).padding(horizontal = 5.dp, vertical = 1.dp),
     style = MaterialTheme.typography.labelSmall,
     color = if (strong) MaterialTheme.colorScheme.onPrimary else muted,
 )
@@ -195,8 +195,11 @@ internal fun Sheet(title: String, onDismiss: () -> Unit, icon: ImageVector? = nu
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     tonalElevation = 0.dp,
+    dragHandle = {
+        Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 32.dp, height = 3.dp).clip(RoundedShape4).background(MaterialTheme.colorScheme.outlineVariant))
+    },
 ) {
-    Column(Modifier.padding(horizontal = Gutter).padding(bottom = 20.dp)) {
+    Column(Modifier.padding(horizontal = Gutter).padding(bottom = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) Icon(icon, null, Modifier.padding(end = 8.dp).size(18.dp), if (iconTint == Color.Unspecified) MaterialTheme.colorScheme.onSurface else iconTint)
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -251,7 +254,7 @@ internal fun reminderText(n: Note): String = listOfNotNull(
 
 @Composable
 internal fun SourceRow(n: Note, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.fillMaxWidth().clip(SmallShape).clickable(onClick = onClick).heightIn(min = 48.dp).padding(vertical = 8.dp)) {
+    Column(modifier.fillMaxWidth().clip(SmallShape).clickable(onClick = onClick).heightIn(min = 44.dp).padding(vertical = 5.dp)) {
         val first = n.body.take(240).trim().lineSequence().firstOrNull().orEmpty()
         Text(n.title.ifBlank { first }, style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         if (n.title.isNotBlank() && first.isNotBlank()) Text(first.take(120), style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
