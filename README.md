@@ -8,18 +8,18 @@
 
 *An offline-first Android notes app with reminders and an on-device AI assistant. No account, no cloud, no tracking.*
 
-[![Versi](https://img.shields.io/badge/versi-1.8.1-191918)](CHANGELOG.md)
+[![Versi](https://img.shields.io/badge/versi-1.10-191918)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-191918)](#pasang)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
 [![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-### [Unduh Catatanku 1.8.1 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.8.1/Catatanku-1.8.1.apk)
+### [Unduh Catatanku 1.10 (APK, 25,1 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.10/Catatanku-1.10.apk)
 
 Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 
 </div>
 
-![Daftar, editor, lembar pengingat, dan rencana asisten dalam mode terang](docs/screenshots/terang.png)
+![Daftar dengan dok mengambang, editor berformat, lembar Templat, dan Pengaturan dalam mode terang](docs/screenshots/terang.png)
 ![Tampilan yang sama dalam mode gelap](docs/screenshots/gelap.png)
 
 ## Sekilas
@@ -193,10 +193,11 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Uji unit JVM murni & benchmark pencarian | 56 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7) + 1 `PerfTest` berjalan di Termux |
-| Mesin pencarian, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten | Uji unit JVM otomatis |
-| Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite | 23 uji Robolectric (`ReminderTest` 20, `Shots*` 3) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
+| Uji unit JVM murni & benchmark pencarian | 69 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7, `WritingToolsTest` 13) + 1 `PerfTest` (dilewati kecuali `-Pperf=true`) |
+| Templat, format ringan, tautan `[[…]]`, cari & ganti, ekspor, biaya gaya per ketikan, mesin pencarian, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten | Uji unit JVM otomatis |
+| Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite | 30 uji Robolectric (`ReminderTest` 22, `SecurityHardeningTest` 5, `Shots*` 3 yang merender 31 layar terang, gelap, dan tinggi) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
 | Benchmark AI lokal pada perangkat (CPU sweep, GPU, MTP per-tugas, KV cache 2048/3072/4096, vision GPU 1024px, audio CPU, thermal 5-run) | Diukur langsung pada Moto G86 Power 5G (`mt6878`, `gemma-4-E2B-it.litertlm`, `litertlm-android` 0.19.1) — lihat [Benchmark](docs/BENCHMARK.md) |
+| Prompt templat dan aksi Asisten 1.10 (templat dari deskripsi, rencana, poin penting, nada, terjemahan, jelaskan, susun ulang, ringkasan lintas catatan) | Dijalankan dengan Gemma 4 E2B sungguhan lewat `litertlm-jvm` 0.19.1 (CPU desktop); belum diukur di HP |
 | Build debug & rilis R8 (`assembleDebug`, `assembleRelease`), Android Lint, audit graf ketergantungan bebas SDK tertutup | Diverifikasi saat build & CI |
 | Skenario sentuh interaktif APK penuh, transkripsi suara ucapan bahasa Indonesia nyata, serta keandalan alarm latar belakang pada merek OEM agresif (Oppo/Vivo/Xiaomi/Huawei/Transsion) | **Belum diuji langsung di perangkat OEM masing-masing** |
 
