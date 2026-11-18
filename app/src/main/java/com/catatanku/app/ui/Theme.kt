@@ -210,6 +210,7 @@ object AppIcons {
     val Stop = icon("stop", "M7 7h10v10H7z", fills = listOf("M7 7h10v10H7z"))
     val Notes = icon("notes", "M6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5z", "M8.5 9h7M8.5 13h7M8.5 17h4")
     val Sliders = icon("sliders", "M4 7h10M18 7h2M4 17h4M12 17h8", "M18 7a2 2 0 1 1-4 0a2 2 0 0 1 4 0z", "M12 17a2 2 0 1 1-4 0a2 2 0 0 1 4 0z")
+    val TextFormat = icon("text-format", "M4 7V5.5h11V7", "M9.5 5.5V18.5", "M7.5 18.5h4", "M14 13v-1h6v1", "M17 12v6.5", "M16 18.5h2")
     val Sun = icon("sun", "M16 12a4 4 0 1 1-8 0a4 4 0 0 1 8 0z", "M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4")
     val Moon = icon("moon", "M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z")
 }

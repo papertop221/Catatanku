@@ -104,6 +104,26 @@ abstract class Shots(private val suffix: String) {
         }
         rule.runOnUiThread { vm.settingsSection = null }
 
+        // ---- 1.10: templat, format ringan, tautan, asisten pada teks terpilih, pilih banyak ----
+        rule.runOnUiThread { vm.go(Screen.List); vm.open(null); vm.openTemplates() }
+        shot("24-templat")
+        rule.runOnUiThread {
+            vm.closeTemplates()
+            vm.applyTemplate(com.catatanku.app.domain.usecase.Templates.builtIn.first { it.id == "b-rapat" })
+            vm.edit { it.copy(body = it.body.replace("Peserta: ", "Peserta: Rina, Dodi").replace("## Pembahasan\n• ", "## Pembahasan\n• **Peluncuran** aplikasi kasir, lihat [[Servis motor]]\n> Anggaran iklan disetujui.")) }
+        }
+        check(vm.draft.title.startsWith("Rapat ") && "## Keputusan" in vm.draft.body) { "Templat harus terpasang: ${vm.draft}" }
+        shot("25-editor-format")
+        rule.runOnUiThread { vm.aiSelection = 0 until 20; vm.aiSheet = true }
+        shot("26-asisten-pilihan")
+        rule.runOnUiThread { vm.dismissAi(); vm.aiSheet = true }
+        shot("26b-asisten-lengkap")
+        rule.runOnUiThread { vm.dismissAi(); vm.deleteDraftForever() }
+        rule.waitUntil(10_000) { vm.screen == Screen.List }
+        rule.runOnUiThread { vm.notes.filter { !it.inTrash }.take(2).forEach { vm.toggleSelect(it.id) } }
+        shot("27-pilih-banyak")
+        rule.runOnUiThread { vm.clearSelection() }
+
         // ---- 1.4: pengingat, riwayat versi, rekap, kunci ----
         rule.runOnUiThread { vm.go(Screen.List); vm.view = NoteView.Reminders }
         shot("11-tampilan-pengingat")

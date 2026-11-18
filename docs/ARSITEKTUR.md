@@ -11,7 +11,7 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 |---|---|---|
 | `MainActivity.kt`, `ReminderReceiver.kt`, `SystemIntegration.kt` | Pintu masuk Manifest (`MainActivity`, `ProcessTextActivity`, `QuickNoteTile`, `ReminderReceiver`) | Tidak |
 | `domain/model/` (`NoteModels.kt`, `BackupModels.kt`) | Model domain (`Note`, `Version`, `Repeat`, `AiAction`, `AgentStep`, model manifest/progres cadangan) | Ya |
-| `domain/usecase/` (`SearchEngine.kt`, `EmbeddingCodec.kt`, `TimeParse.kt`) | Indeks TF-IDF + trigram, waktu deterministik, sisa codec embedding (hanya untuk migrasi lama) | Ya |
+| `domain/usecase/` (`SearchEngine.kt`, `TimeParse.kt`, `Templates.kt`, `TextFormat.kt`, `EmbeddingCodec.kt`) | Indeks TF-IDF + trigram, waktu deterministik, templat (isian waktu diisi kode), format ringan & tautan `[[…]]`, cari & ganti, ekspor; sisa codec embedding hanya untuk migrasi lama | Ya |
 | `data/backup/` (`BackupArchive.kt`, `BackupCodec.kt`, `JsonStream.kt`) | Ekspor/impor ZIP lengkap (`catatanku-backup.zip`), SHA-256 `checksums.json`, pelindung traversal/ZIP bomb, JSON streaming O(1) | Ya |
 | `data/database/NoteDb.kt` | SQLite terenkripsi AES-256-GCM (`catatan.db`, skema v6: tabel `notes`, `versions`, `embeddings`), migrasi v1→v6, kolom `vault`, impor transaksional | Tidak |
 | `data/repository/NoteRepository.kt` | Repositori tunggal, pemulihan atomik berbasis *staging* + rollback, dan `AutoBackup` harian terenkripsi | Tidak |
@@ -282,3 +282,16 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 | `ShotsLight` / `ShotsDark` / `ShotsTall` | Render layar Compose ke PNG lewat Robolectric + Roborazzi |
 
 Uji Robolectric (`ReminderTest`, `Shots*`) berjalan di lingkungan Linux `glibc` (seperti GitHub Actions CI), sedangkan seluruh uji logika JVM murni & `PerfTest` berjalan langsung baik di CI maupun Termux.
+
+
+## Templat dan aksi massal (1.10)
+
+- `Templates.kt` (murni Kotlin) memuat templat bawaan dan penyandian daftar templat pengguna. `TemplateStore` menyimpan
+  daftar itu di preferensi `templates` sebagai satu string AES-256-GCM (`VaultCrypto.encryptString`, AAD `templates:user`)
+  dengan kunci data Keystore yang sama dengan catatan; hapus darurat memusnahkan kunci dan preferensinya.
+- Templat buatan asisten: `AiText.templatePrompt` → `AiText.parseTemplate` (judul + kerangka `##`/`•`/`☐`/`Label: `).
+  Isian `{tanggal}`, `{hari}`, `{jam}` hanya diisi oleh `Templates.fill` saat dipakai.
+- Aksi massal (`AppViewModel.bulk`) menulis semua catatan yang berubah dalam satu transaksi (`NoteRepository.persistAll`)
+  dan menyelaraskan pengingat hanya untuk catatan yang status pengingat/sampah/brankasnya berubah.
+- Aksi asisten pada teks terpilih menyimpan posisi dan teks asli (`AiJob.selStart/selEnd/selText`); saat diterapkan,
+  posisi diperiksa ulang dan dicari lagi bila isi bergeser, agar tidak menimpa bagian yang salah.

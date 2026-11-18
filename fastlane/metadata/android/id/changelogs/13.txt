@@ -1,5 +1,5 @@
-• Desain baru "Fokus": judul besar, daftar ringkas, dan dok mengambang di bawah
-• Pengaturan lebih ringkas: kategori dalam satu grup dengan status langsung
-• Pilihan tema Sistem/Terang/Gelap dan tombol cepat di bilah atas
-• Transisi halus antarlayar; nama fitur dibakukan
+• Desain baru "Fokus" dengan dok mengambang dan pilihan tema terang/gelap
+• Templat profesional, templat buatan asisten, dan Templat saya
+• Pilih banyak catatan, format ringan, tautan [[catatan]], cari & ganti, gandakan, ekspor .md/.txt
+• Asisten lebih dalam: rencana dari tujuan, poin penting, nada formal/santai, terjemahan, aksi pada teks terpilih, ringkasan lintas catatan
 • Pencarian semantik dihapus; pencarian tetap instan tanpa model

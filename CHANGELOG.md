@@ -16,6 +16,21 @@ Tampilan ringkas & rapi
 - Gerak halus dan pendek: transisi antarlayar dan antarkategori, baris catatan berpindah ke tempatnya, bagian lipat membuka dengan lembut
 - Palet sedikit lebih segar: kertas lebih bersih, permukaan bertingkat lebih jelas di terang dan gelap
 
+Fitur dasar catatan
+- **Templat**: 8 templat bawaan yang profesional (Notulen rapat, Rencana proyek, Laporan kerja, Jurnal harian, Catatan belajar, Brief klien, Daftar belanja, Evaluasi); tanggal, hari, dan jam diisi oleh kode saat dipakai. Bisa dipakai dari catatan kosong ("Mulai dari templat"), menu catatan, atau lembar Asisten
+- **Templat buatan asisten**: deskripsikan keperluannya (mis. "laporan kunjungan klien") di catatan yang masih kosong; asisten menyusun kerangka tanpa data contoh, lalu bisa dipakai atau disimpan ke **Templat saya** (tersimpan terenkripsi AES-256-GCM dengan kunci Keystore). Catatan yang ada juga bisa disimpan sebagai templat
+- **Pilih banyak**: tekan lama catatan, lalu sematkan, arsipkan, pindah folder, beri tag, hapus, pulihkan, atau hapus permanen sekaligus dalam satu transaksi SQLite, dengan Urungkan
+- **Format ringan**: subjudul (`## `), tebal (`**…**`), miring (`_…_`), dan kutipan (`> `) tampil rapi langsung di editor lewat tombol Format; penanda tetap terlihat redup sehingga teks tetap portabel
+- **Tautan antarcatatan**: tulis `[[judul]]` (dengan saran judul saat mengetik) lalu ketuk untuk membuka catatan itu atau membuatnya; bagian **Ditautkan dari** menampilkan catatan yang menautkan ke catatan ini
+- **Utilitas**: Cari & ganti di dalam catatan (dengan sorotan dan Urungkan), Gandakan, serta ekspor satu catatan ke `.md` atau `.txt` (catatan Brankas tidak diekspor sebagai teks polos)
+
+Asisten yang lebih dalam
+- Lembar Asisten dikelompokkan: Tulis, Perbaiki, Olah, Atur
+- Aksi baru: **Rencana dari tujuan** (langkah centang berurutan; tenggat yang disebut ditawarkan sebagai pengingat, waktunya dihitung oleh kode), **Poin penting** (jadwal, keputusan, angka & biaya, kontak, tindak lanjut), **Nada formal**, **Nada santai**, **Terjemahkan** (Indonesia ↔ Inggris), dan **Jelaskan**
+- **Aksi pada teks terpilih**: pilih sebagian teks lalu jalankan aksi; hasilnya menggantikan atau disisipkan di bawah bagian itu saja
+- **Susun ulang** kini memakai subjudul, dan hasil asisten tampil dengan format yang sama seperti di catatan
+- **Ringkas tampilan ini**: ringkasan lintas catatan untuk folder, tag, hasil cari, atau tampilan yang dibuka, bernomor sumber; bisa disimpan sebagai catatan baru lengkap dengan tautan ke sumbernya. Ringkasan mingguan memakai alur yang sama
+
 Penghapusan pencarian semantik
 - Model embedding, pencarian hibrida, dan pengaturannya dihapus; pencarian kembali murni TF-IDF + trigram (instan, tanpa model)
 - Vektor lama di tabel `embeddings` dan berkas model embedding dihapus sekali saat aplikasi pertama dibuka; skema basis data tidak berubah sehingga migrasi lama tetap berjalan

@@ -79,6 +79,7 @@ import com.catatanku.app.ai.engine.AiState
 import com.catatanku.app.ai.inference.AiText
 import com.catatanku.app.domain.model.Note
 import com.catatanku.app.domain.usecase.TimeParse
+import com.catatanku.app.domain.usecase.TextFormat
 import com.catatanku.app.media.Attachments
 import com.catatanku.app.media.AudioPlayer
 import com.catatanku.app.media.VoiceRecorder
@@ -93,26 +94,6 @@ private fun Tool(icon: ImageVector, label: String, tint: Color = MaterialTheme.c
     Modifier.size(48.dp).clip(SmallShape).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
     Alignment.Center,
 ) { Icon(icon, label, Modifier.size(20.dp), tint) }
-
-private fun checklistStyle(mutedColor: Color) = VisualTransformation { src ->
-    val s = src.text
-    if ('☑' !in s) return@VisualTransformation TransformedText(src, OffsetMapping.Identity)
-    val builder = AnnotatedString.Builder(s)
-    var pos = 0
-    while (pos < s.length) {
-        val end = s.indexOf('\n', pos).let { if (it < 0) s.length else it }
-        var box = pos
-        while (box < end && s[box] == ' ') box++
-        if (box < end && s[box] == '☑' && box + 1 <= end) {
-            builder.addStyle(SpanStyle(color = mutedColor), box, box + 1)
-            if (box + 1 < end) {
-                builder.addStyle(SpanStyle(color = mutedColor, textDecoration = TextDecoration.LineThrough), box + 1, end)
-            }
-        }
-        pos = end + 1
-    }
-    TransformedText(builder.toAnnotatedString(), OffsetMapping.Identity)
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -130,6 +111,14 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
     var hint by remember { mutableStateOf<TimeParse.Found?>(null) }
     var hintDismissed by remember(d.id) { mutableStateOf(false) }
     var previewImage by remember { mutableStateOf<String?>(null) }
+    var formatMenu by remember { mutableStateOf(false) }
+    var findOpen by remember(d.id) { mutableStateOf(false) }
+    var findQuery by remember(d.id) { mutableStateOf("") }
+    var replaceWith by remember(d.id) { mutableStateOf("") }
+    var askTemplateName by remember { mutableStateOf(false) }
+    var backlinks by remember { mutableStateOf<List<Note>>(emptyList()) }
+    val exportMd = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri -> uri?.let { vm.exportDraft(it, markdown = true) } }
+    val exportTxt = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri -> uri?.let { vm.exportDraft(it, markdown = false) } }
 
     val scroll = rememberScrollState()
     val bodyFocus = remember { FocusRequester() }
@@ -184,6 +173,14 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         lastSnap = d.title to t
         stored = TextFieldValue(t, TextRange(c))
         vm.edit { it.copy(body = t) }
+    }
+
+    fun applyEdit(e: TextFormat.Edit) {
+        pushUndo(d.title to d.body)
+        lastSnap = d.title to e.text
+        stored = TextFieldValue(e.text, TextRange(e.selStart, e.selEnd))
+        vm.edit { it.copy(body = e.text) }
+        runCatching { bodyFocus.requestFocus() }
     }
 
     fun undoEdit() {
@@ -245,9 +242,21 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
     LaunchedEffect(d) { delay(700); vm.saveDraft() }
     LaunchedEffect(d.title, d.body, d.tags, vm.index) { delay(500); related = withContext(Dispatchers.Default) { vm.relatedTo(d) } }
     LaunchedEffect(d.title, d.body, d.remindAt) { delay(700); hint = withContext(Dispatchers.Default) { vm.reminderHint(d) } }
+    LaunchedEffect(d.title, d.id, vm.index) { delay(600); backlinks = withContext(Dispatchers.Default) { vm.backlinks(d) } }
 
     val mutedCol = muted
-    val bodyVisual = remember(mutedCol) { checklistStyle(mutedCol) }
+    val linkCol = accent
+    val hlCol = timeColor.copy(alpha = 0.28f)
+    val activeFind = if (findOpen) findQuery else ""
+    val bodyVisual = remember(mutedCol, linkCol, hlCol, activeFind) {
+        VisualTransformation { src ->
+            val m = if (activeFind.isEmpty()) emptyList() else TextFormat.matches(src.text, activeFind)
+            TransformedText(formatAnnotated(src.text, mutedCol, linkCol, hlCol, m), OffsetMapping.Identity)
+        }
+    }
+    val cursor = bodyField.selection
+    val linkHere = remember(bodyField.text, cursor) { if (cursor.collapsed) TextFormat.linkAt(bodyField.text, cursor.start) else null }
+    val partial = remember(bodyField.text, cursor) { if (cursor.collapsed) TextFormat.partialLink(bodyField.text, cursor.start) else null }
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -270,11 +279,66 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }
                     }
                 }
+                if (findOpen) {
+                    Hairline()
+                    val count = remember(d.body, findQuery) { TextFormat.matches(d.body, findQuery).size }
+                    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f).heightIn(min = 40.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 14.dp), Alignment.CenterStart) {
+                                PlainField(findQuery, { findQuery = it.take(80) }, "Cari di catatan")
+                            }
+                            Muted(if (findQuery.isEmpty()) "" else "$count hasil", Modifier.padding(horizontal = 10.dp), MaterialTheme.typography.labelMedium)
+                            IconAction(AppIcons.Close, "Tutup cari & ganti", muted, 18.dp) { findOpen = false }
+                        }
+                        Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f).heightIn(min = 40.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 14.dp), Alignment.CenterStart) {
+                                PlainField(replaceWith, { replaceWith = it.take(80) }, "Ganti dengan")
+                            }
+                            TextAction("Ganti semua", enabled = count > 0 && !d.inTrash) {
+                                val (t, n) = TextFormat.replaceAll(d.body, findQuery, replaceWith)
+                                applyEdit(TextFormat.Edit(t, t.length, t.length))
+                                vm.say("$n diganti.", "Urungkan") { undoEdit() }
+                            }
+                        }
+                    }
+                }
+                if (linkHere != null || partial != null) {
+                    Hairline()
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (linkHere != null) {
+                            val exists = remember(linkHere, vm.notes) { vm.linkTarget(linkHere) != null }
+                            TextAction((if (exists) "Buka " else "Buat ") + "“${linkHere.take(40)}”", color = accent) { flushPendingTag(); vm.openLink(linkHere) }
+                        } else if (partial != null) {
+                            val options = remember(partial, vm.notes) { vm.linkSuggestions(partial) }
+                            if (options.isEmpty()) Muted(if (partial.isBlank()) "Ketik judul catatan" else "Belum ada catatan “$partial”", Modifier.padding(horizontal = 8.dp, vertical = 12.dp))
+                            options.forEach { t -> Choice(t.take(32)) { applyEdit(TextFormat.completeLink(bodyField.text, cursor.start, t)) } }
+                        }
+                    }
+                }
                 Hairline()
                 Row(
                     Modifier.fillMaxWidth().padding(start = 8.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Box {
+                        Tool(AppIcons.TextFormat, "Format teks") { formatMenu = true }
+                        Menu(formatMenu, { formatMenu = false }) {
+                            val sel = bodyField.selection
+                            DropdownMenuItem({ Text("Subjudul") }, { formatMenu = false; applyEdit(TextFormat.toggleLinePrefix(bodyField.text, sel.start, "## ")) })
+                            DropdownMenuItem({ Text("Tebal") }, { formatMenu = false; applyEdit(TextFormat.wrap(bodyField.text, sel.start, sel.end, "**")) })
+                            DropdownMenuItem({ Text("Miring") }, { formatMenu = false; applyEdit(TextFormat.wrap(bodyField.text, sel.start, sel.end, "_")) })
+                            DropdownMenuItem({ Text("Kutipan") }, { formatMenu = false; applyEdit(TextFormat.toggleLinePrefix(bodyField.text, sel.start, "> ")) })
+                            DropdownMenuItem({ Text("Tautan ke catatan") }, {
+                                formatMenu = false
+                                val t = bodyField.text; val c = sel.end.coerceIn(0, t.length)
+                                val next = t.substring(0, c) + "[[" + t.substring(c)
+                                applyEdit(TextFormat.Edit(next, c + 2, c + 2))
+                            })
+                        }
+                    }
                     Tool(AppIcons.CheckBox, "Daftar centang") { prefix(true) }
                     Tool(AppIcons.Bullets, "Daftar poin") { prefix(false) }
                     Tool(AppIcons.Image, "Lampirkan gambar") { vm.suppressNextLeaveLock(); pickImage.launch("image/*") }
@@ -295,7 +359,11 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                     if (!d.vault) Tool(AppIcons.Folder, "Pindahkan ke folder") { folderDialog = true }
                     Spacer(Modifier.weight(1f))
-                    TextAction(if (vm.aiBusy) "Bekerja…" else "Asisten") { vm.aiSheet = true }
+                    TextAction(if (vm.aiBusy) "Bekerja…" else "Asisten") {
+                        val sel = bodyField.selection
+                        vm.aiSelection = if (!sel.collapsed && sel.max <= d.body.length) sel.min until sel.max else null
+                        vm.aiSheet = true
+                    }
                 }
             }
         },
@@ -325,6 +393,14 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                                 Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, d.title).putExtra(Intent.EXTRA_TEXT, plain), null))
                         }, enabled = !d.isBlank)
                         DropdownMenuItem({ Text("Salin") }, { menu = false; copyText(ctx, plain); vm.say("Teks disalin.") }, enabled = !d.isBlank)
+                        DropdownMenuItem({ Text("Cari & ganti") }, { menu = false; findOpen = true }, enabled = !d.isBlank)
+                        DropdownMenuItem({ Text("Templat") }, { menu = false; vm.openTemplates() }, enabled = !d.inTrash)
+                        DropdownMenuItem({ Text("Simpan sebagai templat") }, { menu = false; askTemplateName = true }, enabled = d.body.isNotBlank())
+                        DropdownMenuItem({ Text("Gandakan") }, { menu = false; vm.duplicateDraft() }, enabled = !d.isBlank && !d.inTrash)
+                        if (!d.vault) {
+                            DropdownMenuItem({ Text("Ekspor .md") }, { menu = false; vm.suppressNextLeaveLock(); exportMd.launch(vm.exportFileName(true)) }, enabled = !d.isBlank)
+                            DropdownMenuItem({ Text("Ekspor .txt") }, { menu = false; vm.suppressNextLeaveLock(); exportTxt.launch(vm.exportFileName(false)) }, enabled = !d.isBlank)
+                        }
                         DropdownMenuItem({ Text("Riwayat versi") }, { menu = false; vm.openVersions() }, enabled = d.id != 0L)
                         if (!d.inTrash) {
                             DropdownMenuItem(
@@ -420,6 +496,7 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     visualTransformation = bodyVisual,
                     decorationBox = { inner -> Box { if (bodyField.text.isEmpty()) Text("Tulis sesuatu", style = NoteType.body, color = muted); inner() } },
                 )
+                if (d.body.isBlank() && !d.inTrash) TextAction("Mulai dari templat", Modifier.padding(top = 4.dp), color = accent, onClick = vm::openTemplates)
                 if (vm.canUndoAi) TextAction("Urungkan perubahan asisten", Modifier.padding(top = 4.dp), onClick = vm::undoAiChange)
                 if (d.body.length > AiText.maxInput && hasModel) Muted(
                     "Catatan panjang: sebagian aksi asisten membaca ±${AiText.maxInput} huruf pertama.",
@@ -459,6 +536,10 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
                 if (aiState is AiState.Loading) Muted("Memuat model ke memori…", Modifier.padding(top = 8.dp))
 
+                if (backlinks.isNotEmpty()) {
+                    SectionLabel("Ditautkan dari", Modifier.padding(top = GroupGap, bottom = 2.dp))
+                    backlinks.forEach { n -> SourceRow(n) { flushPendingTag(); vm.openRelated(n) } }
+                }
                 if (related.isNotEmpty()) {
                     SectionLabel("Terkait", Modifier.padding(top = GroupGap, bottom = 2.dp))
                     related.forEach { n -> SourceRow(n) { flushPendingTag(); vm.openRelated(n) } }
@@ -486,7 +567,9 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
         )
     }
 
-    if (vm.aiSheet || vm.aiJob != null) AiSheet(vm, hasModel, aiState is AiState.Loading) { copyText(ctx, it); vm.say("Teks disalin.") }
+    if (vm.templateSheet || vm.aiJob?.isTemplate == true) TemplateSheet(vm, hasModel, aiState is AiState.Loading)
+    else if (vm.aiSheet || vm.aiJob != null) AiSheet(vm, hasModel, aiState is AiState.Loading) { copyText(ctx, it); vm.say("Teks disalin.") }
+    if (askTemplateName) NameDialog("Simpan sebagai templat", d.title.ifBlank { d.heading }.take(40), "Nama templat", "Simpan templat", { askTemplateName = false }) { vm.saveDraftAsTemplate(it) }
     if (confirmForever) Confirm("Hapus permanen?", "Catatan ini tidak bisa dipulihkan lagi.", "Hapus permanen", destructive = true,
         onDismiss = { confirmForever = false }) { vm.deleteDraftForever() }
     if (folderDialog) FolderDialog(d.folder, vm.folders, { folderDialog = false }) { f -> vm.edit { it.copy(folder = f) } }

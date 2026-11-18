@@ -9,6 +9,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
@@ -107,17 +109,33 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
     }
     fun closeSearch() { searchOpen = false; vm.updateQuery("") }
     androidx.activity.compose.BackHandler(searchVisible) { closeSearch() }
+    androidx.activity.compose.BackHandler(vm.selecting) { vm.clearSelection() }
+    var bulkFolder by remember { mutableStateOf(false) }
+    var bulkTag by remember { mutableStateOf(false) }
+    var bulkDelete by remember { mutableStateOf(false) }
+    var selMenu by remember { mutableStateOf(false) }
     val dark = vm.themeMode.isDark()
     val dateLine = remember { java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMMM", ID).format(java.time.LocalDate.now()).replaceFirstChar { it.titlecase(ID) } }
 
     Scaffold(snackbarHost = { Notices(snack) }) { pad ->
         Box(Modifier.padding(pad).fillMaxSize().imePadding()) {
             val today = vm.today
-            val showToday = view == NoteView.All && !searching && vm.tagFilter == null && !vm.askActive && (today.isNotEmpty() || vm.openTaskCount > 0)
+            val showToday = view == NoteView.All && !searching && !vm.selecting && vm.tagFilter == null && !vm.askActive && (today.isNotEmpty() || vm.openTaskCount > 0)
             val split = !searching && shown.any { it.pinned } && shown.any { !it.pinned }
             val (pinned, rest) = remember(shown, split) { if (split) shown.partition { it.pinned } else shown to emptyList() }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 128.dp)) {
-                item(key = "header", contentType = "header") {
+                if (vm.selecting) item(key = "sel-header", contentType = "header") {
+                    Column(Modifier.padding(top = 6.dp, bottom = 14.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconAction(AppIcons.Close, "Batalkan pilihan", onClick = vm::clearSelection)
+                            Spacer(Modifier.weight(1f))
+                            TextAction(if (vm.selectedIds.size == shown.size) "Batal pilih semua" else "Pilih semua") {
+                                if (vm.selectedIds.size == shown.size) vm.clearSelection() else vm.selectAllShown()
+                            }
+                        }
+                        Text("${vm.selectedIds.size} dipilih", Modifier.padding(horizontal = Gutter), style = MaterialTheme.typography.headlineLarge)
+                    }
+                } else item(key = "header", contentType = "header") {
                     Column {
                         Row(Modifier.fillMaxWidth().padding(start = Gutter, end = 6.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(dateLine, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = accent)
@@ -138,6 +156,8 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                                 Hairline()
                                 DropdownMenuItem({ Text("Tugas terbuka") }, { moreMenu = false; vm.askOpenTasks() })
                                 DropdownMenuItem({ Text("Ringkasan mingguan") }, { moreMenu = false; vm.askRecap() })
+                                if (hasModel) DropdownMenuItem({ Text("Ringkas tampilan ini") }, { moreMenu = false; vm.digestShown() }, enabled = shown.isNotEmpty())
+                                DropdownMenuItem({ Text("Pilih catatan") }, { moreMenu = false; shown.firstOrNull()?.let { vm.toggleSelect(it.id) } }, enabled = shown.isNotEmpty())
                                 if (hasModel) DropdownMenuItem(
                                     { Text("Lengkapi metadata") }, { moreMenu = false; confirmOrganize = true },
                                     enabled = vm.batch == null && vm.organizableCount > 0,
@@ -233,7 +253,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }
                     }
                 }
-                if (!hasModel && !vm.hideAiBanner && !searching && vm.loaded && view == NoteView.All && !vm.askActive) item(key = "banner") {
+                if (!hasModel && !vm.hideAiBanner && !searching && !vm.selecting && vm.loaded && view == NoteView.All && !vm.askActive) item(key = "banner") {
                     Row(Modifier.padding(start = Gutter, end = 6.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Asisten belum aktif", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = muted)
                         TextAction("Aktifkan") { vm.go(Screen.Settings) }
@@ -278,7 +298,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 AnimatedVisibility(
-                    searchVisible,
+                    searchVisible && !vm.selecting,
                     enter = fadeIn(tween(160)) + expandVertically(tween(200), expandFrom = Alignment.Bottom),
                     exit = fadeOut(tween(120)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Bottom),
                 ) {
@@ -310,7 +330,34 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (vm.selecting) Row(
+                    Modifier.fillMaxWidth().height(60.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainer)
+                        .horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val sel = vm.selectedNotes
+                    if (view == NoteView.Trash) {
+                        TextAction("Pulihkan", onClick = vm::bulkRestore)
+                        TextAction("Hapus permanen", color = MaterialTheme.colorScheme.error) { bulkDelete = true }
+                    } else {
+                        if (sel.none { it.archived }) TextAction(if (sel.any { !it.pinned }) "Sematkan" else "Lepas sematan", onClick = vm::bulkPin)
+                        TextAction(if (sel.any { !it.archived }) "Arsipkan" else "Keluarkan", onClick = vm::bulkArchive)
+                        if (view != NoteView.Vault) TextAction("Folder") { bulkFolder = true }
+                        TextAction("Tag") { bulkTag = true }
+                        TextAction("Hapus", color = MaterialTheme.colorScheme.error, onClick = vm::bulkTrash)
+                        if (sel.size == 1) Box {
+                            TextAction("Lainnya") { selMenu = true }
+                            Menu(selMenu, { selMenu = false }) {
+                                val n = sel.first()
+                                fun done() { selMenu = false; vm.clearSelection() }
+                                if (n.hasReminder && n.remindFired) DropdownMenuItem({ Text("Tandai pengingat selesai") }, { done(); vm.finishReminder(n) })
+                                DropdownMenuItem({ Text(if (n.hasReminder) "Ubah pengingat" else "Setel pengingat") }, { done(); vm.openReminder(n) })
+                                DropdownMenuItem({ Text(if (n.vault) "Keluarkan dari Brankas" else "Pindahkan ke Brankas") }, { done(); vm.moveNoteToVault(n, !n.vault) })
+                                DropdownMenuItem({ Text("Hapus permanen", color = MaterialTheme.colorScheme.error) }, { selMenu = false; bulkDelete = true })
+                            }
+                        }
+                    }
+                } else Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(
                         Modifier.weight(1f).height(60.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 6.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceAround,
@@ -332,6 +379,11 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
             }
         }
     }
+    if (bulkFolder) FolderDialog("", vm.folders, onDismiss = { bulkFolder = false }) { f -> vm.bulkMove(f) }
+    if (bulkTag) NameDialog("Tambah tag", "", "Nama tag", "Tambahkan tag", { bulkTag = false }) { vm.bulkTag(it) }
+    if (bulkDelete) Confirm(
+        "Hapus permanen?", "${vm.selectedIds.size} catatan tidak bisa dipulihkan lagi.", "Hapus permanen", destructive = true,
+        onDismiss = { bulkDelete = false }) { vm.bulkDeleteForever() }
     if (confirmEmpty) Confirm(
         "Kosongkan Sampah?", "${vm.trashCount} catatan akan dihapus permanen dan tidak bisa dipulihkan.", "Hapus permanen", destructive = true,
         onDismiss = { confirmEmpty = false }) { vm.emptyTrash() }
@@ -462,7 +514,8 @@ private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifi
                 }
             }
         } else {
-            if (vm.askAnswer.isNotEmpty()) Text(vm.askAnswer, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)
+            if (vm.askAnswer.isNotEmpty()) StyledText(vm.askAnswer)
+            if (vm.askDigest && !vm.askRunning && vm.askAnswer.isNotBlank()) TextAction("Simpan sebagai catatan", Modifier.padding(top = 6.dp), color = accent, onClick = vm::saveAnswerAsNote)
             if (vm.askSources.isNotEmpty()) {
                 SectionLabel("Sumber", Modifier.padding(top = 16.dp, bottom = 2.dp))
                 vm.askSources.forEach { n -> SourceRow(n) { vm.open(n) } }
@@ -512,10 +565,9 @@ private fun SwipeRow(startLabel: String?, endLabel: String?, onStart: () -> Unit
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () -> Unit, onDeleteForever: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
     val (title, snippet) = remember(n.title, n.body, n.attachments) {
         val lines = n.body.take(400).lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.take(4).toList()
-        n.heading to (if (n.title.isBlank()) lines.drop(1) else lines).joinToString(" ")
+        n.heading to com.catatanku.app.domain.usecase.TextFormat.plain((if (n.title.isBlank()) lines.drop(1) else lines).joinToString(" "))
     }
     val time = remember(n.remindAt, n.remindFired, n.updated, n.inTrash) {
         when {
@@ -524,7 +576,9 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
             else -> shortDate(n.updated)
         }
     }
-    val canSwipe = !n.inTrash && !n.vault
+    val selecting = vm.selecting
+    val selected = n.id in vm.selectedIds
+    val canSwipe = !n.inTrash && !n.vault && !selecting
     Box {
         SwipeRow(
             startLabel = if (!canSwipe) null else if (n.archived) "Keluarkan dari arsip" else "Arsipkan",
@@ -532,7 +586,12 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
             onStart = { vm.toggleArchive(n) }, onEnd = { vm.openReminder(n) },
         ) {
             Row(
-                Modifier.fillMaxWidth().combinedClickable(onClick = { vm.open(n) }, onLongClick = { menu = true }, onLongClickLabel = "Aksi cepat")
+                Modifier.fillMaxWidth()
+                    .background(if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else androidx.compose.ui.graphics.Color.Transparent)
+                    .combinedClickable(
+                        onClick = { if (selecting) vm.toggleSelect(n.id) else vm.open(n) },
+                        onLongClick = { vm.toggleSelect(n.id) }, onLongClickLabel = "Pilih catatan",
+                    )
                     .padding(horizontal = Gutter, vertical = 12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -543,31 +602,15 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
                     }
                     if (snippet.isNotBlank()) Text(snippet, Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = NoteType.rowSnippet, color = muted)
                 }
-                Text(
+                if (selecting) Box(
+                    Modifier.padding(start = 12.dp, top = 2.dp).size(22.dp).clip(CircleShape)
+                        .background(if (selected) accent else MaterialTheme.colorScheme.surfaceContainerHighest),
+                    Alignment.Center,
+                ) { if (selected) Icon(AppIcons.Check, "Dipilih", Modifier.size(14.dp), MaterialTheme.colorScheme.onSecondary) }
+                else Text(
                     time, Modifier.padding(start = 12.dp, top = 3.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1,
                     color = when { n.hasReminder && !n.inTrash && n.remindFired -> MaterialTheme.colorScheme.error; n.hasReminder && !n.inTrash -> timeColor; else -> muted },
                 )
-            }
-        }
-        Menu(menu, { menu = false }) {
-            if (n.inTrash) {
-                DropdownMenuItem({ Text("Pulihkan") }, { menu = false; vm.restore(n) })
-                DropdownMenuItem({ Text("Hapus permanen", color = MaterialTheme.colorScheme.error) }, { menu = false; onDeleteForever() })
-            } else if (n.vault) {
-                DropdownMenuItem({ Text(if (n.pinned) "Lepas sematan" else "Sematkan") }, { menu = false; vm.togglePin(n) })
-                if (n.hasReminder && n.remindFired) DropdownMenuItem({ Text("Tandai pengingat selesai") }, { menu = false; vm.finishReminder(n) })
-                DropdownMenuItem({ Text(if (n.hasReminder) "Ubah pengingat" else "Setel pengingat") }, { menu = false; vm.openReminder(n) })
-                DropdownMenuItem({ Text("Keluarkan dari Brankas") }, { menu = false; vm.moveNoteToVault(n, false) })
-                Hairline()
-                DropdownMenuItem({ Text("Hapus permanen", color = MaterialTheme.colorScheme.error) }, { menu = false; onDeleteForever() })
-            } else {
-                if (!n.archived) DropdownMenuItem({ Text(if (n.pinned) "Lepas sematan" else "Sematkan") }, { menu = false; vm.togglePin(n) })
-                if (n.hasReminder && n.remindFired) DropdownMenuItem({ Text("Tandai pengingat selesai") }, { menu = false; vm.finishReminder(n) })
-                DropdownMenuItem({ Text(if (n.hasReminder) "Ubah pengingat" else "Setel pengingat") }, { menu = false; vm.openReminder(n) })
-                DropdownMenuItem({ Text("Pindahkan ke folder") }, { menu = false; onMoveFolder() })
-                DropdownMenuItem({ Text("Pindahkan ke Brankas") }, { menu = false; vm.moveNoteToVault(n, true) })
-                DropdownMenuItem({ Text(if (n.archived) "Keluarkan dari arsip" else "Arsipkan") }, { menu = false; vm.toggleArchive(n) })
-                DropdownMenuItem({ Text("Pindahkan ke Sampah") }, { menu = false; vm.trash(n) })
             }
         }
     }

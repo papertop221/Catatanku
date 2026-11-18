@@ -102,6 +102,15 @@ tanpa ikon pendamping. Satu-satunya ikon di tengah teks adalah lonceng kecil pad
 | Model bahasa · Kapasitas konteks · Kalibrasi kinerja | Model AI, Panjang bacaan, Penyesuaian kecepatan |
 | Izin notifikasi · Alarm presisi · Optimasi baterai · Prioritas alarm · Diagnostik | (rincian pengingat) |
 | Tema (Sistem · Terang · Gelap) · Warna dinamis | Warna mengikuti wallpaper |
+| Templat · Templat saya · Mulai dari templat | (baru) |
+| Rencana dari tujuan · Poin penting · Nada formal · Nada santai · Terjemahkan · Jelaskan | (baru) |
+| Ringkas tampilan ini · Simpan sebagai catatan · Pilih catatan · Ditautkan dari | (baru) |
+
+## Format teks (mulai 1.10)
+
+Format ringan mirip Markdown: `## ` subjudul, `**tebal**`, `_miring_`, `> ` kutipan, `[[judul]]` tautan. Penandanya
+tidak disembunyikan, hanya diredupkan, agar teks tetap utuh saat disalin, dibagikan, atau diekspor. Tautan memakai
+warna aksen dan garis bawah. Cuplikan di daftar membuang penanda.
 
 ## Gerak (mulai 1.10)
 

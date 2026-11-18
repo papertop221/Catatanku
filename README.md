@@ -84,7 +84,11 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 - Bagikan/salin, terima teks, gambar (`image/*`), dan suara (`audio/*`) dari aplikasi lain
 - Menu teks terpilih di aplikasi lain (browser, obrolan, PDF): simpan langsung sebagai catatan, simpan dengan pengingat, atau ringkas/perbaiki ejaan/ambil daftar tugas dengan AI lokal (dan ganti teks di aplikasi asal bila kolomnya bisa disunting)
 - Tile Setelan Cepat "Catatan baru", pintasan tekan-lama ikon aplikasi, pintu masuk asisten perangkat (`ACTION_ASSIST`), dan intent publik (`NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS`)
-- Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; tekan lama untuk sematkan, pindahkan ke folder, tandai pengingat selesai, arsipkan, atau hapus
+- **Templat**: 8 templat bawaan (Notulen rapat, Rencana proyek, Laporan kerja, Jurnal harian, Catatan belajar, Brief klien, Daftar belanja, Evaluasi), templat buatan asisten dari deskripsi singkat, dan *Templat saya* (tersimpan terenkripsi)
+- **Format ringan**: subjudul `## `, `**tebal**`, `_miring_`, kutipan `> `, langsung tampil rapi di editor
+- **Tautan antarcatatan** `[[judul]]` dengan saran judul saat mengetik, plus daftar *Ditautkan dari*
+- Cari & ganti di dalam catatan, gandakan catatan, ekspor satu catatan ke `.md`/`.txt`
+- Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; **tekan lama untuk memilih banyak** lalu sematkan, arsipkan, pindah folder, beri tag, atau hapus sekaligus (bisa diurungkan)
 - Blok "Hari ini": pengingat yang terlewat atau jatuh hari ini, dan jumlah tugas yang belum dicentang
 
 **Pengingat**
@@ -106,20 +110,21 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 - Catatan terkait muncul otomatis di editor
 
 **AI lokal** — opsional, butuh model
-- *Asisten*: lanjutkan, koreksi ejaan, susun ulang, ringkasan, ekstrak tugas, buat judul, instruksi khusus
+- *Asisten*: lanjutkan, buat judul, koreksi ejaan, susun ulang, nada formal/santai, terjemahkan (Indonesia ↔ Inggris), ringkasan, ekstrak tugas, **rencana dari tujuan** (dengan tenggat sebagai pengingat), **poin penting** (jadwal, keputusan, angka, kontak, tindak lanjut), dan instruksi khusus
+- *Pada teks terpilih*: pilih sebagian teks lalu ringkas, koreksi, ubah nada, terjemahkan, atau jelaskan; hasilnya hanya mengganti bagian itu
 - *Gambar & suara (Gemma 4 E2B)*: baca teks/isi gambar (OCR), ambil daftar tugas dari gambar, serta transkripsikan atau ambil daftar tugas dari rekaman suara
 - *Catatan panjang*: ringkas, daftar tugas, dan perbaiki ejaan memproses seluruh isi bagian demi bagian
 - *Merapikan*: isi judul, folder, dan tag yang kosong untuk satu atau semua catatan, atau otomatis saat catatan ditutup
 - *Tanyakan*: jawaban dari hingga 4 catatan paling relevan, tampil di atas daftar lengkap dengan sumbernya
-- *Ringkasan mingguan* dan daftar *Tugas terbuka*
+- *Ringkas tampilan ini* (folder, tag, hasil cari) dan *Ringkasan mingguan*, bernomor sumber dan bisa disimpan sebagai catatan; daftar *Tugas terbuka*
 - *Sarankan pengingat* dari jadwal atau tenggat di catatan
 - *Perluas pencarian*: "jogging" → "lari, olahraga"
 
 Hasil AI selalu ditinjau dulu sebelum diterapkan; "Ganti isi" bisa diurungkan, dan merapikan tidak pernah menimpa isian yang sudah ada.
 
 **Tampilan**
-- Satu layar tanpa tab; kolom cari, filter tag, dan tombol catatan baru di bawah, sejangkauan ibu jari
-- Mode terang dan gelap (hitam pekat); pilihan warna mengikuti wallpaper di Android 12+
+- Arah desain "Fokus": judul besar, daftar ringkas, dan dok mengambang (Catatan · Cari · Pengingat · Pengaturan) sejangkauan ibu jari
+- Tema Sistem, Terang, atau Gelap (hitam pekat) dengan tombol cepat; warna mengikuti wallpaper di Android 12+
 - Aturan desainnya tertulis di [DESAIN.md](docs/DESAIN.md)
 
 **Keamanan dan cadangan**

@@ -66,6 +66,22 @@ class NoteRepository(private val ctx: Context) {
         return id
     }
 
+    /** Menyimpan banyak catatan dalam satu transaksi SQLite (aksi massal), lalu menyelaraskan pengingatnya. */
+    fun persistAll(changed: List<Note>, before: Map<Long, Note>) {
+        if (changed.isEmpty()) return
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            changed.forEach { db.upsert(it) }
+            w.setTransactionSuccessful()
+        } finally { w.endTransaction() }
+        changed.forEach { n ->
+            val b = before[n.id]
+            if (b == null || b.remindAt != n.remindAt || b.inTrash != n.inTrash || b.vault != n.vault || b.remindFired != n.remindFired) Reminders.sync(ctx, n)
+        }
+        prefs.edit().putBoolean("dirty", true).apply()
+    }
+
     fun buildBackupRecords(includeVault: Boolean = true): List<BackupNoteRecord> {
         val all = db.all(includeVault)
         val versionsByNote = db.allVersionsByNoteId()

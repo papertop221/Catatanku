@@ -121,6 +121,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var undoAi by mutableStateOf<UndoAiSnap?>(null)
     val canUndoAi get() = undoAi != null
     var aiSheet by mutableStateOf(false)
+    /** Rentang teks terpilih di editor saat lembar Asisten dibuka; null = seluruh catatan. */
+    var aiSelection by mutableStateOf<IntRange?>(null)
+
+    // Templat
+    private val templateStore = com.catatanku.app.data.repository.TemplateStore(app)
+    var userTemplates by mutableStateOf<List<com.catatanku.app.domain.usecase.NoteTemplate>>(emptyList()); private set
+    var templateSheet by mutableStateOf(false)
+
+    // Pilih banyak di daftar
+    var selectedIds by mutableStateOf<Set<Long>>(emptySet()); private set
+    val selecting get() = selectedIds.isNotEmpty()
+
+    // Ringkasan lintas catatan
+    var askDigest by mutableStateOf(false); private set
     var versions by mutableStateOf<List<Version>?>(null); private set
     private var opened: Note? = null
     private var snapshotDone = false
@@ -369,7 +383,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateQuery(q: String) {
         if (q == query) return
         if (askActive) closeAsk()
-        query = q; aiTerms = emptyList()
+        query = q; aiTerms = emptyList(); clearSelection()
         refreshShown()
     }
     /** Kategori Pengaturan yang sedang dibuka; null = dashboard. */
@@ -382,6 +396,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun switchView(v: NoteView) {
+        clearSelection()
         if (v != NoteView.Vault && vaultUnlocked) lockVault()
         view = v
         tagFilter = null
@@ -811,15 +826,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ============================== Bantu tulis ==============================
 
-    fun runAi(action: AiAction, custom: String = "") {
+    fun runAi(action: AiAction, custom: String = "", selection: IntRange? = aiSelection) {
         val d = draft
         if (d.body.isBlank() || aiJob?.running == true) return
+        val sel = selection?.takeIf { it.first >= 0 && it.last < d.body.length && !it.isEmpty() }
+        if (sel != null) { runAiOnSelection(action, custom, sel); return }
         aiJob = AiJob(action)
         running = viewModelScope.launch {
             try {
                 var suggestedTime: Long? = null
                 val budget = AiTaskBudget.forAction(action)
                 val clean = when {
+                    action == AiAction.Plan || action == AiAction.Extract -> {
+                        val out = ai.generate(AiText.prompt(action, d.title, d.body, custom), budget) { partial ->
+                            aiJob = aiJob?.copy(text = AiText.cleanStructured(partial))
+                        }
+                        val structured = AiText.cleanStructured(out).let { if (action == AiAction.Plan) AiText.normalizeChecklist(it) else it }
+                        // Waktu dihitung oleh kode dari frasa yang disalin model, bukan oleh model.
+                        suggestedTime = TimeParse.best(structured)?.takeIf { it.hasTime }?.at?.toMillis()
+                        structured
+                    }
+                    AiText.isStructured(action) && !(action.wholeNote && d.body.length > AiText.maxInput) -> {
+                        val out = ai.generate(AiText.prompt(action, d.title, d.body, custom), budget) { partial ->
+                            aiJob = aiJob?.copy(text = AiText.cleanStructured(partial))
+                        }
+                        AiText.cleanStructured(out)
+                    }
                     action == AiAction.Tasks && d.body.length <= AiText.maxInput -> {
                         val foundTime = TimeParse.best(d.body)
                         val direct = AiText.extractDirectTasksAndTime(d.body)
@@ -845,6 +877,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 aiJob = aiJob?.copy(running = false, progress = null)
             } catch (e: Throwable) {
                 aiJob = aiJob?.copy(running = false, progress = null, error = "AI gagal: ${e.message}")
+            }
+        }
+    }
+
+    private fun runAiOnSelection(action: AiAction, custom: String, sel: IntRange) {
+        val d = draft
+        val picked = d.body.substring(sel.first, sel.last + 1)
+        aiJob = AiJob(action, selStart = sel.first, selEnd = sel.last + 1, selText = picked)
+        running = viewModelScope.launch {
+            try {
+                val out = ai.generate(AiText.selectionPrompt(action, picked, custom), AiTaskBudget.forAction(action)) { partial ->
+                    aiJob = aiJob?.copy(text = if (AiText.isStructured(action)) AiText.cleanStructured(partial) else AiText.cleanBlock(partial))
+                }
+                var clean = if (action.forTitle) AiText.cleanLine(AiText.strip(out))
+                else if (AiText.isStructured(action)) AiText.cleanStructured(out) else AiText.cleanBlock(out)
+                if (action == AiAction.Plan) clean = AiText.normalizeChecklist(clean)
+                aiJob = aiJob?.copy(text = clean, running = false, error = if (clean.isBlank()) "Model tidak menghasilkan teks." else null)
+            } catch (e: CancellationException) {
+                aiJob = aiJob?.copy(running = false)
+            } catch (e: Throwable) {
+                aiJob = aiJob?.copy(running = false, error = "AI gagal: ${e.message}")
             }
         }
     }
@@ -880,7 +933,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     internal fun debugAiJob(j: AiJob) { aiJob = j }
 
     fun stopAi() { running?.cancel(); running = null }
-    fun dismissAi() { stopAi(); aiJob = null; aiSheet = false }
+    fun dismissAi() { stopAi(); aiJob = null; aiSheet = false; aiSelection = null }
 
     fun applyAi(replace: Boolean, remindAt: Long? = null) {
         val j = aiJob ?: return
@@ -888,6 +941,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (text.isEmpty()) return
         undoAi = UndoAiSnap(draft.title, draft.body, draft.remindAt, draft.remindRepeat, draft.remindAlarm, draft.remindFired)
         var next = when {
+            j.isTemplate -> {
+                val (t, b) = com.catatanku.app.domain.usecase.Templates.insertInto(
+                    draft.title, draft.body, com.catatanku.app.domain.usecase.NoteTemplate("ai", j.templateName.orEmpty(), j.templateTitle, text),
+                )
+                draft.copy(title = t, body = b)
+            }
+            j.onSelection && !j.action.forTitle -> {
+                val body = draft.body
+                // Teks bisa sudah berubah sejak aksi dimulai: cari lagi potongan aslinya bila posisinya bergeser.
+                val start = if (j.selEnd <= body.length && body.substring(j.selStart, j.selEnd) == j.selText) j.selStart else body.indexOf(j.selText)
+                when {
+                    start < 0 -> draft.copy(body = body.trimEnd() + "\n\n" + text)
+                    replace -> draft.copy(body = body.substring(0, start) + text + body.substring(start + j.selText.length))
+                    else -> {
+                        val end = start + j.selText.length
+                        draft.copy(body = body.substring(0, end) + "\n" + text + body.substring(end))
+                    }
+                }
+            }
             j.action.forTitle -> draft.copy(title = AiText.cleanLine(text).take(120))
             replace || draft.body.isBlank() -> draft.copy(body = text)
             j.action == AiAction.Continue -> draft.copy(body = draft.body.trimEnd() + " " + text)
@@ -908,7 +980,207 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             )
         }
-        aiJob = null; aiSheet = false
+        aiJob = null; aiSheet = false; aiSelection = null; templateSheet = false
+    }
+
+    // ============================== Templat ==============================
+
+    fun loadTemplates() {
+        appScope.launch {
+            val list = runCatching { templateStore.load() }.getOrDefault(emptyList())
+            withContext(Dispatchers.Main) { userTemplates = list }
+        }
+    }
+
+    fun openTemplates() { loadTemplates(); aiJob = null; templateSheet = true }
+    fun closeTemplates() { if (aiJob?.isTemplate == true) stopAi(); if (aiJob?.isTemplate == true) aiJob = null; templateSheet = false }
+
+    fun applyTemplate(t: com.catatanku.app.domain.usecase.NoteTemplate) {
+        undoAi = UndoAiSnap(draft.title, draft.body, draft.remindAt, draft.remindRepeat, draft.remindAlarm, draft.remindFired)
+        val (title, body) = com.catatanku.app.domain.usecase.Templates.insertInto(draft.title, draft.body, t)
+        draft = draft.copy(title = title, body = body)
+        templateSheet = false; aiJob = null
+        say("Templat ${t.name} dipakai.", "Urungkan") { undoAiChange() }
+    }
+
+    /** Asisten membuat templat dari deskripsi singkat; catatan boleh masih kosong. */
+    fun generateTemplate(description: String) {
+        val desc = description.trim()
+        if (desc.isEmpty() || aiJob?.running == true) return
+        val name = desc.replace('\n', ' ').replaceFirstChar { it.titlecase() }.take(com.catatanku.app.domain.usecase.Templates.MAX_NAME)
+        aiJob = AiJob(AiAction.Custom, customTitle = "Templat baru", templateName = name)
+        running = viewModelScope.launch {
+            try {
+                val out = ai.generate(AiText.templatePrompt(desc), AiTaskBudget.TEMPLATE) { partial ->
+                    aiJob = aiJob?.copy(text = AiText.cleanStructured(partial.substringAfter('\n', "")))
+                }
+                val parsed = AiText.parseTemplate(out)
+                aiJob = if (parsed == null) aiJob?.copy(running = false, text = "", error = "Asisten tidak menghasilkan templat yang rapi. Coba deskripsi lain.")
+                else aiJob?.copy(running = false, text = parsed.body, templateTitle = parsed.title)
+            } catch (e: CancellationException) {
+                aiJob = aiJob?.copy(running = false)
+            } catch (e: Throwable) {
+                aiJob = aiJob?.copy(running = false, error = "AI gagal: ${e.message}")
+            }
+        }
+    }
+
+    fun saveTemplate(name: String, title: String, body: String, announce: Boolean = true) {
+        val clean = com.catatanku.app.domain.usecase.Templates.sanitize(name, title, body) ?: return
+        val t = com.catatanku.app.domain.usecase.NoteTemplate("u" + System.currentTimeMillis(), clean.first, clean.second, clean.third)
+        val next = (listOf(t) + userTemplates.filter { !it.name.equals(t.name, ignoreCase = true) }).take(com.catatanku.app.domain.usecase.Templates.MAX_USER_TEMPLATES)
+        userTemplates = next
+        appScope.launch { runCatching { templateStore.save(next) } }
+        if (announce) say("Disimpan ke Templat saya.")
+    }
+
+    fun saveGeneratedTemplateAndApply() {
+        val j = aiJob ?: return
+        if (!j.isTemplate || j.text.isBlank()) return
+        saveTemplate(j.templateName.orEmpty(), j.templateTitle, j.text, announce = false)
+        applyAi(replace = false)
+        say("Templat disimpan dan dipakai.", "Urungkan") { undoAiChange() }
+    }
+
+    fun saveDraftAsTemplate(name: String) {
+        val d = draft
+        if (d.body.isBlank()) { say("Catatan masih kosong."); return }
+        saveTemplate(name.ifBlank { d.heading }, "", d.body)
+    }
+
+    fun deleteTemplate(t: com.catatanku.app.domain.usecase.NoteTemplate) {
+        if (t.builtIn) return
+        val before = userTemplates
+        val next = before.filter { it.id != t.id }
+        userTemplates = next
+        appScope.launch { runCatching { templateStore.save(next) } }
+        say("Templat ${t.name} dihapus.", "Urungkan") {
+            userTemplates = before
+            appScope.launch { runCatching { templateStore.save(before) } }
+        }
+    }
+
+    // ============================== Utilitas catatan ==============================
+
+    fun duplicateDraft() {
+        saveDraft()
+        val d = draft
+        if (d.id == 0L || d.isBlank) return
+        val now = System.currentTimeMillis()
+        val copy = d.copy(
+            id = 0L, title = (d.title.ifBlank { d.heading }.take(100) + " (salinan)"), created = now, updated = now,
+            pinned = false, remindAt = 0L, remindRepeat = Repeat.None, remindAlarm = false, remindFired = false,
+            attachments = emptyList(),
+        )
+        viewModelScope.launch {
+            val id = withContext(Dispatchers.IO) { persist(copy) }
+            val saved = copy.copy(id = id)
+            putLocal(saved)
+            open(saved)
+            say("Catatan digandakan" + if (d.attachments.isNotEmpty()) " (tanpa lampiran)." else ".")
+        }
+    }
+
+    /** Ekspor satu catatan ke berkas pilihan pengguna. Catatan Brankas tidak diekspor sebagai teks polos. */
+    fun exportDraft(uri: Uri, markdown: Boolean) {
+        val d = draft
+        if (d.vault) { say("Catatan Brankas tidak diekspor sebagai teks polos. Pakai ekspor terenkripsi di Pengaturan."); return }
+        if (!com.catatanku.app.security.InputSecurity.isSafeExternalContentUri(uri.scheme, uri.authority, uri.userInfo, uri.host, ctx.packageName)) { say("Lokasi berkas tidak diizinkan."); return }
+        val text = com.catatanku.app.domain.usecase.TextFormat.export(d.title, d.body, d.tags, markdown)
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } != null }.getOrDefault(false)
+            }
+            say(if (ok) "Catatan diekspor." else "Ekspor gagal; coba lokasi lain.")
+        }
+    }
+
+    fun exportFileName(markdown: Boolean) = com.catatanku.app.domain.usecase.TextFormat.fileName(draft.heading, if (markdown) "md" else "txt")
+
+    // ============================== Tautan antarcatatan ==============================
+
+    private fun linkPool(): List<Note> = notes.filter { !it.inTrash && (!it.vault || draft.vault) && it.id != draft.id }
+
+    fun linkSuggestions(prefix: String): List<String> {
+        val p = prefix.trim()
+        return linkPool().asSequence().map { it.title.ifBlank { it.heading } }.filter { it.isNotBlank() && (p.isEmpty() || it.contains(p, ignoreCase = true)) }
+            .distinctBy { it.lowercase() }.sortedBy { if (it.startsWith(p, ignoreCase = true)) 0 else 1 }.take(5).toList()
+    }
+
+    fun linkTarget(title: String): Note? =
+        linkPool().firstOrNull { it.title.equals(title.trim(), ignoreCase = true) } ?: linkPool().firstOrNull { it.heading.equals(title.trim(), ignoreCase = true) }
+
+    /** Membuka catatan yang ditautkan; bila belum ada, membuat catatan baru berjudul itu. */
+    fun openLink(title: String) {
+        val t = title.trim().take(120)
+        if (t.isEmpty()) return
+        val target = linkTarget(t)
+        saveDraft(); flushListIfStale()
+        if (target != null) { open(target); return }
+        val fresh = Note(title = t, vault = draft.vault, folder = draft.folder)
+        open(fresh)
+        say("Catatan baru: $t")
+    }
+
+    fun backlinks(n: Note): List<Note> {
+        val title = n.title.ifBlank { return emptyList() }
+        return notes.filter { it.id != n.id && !it.inTrash && (!it.vault || n.vault) && com.catatanku.app.domain.usecase.TextFormat.linksTo(it.body, title) }.take(8)
+    }
+
+    // ============================== Pilih banyak ==============================
+
+    fun toggleSelect(id: Long) { selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id }
+    fun selectAllShown() { selectedIds = shown.map { it.id }.toSet() }
+    fun clearSelection() { selectedIds = emptySet() }
+    val selectedNotes get() = selectedIds.mapNotNull { notesById[it] }
+
+    /** Menerapkan perubahan ke banyak catatan dalam satu transaksi SQLite, lengkap dengan Urungkan. */
+    private fun bulk(message: String, transform: (Note) -> Note) {
+        val before = selectedNotes
+        val after = before.map(transform).filterIndexed { i, n -> n != before[i] }
+        clearSelection()
+        if (after.isEmpty()) return
+        val byId = after.associateBy { it.id }
+        writeGen++
+        applyNotes(notes.map { byId[it.id] ?: it })
+        viewModelScope.launch { withContext(Dispatchers.IO) { repo.persistAll(after, before.associateBy { it.id }) }; markDirty() }
+        say(message, "Urungkan") {
+            val restore = before.filter { b -> byId.containsKey(b.id) }
+            val back = restore.associateBy { it.id }
+            writeGen++
+            applyNotes(notes.map { back[it.id] ?: it })
+            viewModelScope.launch { withContext(Dispatchers.IO) { repo.persistAll(restore, after.associateBy { it.id }) }; markDirty() }
+        }
+    }
+
+    fun bulkPin() {
+        val pin = selectedNotes.any { !it.pinned }
+        bulk(if (pin) "${selectedIds.size} catatan disematkan." else "Sematan dilepas.") { if (it.archived) it else it.copy(pinned = pin) }
+    }
+    fun bulkArchive() {
+        val archive = selectedNotes.any { !it.archived }
+        bulk(if (archive) "${selectedIds.size} catatan diarsipkan." else "${selectedIds.size} catatan dikeluarkan dari arsip.") { it.copy(archived = archive, pinned = false) }
+    }
+    fun bulkTrash() {
+        val now = System.currentTimeMillis()
+        bulk("${selectedIds.size} catatan dipindah ke Sampah.") { it.copy(deletedAt = now, pinned = false) }
+    }
+    fun bulkRestore() = bulk("${selectedIds.size} catatan dipulihkan.") { it.copy(deletedAt = 0) }
+    fun bulkMove(folder: String) {
+        val f = folder.trim().take(30)
+        bulk(if (f.isEmpty()) "Dikeluarkan dari folder." else "Dipindah ke folder $f.") { it.copy(folder = f) }
+    }
+    fun bulkTag(raw: String) {
+        val t = com.catatanku.app.domain.usecase.TextTools.normalizeTag(raw)
+        if (t.isEmpty()) return
+        bulk("Tag #$t ditambahkan.") { if (t in it.tags) it else it.copy(tags = it.tags + t) }
+    }
+    fun bulkDeleteForever() {
+        val ids = selectedIds
+        clearSelection()
+        ids.forEach { id -> dropLocal(id) }
+        viewModelScope.launch { withContext(Dispatchers.IO) { ids.forEach { repo.deleteForever(it) } }; markDirty() }
+        say("${ids.size} catatan dihapus permanen.")
     }
 
     fun undoAiChange() {
@@ -1054,30 +1326,70 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun askRecap() {
-        if (askRunning) return
-        askQuery = "Ringkasan mingguan"; askByAi = false
         val since = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
-        askSources = notes.filter { !it.vault && !it.inTrash && !it.archived && it.updated >= since && it.body.isNotBlank() }
-            .sortedByDescending { it.updated }.take(if (AiText.maxInput > 4000) 8 else 5)
+        digest("7 hari terakhir", notes.filter { !it.vault && !it.inTrash && !it.archived && it.updated >= since && it.body.isNotBlank() }
+            .sortedByDescending { it.updated }, empty = "Tidak ada catatan yang ditulis atau diubah dalam 7 hari terakhir.")
+    }
+
+    /** Label cakupan tampilan saat ini, untuk "Ringkas tampilan ini". */
+    fun digestScopeLabel(): String = when {
+        query.isNotBlank() -> "hasil cari \"${query.trim().take(30)}\""
+        tagFilter != null -> "tag #$tagFilter"
+        else -> when (val v = view) {
+            NoteView.All -> "semua catatan"
+            is NoteView.Folder -> "folder ${v.name}"
+            NoteView.Reminders -> "catatan berpengingat"
+            NoteView.Archive -> "arsip"
+            NoteView.Trash -> "sampah"
+            NoteView.Vault -> "brankas"
+        }
+    }
+
+    fun digestShown() = digest(digestScopeLabel(), shown.filter { !it.inTrash && it.body.isNotBlank() }, empty = "Tidak ada catatan berisi di tampilan ini.")
+
+    /** Ringkasan lintas catatan oleh asisten, dengan nomor sumber; bisa disimpan sebagai catatan baru. */
+    fun digest(scope: String, pool: List<Note>, empty: String) {
+        if (askRunning) return
+        clearSelection()
+        val cap = if (AiText.maxInput > 4000) 10 else 6
+        askQuery = "Ringkasan ${scope}"; askByAi = false; askDigest = false
+        askSources = pool.take(cap)
         askAnswer = ""
-        if (askSources.isEmpty()) { askAnswer = "Tidak ada catatan yang ditulis atau diubah dalam 7 hari terakhir."; return }
-        if (!ai.hasModel) { askAnswer = "Model AI belum dipasang. Berikut catatan 7 hari terakhir:"; return }
-        askRunning = true; askByAi = true
+        if (askSources.isEmpty()) { askAnswer = empty; return }
+        if (!ai.hasModel) { askAnswer = "Asisten belum aktif. Berikut catatannya:"; return }
+        askRunning = true; askByAi = true; askDigest = true
+        val label = scope + if (pool.size > cap) " (${cap} terbaru dari ${pool.size})" else ""
         running = viewModelScope.launch {
             try {
-                val out = ai.generate(AiText.recapPrompt(askSources.map { it.title to it.body }), AiTaskBudget.RECAP) {
-                    askAnswer = AiText.cleanBlock(it)
+                val out = ai.generate(AiText.digestPrompt(label, askSources.map { it.title to it.body }), AiTaskBudget.DIGEST) {
+                    askAnswer = AiText.cleanStructured(it)
                 }
-                askAnswer = AiText.cleanBlock(out).ifBlank { "Model tidak menghasilkan rekap." }
+                askAnswer = AiText.cleanStructured(out).ifBlank { "Model tidak menghasilkan ringkasan." }
             } catch (e: CancellationException) {
-            } catch (e: Throwable) { askAnswer = "AI gagal: ${e.message}"
+            } catch (e: Throwable) { askAnswer = "AI gagal: ${e.message}"; askDigest = false
             } finally { askRunning = false }
+        }
+    }
+
+    /** Menyimpan jawaban ringkasan sebagai catatan baru beserta tautan ke sumbernya. */
+    fun saveAnswerAsNote() {
+        if (askRunning || askAnswer.isBlank()) return
+        val sources = askSources.mapIndexed { i, n -> "[${i + 1}] [[${n.title.ifBlank { n.heading }.take(100)}]]" }.joinToString("\n")
+        val body = askAnswer.trim() + if (sources.isNotEmpty()) "\n\n## Sumber\n$sources" else ""
+        val title = askQuery.take(100)
+        closeAsk()
+        val now = System.currentTimeMillis()
+        val n = Note(title = title, body = body, created = now, updated = now)
+        viewModelScope.launch {
+            val id = withContext(Dispatchers.IO) { persist(n) }
+            putLocal(n.copy(id = id))
+            say("Ringkasan disimpan sebagai catatan.", "Buka") { stats.byId[id]?.let { open(it) } }
         }
     }
 
     fun closeAsk() {
         if (askRunning) stopAi()
-        askQuery = ""; askAnswer = ""; askSources = emptyList(); openTasksList = emptyList(); askRunning = false
+        askQuery = ""; askAnswer = ""; askSources = emptyList(); openTasksList = emptyList(); askRunning = false; askDigest = false
     }
 
     // ============================== Asisten perintah ==============================
@@ -1605,6 +1917,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun scrubSensitiveMemory() {
+        userTemplates = emptyList(); selectedIds = emptySet(); templateSheet = false; aiSelection = null
         indexJob?.cancel(); indexJob = null
         searchJob?.cancel(); searchJob = null
         running?.cancel(); running = null

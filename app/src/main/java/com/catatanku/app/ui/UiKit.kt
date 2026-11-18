@@ -93,8 +93,47 @@ internal val PillShape = androidx.compose.foundation.shape.RoundedCornerShape(pe
 internal val GroupShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 
 @Composable
-internal fun Muted(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodySmall) =
-    Text(text, modifier, color = muted, style = style)
+internal fun Muted(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodySmall, maxLines: Int = Int.MAX_VALUE) =
+    Text(text, modifier, color = muted, style = style, maxLines = maxLines, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+
+/**
+ * Gaya tampilan untuk teks catatan: butir ☑ redup dan dicoret, format ringan ([TextFormat]), tautan berwarna, dan sorotan
+ * hasil cari. Teks tidak diubah (pemetaan offset identitas), sehingga aman dipakai sebagai VisualTransformation editor.
+ */
+internal fun formatAnnotated(
+    text: String, mutedColor: Color, linkColor: Color = mutedColor, highlight: Color? = null, matches: List<IntRange> = emptyList(),
+): androidx.compose.ui.text.AnnotatedString {
+    val b = androidx.compose.ui.text.AnnotatedString.Builder(text)
+    val limit = minOf(text.length, com.catatanku.app.domain.usecase.TextFormat.STYLE_LIMIT)
+    if ('☑' in text) {
+        var pos = 0
+        while (pos < limit) {
+            val end = text.indexOf('\n', pos).let { if (it < 0) text.length else it }
+            var box = pos
+            while (box < end && text[box] == ' ') box++
+            if (box < end && text[box] == '☑') {
+                b.addStyle(androidx.compose.ui.text.SpanStyle(color = mutedColor), box, box + 1)
+                if (box + 1 < end) b.addStyle(androidx.compose.ui.text.SpanStyle(color = mutedColor, textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough), box + 1, end)
+            }
+            pos = end + 1
+        }
+    }
+    com.catatanku.app.domain.usecase.TextFormat.spans(text).forEach { sp ->
+        val style = when (sp.kind) {
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Heading1 -> androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Heading2 -> androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Bold -> androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Italic -> androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Quote -> androidx.compose.ui.text.SpanStyle(color = mutedColor, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Link -> androidx.compose.ui.text.SpanStyle(color = linkColor, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Marker -> androidx.compose.ui.text.SpanStyle(color = mutedColor.copy(alpha = 0.55f), fontWeight = FontWeight.Normal, fontSize = 15.sp)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Match -> null
+        }
+        if (style != null) b.addStyle(style, sp.start, sp.end)
+    }
+    if (highlight != null) matches.forEach { r -> if (r.last < text.length) b.addStyle(androidx.compose.ui.text.SpanStyle(background = highlight), r.first, r.last + 1) }
+    return b.toAnnotatedString()
+}
 
 @Composable
 internal fun SectionLabel(text: String, modifier: Modifier = Modifier) =
