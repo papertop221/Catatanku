@@ -90,7 +90,7 @@ private fun noteFont(weight: FontWeight) = Font(
 val NoteFont = FontFamily(noteFont(FontWeight.Normal), noteFont(FontWeight.Medium), noteFont(FontWeight.SemiBold))
 
 object NoteType {
-    val title = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp)
+    val title = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, lineHeight = 32.sp)
     val body = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 26.sp)
     val rowTitle = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp)
     val rowSnippet = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp)
@@ -98,8 +98,8 @@ object NoteType {
 
 private val Type = Typography().run {
     copy(
-        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp),
-        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
+        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 26.sp, lineHeight = 32.sp, letterSpacing = (-0.2).sp),
+        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.1).sp),
         titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
         bodyLarge = bodyLarge.copy(lineHeight = 24.sp, letterSpacing = 0.1.sp),
         bodyMedium = bodyMedium.copy(lineHeight = 20.sp, letterSpacing = 0.1.sp),

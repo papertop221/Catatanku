@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 
 /** Pengulangan pengingat. Urutan dipakai sebagai nilai di basis data; jangan diubah. */
 enum class Repeat(val label: String) {
-    None("Sekali"), Daily("Setiap hari"), Weekly("Setiap minggu"), Monthly("Setiap bulan");
+    None("Sekali"), Daily("Harian"), Weekly("Mingguan"), Monthly("Bulanan");
 
     /** Jadwal berikutnya setelah [now] untuk pengingat yang semula jatuh pada [at]. */
     fun next(at: LocalDateTime, now: LocalDateTime): LocalDateTime? {
@@ -89,13 +89,13 @@ enum class AiAction(
     /** Catatan yang lebih panjang dari jendela model diproses bagian demi bagian, bukan dipotong. */
     val wholeNote: Boolean = false,
 ) {
-    Continue("Lanjutkan tulisan", "Menulis satu–dua paragraf berikutnya"),
-    Fix("Perbaiki ejaan", "Ejaan dan tata bahasa, makna tetap", replaces = true, wholeNote = true),
-    Tidy("Rapikan struktur", "Dikelompokkan dengan subjudul dan poin", replaces = true),
-    Summarize("Ringkas", "Menjadi 3–5 poin", wholeNote = true),
-    Tasks("Ambil daftar tugas", "Tugas dijadikan daftar centang", wholeNote = true),
-    Title("Buat judul", "Maksimal enam kata", forTitle = true),
-    Custom("Instruksi bebas", ""),
+    Continue("Lanjutkan", "Satu–dua paragraf berikutnya"),
+    Fix("Koreksi ejaan", "Ejaan dan tata bahasa", replaces = true, wholeNote = true),
+    Tidy("Susun ulang", "Subjudul dan poin", replaces = true),
+    Summarize("Ringkasan", "3–5 poin", wholeNote = true),
+    Tasks("Ekstrak tugas", "Daftar centang", wholeNote = true),
+    Title("Buat judul", "Maks. enam kata", forTitle = true),
+    Custom("Instruksi khusus", ""),
 }
 
 /** Hasil bantu-tulis AI yang menunggu keputusan pengguna (tidak pernah diterapkan otomatis). */

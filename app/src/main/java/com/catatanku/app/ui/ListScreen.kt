@@ -97,7 +97,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 Hairline()
                 val tags = vm.allTags
                 if (tags.isNotEmpty() && view != NoteView.Trash && view != NoteView.Vault && !searching) LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(tags, key = { it }) { t ->
                         val on = vm.tagFilter == t
@@ -107,33 +107,32 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         ) {
                             Text(
                                 "#$t",
-                                Modifier.clip(SmallShape).background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background).padding(horizontal = 8.dp, vertical = 3.dp),
+                                Modifier.clip(SmallShape).background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background).padding(horizontal = 10.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelLarge, color = if (on) MaterialTheme.colorScheme.onPrimary else muted,
                             )
                         }
                     }
                 }
                 val offerAgent = isCommand || (hasModel && view != NoteView.Vault && vm.query.trim().split(WORDS).size >= 3)
-                if (searching && view != NoteView.Trash && view != NoteView.Vault && (hasModel || isCommand)) Row(Modifier.padding(horizontal = 8.dp)) {
-                    if (offerAgent) TextAction("Jalankan perintah") { vm.startAgent(vm.query) }
+                if (searching && view != NoteView.Trash && view != NoteView.Vault && (hasModel || isCommand)) Row(Modifier.padding(horizontal = 10.dp, vertical = 2.dp)) {
+                    if (offerAgent) TextAction("Jalankan") { vm.startAgent(vm.query) }
                     if (hasModel) {
-                        TextAction("Tanya catatan") { vm.ask(vm.query) }
+                        TextAction("Tanyakan") { vm.ask(vm.query) }
                         if (vm.aiTerms.isEmpty()) TextAction(if (vm.aiBusy) "Memperluas…" else "Perluas pencarian", enabled = !vm.aiBusy, onClick = vm::expandQueryWithAi)
                     }
                 }
-                Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 5.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Row(
-                        Modifier.weight(1f).height(44.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 10.dp),
+                        Modifier.weight(1f).height(48.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(AppIcons.Search, null, Modifier.size(18.dp), muted)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(10.dp))
                         PlainField(
                             vm.query, vm::updateQuery,
                             when {
                                 view == NoteView.Vault -> "Cari di Brankas"
-                                hasModel -> "Cari, tanya, atau perintah"
-                                else -> "Cari atau perintah"
+                                else -> "Cari atau beri perintah"
                             },
                             Modifier.weight(1f).focusRequester(searchFocus), ime = ImeAction.Search,
                         ) {
@@ -142,9 +141,9 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         if (vm.query.isNotEmpty()) IconAction(AppIcons.Close, "Hapus teks pencarian", muted, 18.dp) { vm.updateQuery("") }
                     }
                     if (canCreate) {
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(10.dp))
                         Box(
-                            Modifier.size(44.dp).clip(SmallShape).background(MaterialTheme.colorScheme.primary).clickable(role = Role.Button) { vm.open(null) },
+                            Modifier.size(48.dp).clip(SmallShape).background(MaterialTheme.colorScheme.primary).clickable(role = Role.Button) { vm.open(null) },
                             Alignment.Center,
                         ) { Icon(AppIcons.Plus, "Catatan baru", Modifier.size(22.dp), MaterialTheme.colorScheme.onPrimary) }
                     }
@@ -153,10 +152,10 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
-            Row(Modifier.padding(start = Gutter, end = 4.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(start = Gutter, end = 6.dp, top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     Row(
-                        Modifier.clip(SmallShape).clickable(role = Role.Button) { viewMenu = true }.heightIn(min = 44.dp),
+                        Modifier.clip(SmallShape).clickable(role = Role.Button) { viewMenu = true }.heightIn(min = 48.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -170,13 +169,13 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                             },
                             style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
-                        Icon(AppIcons.ChevronDown, "Ganti tampilan", Modifier.padding(start = 4.dp).size(20.dp), muted)
+                        Icon(AppIcons.ChevronDown, "Ganti tampilan", Modifier.padding(start = 6.dp).size(18.dp), muted)
                     }
                     Menu(viewMenu, { viewMenu = false }) {
                         fun pick(v: NoteView) { vm.switchView(v); viewMenu = false }
                         DropdownMenuItem({ Text("Semua catatan") }, { pick(NoteView.All) })
                         vm.folders.forEach { f ->
-                            DropdownMenuItem({ Text(f) }, { pick(NoteView.Folder(f)) }, leadingIcon = { Icon(AppIcons.Folder, null, Modifier.size(18.dp)) })
+                            DropdownMenuItem({ Text(f) }, { pick(NoteView.Folder(f)) })
                         }
                         Hairline()
                         DropdownMenuItem({ Text("Pengingat" + if (vm.reminderCount > 0) " (${vm.reminderCount})" else "") }, { pick(NoteView.Reminders) })
@@ -186,38 +185,38 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         DropdownMenuItem(
                             { Text("Brankas" + if (vm.vaultCount > 0) " (${vm.vaultCount})" else "") },
                             { viewMenu = false; vm.requestOpenVault() },
-                            leadingIcon = { Icon(AppIcons.Lock, null, Modifier.size(18.dp)) },
                         )
                     }
                 }
                 if (view == NoteView.Vault) {
-                    TextAction("Kunci Brankas") { vm.lockVault() }
+                    TextAction("Kunci") { vm.lockVault() }
                 }
                 Box {
                     IconAction(AppIcons.More, "Menu") { moreMenu = true }
                     Menu(moreMenu, { moreMenu = false }) {
+                        SectionLabel("Urutkan", Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
                         Sort.entries.forEach { s ->
                             DropdownMenuItem(
-                                { Text("Urutkan: ${s.label}") }, { vm.updateSort(s); moreMenu = false },
+                                { Text(s.label) }, { vm.updateSort(s); moreMenu = false },
                                 trailingIcon = { if (vm.sort == s) Icon(AppIcons.Check, "Dipilih", Modifier.size(18.dp)) },
                             )
                         }
                         Hairline()
-                        DropdownMenuItem({ Text("Tugas belum selesai") }, { moreMenu = false; vm.askOpenTasks() })
-                        DropdownMenuItem({ Text("Rekap 7 hari") }, { moreMenu = false; vm.askRecap() })
+                        DropdownMenuItem({ Text("Tugas terbuka") }, { moreMenu = false; vm.askOpenTasks() })
+                        DropdownMenuItem({ Text("Ringkasan mingguan") }, { moreMenu = false; vm.askRecap() })
                         if (hasModel) DropdownMenuItem(
-                            { Text("Isi judul & tag kosong (${vm.organizableCount})") }, { moreMenu = false; confirmOrganize = true },
+                            { Text("Lengkapi metadata") }, { moreMenu = false; confirmOrganize = true },
                             enabled = vm.batch == null && vm.organizableCount > 0,
                         )
                         if (view is NoteView.Folder) {
                             Hairline()
                             DropdownMenuItem({ Text("Ubah nama folder") }, { moreMenu = false; renameFolderTarget = view.name })
-                            DropdownMenuItem({ Text("Bubarkan folder") }, { moreMenu = false; dissolveFolderTarget = view.name })
+                            DropdownMenuItem({ Text("Hapus folder") }, { moreMenu = false; dissolveFolderTarget = view.name })
                         }
                         if (view == NoteView.Trash) DropdownMenuItem({ Text("Kosongkan Sampah") }, { moreMenu = false; confirmEmpty = true }, enabled = vm.trashCount > 0)
                         if (vm.lockEnabled) {
                             Hairline()
-                            DropdownMenuItem({ Text("Kunci sekarang") }, { moreMenu = false; vm.lockNow() }, leadingIcon = { Icon(AppIcons.Lock, null, Modifier.size(18.dp)) })
+                            DropdownMenuItem({ Text("Kunci sekarang") }, { moreMenu = false; vm.lockNow() })
                         }
                         Hairline()
                         DropdownMenuItem({ Text("Pengaturan") }, { moreMenu = false; vm.go(Screen.Settings) })
@@ -236,7 +235,7 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     item(key = "batch") {
                         Row(Modifier.padding(start = Gutter, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Muted("Mengisi judul dan tag: $done dari $total catatan")
+                                Muted("Melengkapi metadata  ·  $done/$total")
                                 LinearProgressIndicator({ done / total.toFloat() }, Modifier.fillMaxWidth().padding(top = 4.dp))
                             }
                             TextAction("Hentikan", onClick = vm::stopBatch)
@@ -244,38 +243,38 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                 }
                 if (!hasModel && !vm.hideAiBanner && !searching && vm.loaded && view == NoteView.All && !vm.askActive) item(key = "banner") {
-                    Row(Modifier.padding(start = Gutter, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Fitur AI belum aktif.", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = muted)
-                        TextAction("Pilih model") { vm.go(Screen.Settings) }
+                    Row(Modifier.padding(start = Gutter, end = 6.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Asisten belum aktif", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = muted)
+                        TextAction("Aktifkan") { vm.go(Screen.Settings) }
                         IconAction(AppIcons.Close, "Sembunyikan pesan ini", muted, 18.dp, onClick = vm::dismissAiBanner)
                     }
                 }
                 if (showToday) item(key = "today", contentType = "today") { TodayBlock(vm, today) }
-                if (view == NoteView.Trash) item(key = "trash-note") { Muted("Catatan di Sampah dihapus permanen setelah 30 hari.", Modifier.padding(horizontal = Gutter, vertical = 4.dp)) }
-                if (view == NoteView.Vault) item(key = "vault-note") { Muted("Terenkripsi & tersembunyi dari pencarian serta ekspor tanpa sandi.", Modifier.padding(horizontal = Gutter, vertical = 4.dp)) }
+                if (view == NoteView.Trash) item(key = "trash-note") { Muted("Dihapus permanen setelah 30 hari", Modifier.padding(start = Gutter, end = Gutter, bottom = 8.dp)) }
+                if (view == NoteView.Vault) item(key = "vault-note") { Muted("Terenkripsi", Modifier.padding(start = Gutter, end = Gutter, bottom = 8.dp)) }
 
                 when {
                     !vm.loaded -> item(key = "loading") { Skeleton() }
                     shown.isEmpty() && !vm.askActive -> item(key = "empty") {
                         EmptyState(
                             when {
-                                isCommand -> "Ini terbaca sebagai perintah." to "Tekan “Jalankan perintah” untuk melihat rencananya."
-                                searching || vm.tagFilter != null -> "Tidak ada catatan yang cocok." to "Coba kata lain, atau hapus filter tag."
-                                view == NoteView.Trash -> "Sampah kosong." to null
-                                view == NoteView.Archive -> "Arsip kosong." to "Geser catatan ke kanan untuk mengarsipkan."
-                                view == NoteView.Reminders -> "Belum ada pengingat." to "Geser catatan ke kiri atau ketik “ingatkan saya …” di kolom cari."
-                                view == NoteView.Vault -> "Brankas masih kosong." to "Ketuk + untuk menulis catatan rahasia."
-                                else -> "Belum ada catatan." to "Ketuk + di kanan bawah untuk mulai menulis."
+                                isCommand -> "Perintah terdeteksi" to "Ketuk Jalankan untuk melihat rencananya."
+                                searching || vm.tagFilter != null -> "Tidak ada hasil" to "Coba kata lain atau hapus filter tag."
+                                view == NoteView.Trash -> "Sampah kosong" to null
+                                view == NoteView.Archive -> "Arsip kosong" to "Geser catatan ke kanan untuk mengarsipkan."
+                                view == NoteView.Reminders -> "Belum ada pengingat" to "Geser catatan ke kiri untuk menyetelnya."
+                                view == NoteView.Vault -> "Brankas kosong" to "Ketuk + untuk menulis catatan rahasia."
+                                else -> "Belum ada catatan" to "Ketuk + untuk mulai menulis."
                             }
                         )
                     }
                     else -> {
-                        if (split) item(key = "h-pin", contentType = "label") { SectionLabel("Disematkan", Modifier.padding(start = Gutter, top = 8.dp, bottom = 2.dp)) }
+                        if (split) item(key = "h-pin", contentType = "label") { SectionLabel("Disematkan", Modifier.padding(start = Gutter, top = 14.dp, bottom = 2.dp)) }
                         items(pinned, key = { it.id }, contentType = { "note" }) { n ->
                             NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n })
                         }
                         if (split) {
-                            item(key = "h-rest", contentType = "label") { SectionLabel("Lainnya", Modifier.padding(start = Gutter, top = 10.dp, bottom = 2.dp)) }
+                            item(key = "h-rest", contentType = "label") { SectionLabel("Lainnya", Modifier.padding(start = Gutter, top = 24.dp, bottom = 2.dp)) }
                             items(rest, key = { it.id }, contentType = { "note" }) { n ->
                                 NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n })
                             }
@@ -328,31 +327,30 @@ private fun Skeleton() = Column(Modifier.padding(horizontal = Gutter, vertical =
 }
 
 @Composable
-private fun EmptyState(text: Pair<String, String?>) = Column(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 32.dp)) {
+private fun EmptyState(text: Pair<String, String?>) = Column(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 56.dp)) {
     Text(text.first, style = MaterialTheme.typography.titleMedium)
-    text.second?.let { Muted(it, Modifier.padding(top = 4.dp), MaterialTheme.typography.bodyMedium) }
+    text.second?.let { Muted(it, Modifier.padding(top = 6.dp), MaterialTheme.typography.bodyMedium) }
 }
 
 @Composable
 private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fillMaxWidth()) {
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::toggleToday).heightIn(min = 42.dp).padding(horizontal = Gutter),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::toggleToday).heightIn(min = 48.dp).padding(horizontal = Gutter),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(AppIcons.Clock, null, Modifier.size(16.dp), timeColor)
-        Text("Hari ini", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelLarge, color = timeColor)
+        Text("Hari ini", style = MaterialTheme.typography.labelLarge, color = timeColor)
         Muted(
             "  ·  " + listOfNotNull(
                 due.size.takeIf { it > 0 }?.let { "$it pengingat" }, vm.openTaskCount.takeIf { it > 0 }?.let { "$it tugas" },
             ).joinToString(", "),
             Modifier.weight(1f), MaterialTheme.typography.labelLarge,
         )
-        Icon(if (vm.todayOpen) AppIcons.ChevronUp else AppIcons.ChevronDown, if (vm.todayOpen) "Lipat Hari ini" else "Buka Hari ini", Modifier.size(20.dp), muted)
+        Icon(if (vm.todayOpen) AppIcons.ChevronUp else AppIcons.ChevronDown, if (vm.todayOpen) "Lipat Hari ini" else "Buka Hari ini", Modifier.size(18.dp), muted)
     }
     if (vm.todayOpen) {
         due.forEach { n ->
             Row(Modifier.fillMaxWidth().clickable { vm.open(n) }.padding(start = Gutter, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(vertical = 5.dp)) {
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                     Text(n.heading.take(80).ifBlank { "(tanpa judul)" }, style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         (if (n.remindFired) "Terlewat · " else "") + whenLabel(n.remindAt), style = MaterialTheme.typography.labelSmall,
@@ -363,30 +361,30 @@ private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fill
             }
         }
         if (vm.openTaskCount > 0) Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::askOpenTasks).heightIn(min = 40.dp).padding(horizontal = Gutter),
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::askOpenTasks).heightIn(min = 48.dp).padding(horizontal = Gutter),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("${vm.openTaskCount} tugas belum dicentang", Modifier.weight(1f), style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface)
+            Text("${vm.openTaskCount} tugas terbuka", Modifier.weight(1f), style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface)
             Icon(AppIcons.ChevronRight, "Lihat tugas", Modifier.size(18.dp), muted)
         }
     }
-    Hairline()
+    Hairline(Modifier.padding(top = 4.dp))
 }
 
 @Composable
 private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
     Row(Modifier.padding(start = Gutter, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(vm.askQuery, Modifier.weight(1f).padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium)
+        Text(vm.askQuery, Modifier.weight(1f).padding(vertical = 12.dp), style = MaterialTheme.typography.titleMedium)
         if (vm.askRunning) TextAction("Hentikan", onClick = vm::stopAi)
         IconAction(AppIcons.Close, "Tutup jawaban", muted, 18.dp, onClick = vm::closeAsk)
     }
-    Column(Modifier.padding(horizontal = Gutter).padding(bottom = 8.dp)) {
+    Column(Modifier.padding(horizontal = Gutter).padding(bottom = 16.dp)) {
         if (vm.askRunning) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
             if (vm.askAnswer.isEmpty()) Muted(if (loadingModel) "Memuat model ke memori…" else "Membaca catatan…", Modifier.padding(top = 6.dp), MaterialTheme.typography.bodyMedium)
         }
         if (!vm.askByAi && vm.openTasksList.isNotEmpty()) {
-            Muted("Ketuk tugas untuk mencentang, atau judul catatan untuk membuka.", Modifier.padding(bottom = 4.dp))
+            Muted("Ketuk tugas untuk mencentang.", Modifier.padding(bottom = 6.dp))
             vm.openTasksList.forEachIndexed { idx, (note, tasks) ->
                 if (idx > 0) Spacer(Modifier.height(6.dp))
                 Text(
@@ -408,9 +406,9 @@ private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifi
         } else {
             if (vm.askAnswer.isNotEmpty()) Text(vm.askAnswer, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)
             if (vm.askSources.isNotEmpty()) {
-                SectionLabel("Sumber", Modifier.padding(top = 8.dp))
+                SectionLabel("Sumber", Modifier.padding(top = 16.dp, bottom = 2.dp))
                 vm.askSources.forEach { n -> SourceRow(n) { vm.open(n) } }
-                if (vm.askByAi) Muted("AI bisa keliru; cek catatan sumber untuk hal penting.", Modifier.padding(top = 2.dp))
+                if (vm.askByAi) Muted("Periksa sumber untuk hal penting.", Modifier.padding(top = 4.dp))
             }
         }
     }
@@ -465,9 +463,6 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
         listOfNotNull(
             if (n.archived && !n.inTrash && view != NoteView.Archive) "Arsip" else null,
             if (view !is NoteView.Folder && n.folder.isNotBlank()) n.folder else null,
-            if (n.imageCount > 0) "${n.imageCount} gambar" else null,
-            if (n.audioCount > 0) "${n.audioCount} suara" else null,
-            n.tags.take(3).joinToString(" ") { "#$it" }.ifBlank { null },
             shortDate(n.updated),
         ).joinToString("  ·  ")
     }
@@ -480,14 +475,14 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
         ) {
             Column(
                 Modifier.fillMaxWidth().combinedClickable(onClick = { vm.open(n) }, onLongClick = { menu = true }, onLongClickLabel = "Aksi cepat")
-                    .padding(horizontal = Gutter).padding(top = 8.dp),
+                    .padding(horizontal = Gutter).padding(top = 14.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(title.ifBlank { "(kosong)" }, Modifier.weight(1f), style = NoteType.rowTitle, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (n.pinned) Icon(AppIcons.PinFilled, "Disematkan", Modifier.padding(start = 8.dp).size(14.dp), muted)
+                    if (n.pinned) Icon(AppIcons.PinFilled, "Disematkan", Modifier.padding(start = 8.dp).size(13.dp), muted)
                 }
-                if (snippet.isNotBlank()) Text(snippet, Modifier.padding(top = 1.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, style = NoteType.rowSnippet, color = muted)
-                Row(Modifier.padding(top = 3.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (snippet.isNotBlank()) Text(snippet, Modifier.padding(top = 3.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, style = NoteType.rowSnippet, color = muted)
+                Row(Modifier.padding(top = 6.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (n.hasReminder && !n.inTrash) {
                         val tint = if (n.remindFired) MaterialTheme.colorScheme.error else timeColor
                         val remLabel = remember(n.remindAt, n.remindRepeat, n.remindFired) {

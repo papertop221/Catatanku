@@ -596,10 +596,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!file.exists()) { say("Berkas lampiran tidak ditemukan."); return }
         val isImg = Attachments.isImage(name)
         val label = when {
-            isImg && extractTasks -> "Ambil tugas dari gambar"
-            isImg -> "Baca gambar"
-            extractTasks -> "Ambil tugas dari suara"
-            else -> "Transkripsikan suara"
+            isImg && extractTasks -> "Ekstrak tugas"
+            isImg -> "Ekstrak teks"
+            extractTasks -> "Ekstrak tugas"
+            else -> "Transkripsi"
         }
         aiJob = AiJob(
             if (extractTasks) AiAction.Tasks else AiAction.Summarize,
@@ -1072,7 +1072,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun askOpenTasks() {
         if (askRunning) return
-        askQuery = "Tugas yang belum selesai"; askByAi = false
+        askQuery = "Tugas terbuka"; askByAi = false
         val withTasks = notes.filter { !it.vault && !it.inTrash && !it.archived }.sortedByDescending { it.updated }
             .mapNotNull { n -> AiText.openTasks(n.body).takeIf { it.isNotEmpty() }?.let { n to it } }
         openTasksList = withTasks
@@ -1098,7 +1098,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun askRecap() {
         if (askRunning) return
-        askQuery = "Rekap 7 hari terakhir"; askByAi = false
+        askQuery = "Ringkasan mingguan"; askByAi = false
         val since = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
         askSources = notes.filter { !it.vault && !it.inTrash && !it.archived && it.updated >= since && it.body.isNotBlank() }
             .sortedByDescending { it.updated }.take(if (AiText.maxInput > 4000) 8 else 5)

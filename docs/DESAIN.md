@@ -35,10 +35,27 @@ Tidak ada gradasi. Warna mengikuti wallpaper tersedia sebagai pilihan di Pengatu
 - Daftar berupa baris datar dengan garis pemisah. Tidak ada kartu, bayangan, atau efek kaca.
 - Sasaran sentuh minimal 44–48 dp.
 
+## Jarak (mulai 1.10)
+
+Satu ritme 4 dp; nilai di luar daftar ini tidak dipakai.
+
+| Token | Nilai | Dipakai untuk |
+|---|---|---|
+| Tepi (`Gutter`) | 20 dp | Jarak kiri-kanan semua isi layar dan lembar |
+| Baris | 12 dp atas & bawah | Baris catatan di daftar; baris Pengaturan minimal 52 dp |
+| Kelompok | 28 dp | Jarak sebelum judul kelompok (Pengaturan, lembar) |
+| Rapat | 4–8 dp | Antara judul dan keterangannya, antar-chip |
+
+Judul kelompok ditulis kapital kecil (`labelSmall`, jarak huruf lebar), tanpa garis pemisah di atasnya:
+jarak kosonglah yang memisahkan kelompok.
+
 ## Ikon
 
-Satu set garis buatan sendiri di `AppIcons` (24 dp, tebal 1,75, ujung membulat). Ikon selalu ditemani kata; bila
-berdiri sendiri (bilah atas), ia punya keterangan untuk pembaca layar. Tidak ada emoji.
+Satu set garis buatan sendiri di `AppIcons` (24 dp, tebal 1,75, ujung membulat). Tidak ada emoji.
+
+Ikon hanya dipakai di **bilah atas** dan **bilah alat editor**, berdiri sendiri tanpa label, dan selalu punya
+keterangan untuk pembaca layar. Di tempat lain (menu, lembar, Pengaturan, judul lembar, layar kunci) cukup kata,
+tanpa ikon pendamping. Satu-satunya ikon di tengah teks adalah lonceng kecil pada waktu pengingat.
 
 ## Tata letak
 
@@ -50,10 +67,30 @@ berdiri sendiri (bilah atas), ia punya keterangan untuk pembaca layar. Tidak ada
 
 ## Bahasa
 
+- Satu hal, satu nama, di seluruh aplikasi. Nama fitur singkat dan baku (lihat glosarium di bawah).
+- Keterangan di bawah judul baris hanya untuk **keadaan** (galat, status yang perlu tindakan), bukan untuk
+  menjelaskan fitur. Penjelasan dan peringatan tinggal di dialog konfirmasi.
 - Tombol = kata kerja + objek: "Simpan pengingat", "Jalankan rencana", "Hapus model". Bukan "OK" atau "Ya".
 - Keadaan kosong menyebut langkah berikutnya.
 - Pesan galat menyebut apa yang terjadi dan apa yang bisa dilakukan.
 - Tindakan yang menyingkirkan catatan selalu menawarkan "Urungkan".
+
+### Glosarium nama fitur (mulai 1.10)
+
+| Nama | Menggantikan |
+|---|---|
+| Asisten | Bantu tulis, Fitur AI |
+| Lanjutkan · Koreksi ejaan · Susun ulang · Ringkasan · Ekstrak tugas · Buat judul · Instruksi khusus | Lanjutkan tulisan, Perbaiki ejaan, Rapikan struktur, Ringkas, Ambil daftar tugas, Instruksi bebas |
+| Lengkapi metadata | Isi judul, folder & tag (yang kosong) |
+| Deteksi jadwal | Sarankan pengingat |
+| Ekstrak teks · Transkripsi | Baca gambar, Transkripsikan |
+| Tugas terbuka · Ringkasan mingguan | Tugas belum selesai, Rekap 7 hari |
+| Tanyakan · Perluas pencarian · Jalankan | Tanya catatan, Jalankan perintah |
+| Kunci otomatis · PIN aplikasi · Hapus setelah 10 kali gagal · Hapus semua data | (rincian keamanan) |
+| Lindungi layar · Keyboard privat · Bersihkan papan klip · Mode offline | Blokir tangkapan layar, Keyboard penyamaran, Hapus papan klip 30 dtk, Mode Offline Mutlak |
+| Model bahasa · Pencarian semantik · Kapasitas konteks · Kalibrasi kinerja | Model AI, Pencarian makna, Panjang bacaan, Penyesuaian kecepatan |
+| Izin notifikasi · Alarm presisi · Optimasi baterai · Prioritas alarm · Diagnostik | (rincian pengingat) |
+| Warna dinamis | Warna mengikuti wallpaper |
 
 ## Keadaan yang harus selalu didesain
 

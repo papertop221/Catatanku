@@ -1,5 +1,16 @@
 # Riwayat perubahan
 
+## 1.10
+
+Tampilan ringkas & rapi
+- Ritme jarak baru yang konsisten (tepi 20 dp, baris lebih lega, jarak 28 dp antar-kelompok); tercatat di `docs/DESAIN.md` → Jarak
+- Pengaturan ditata ulang: judul kelompok kapital kecil tanpa garis, satu baris per fitur dengan nilai di kanan, keterangan hanya untuk status yang perlu tindakan; pengaturan model lanjutan dan diagnostik pengingat dilipat
+- Daftar: baris catatan lebih lega, meta hanya pengingat · folder · waktu (tag tetap di bilah filter); keadaan kosong lebih singkat
+- Editor: bilah alat ikon saja (berlabel untuk pembaca layar) dengan satu aksi teks *Asisten*; meta ringkas
+- Lembar bawah tanpa ikon judul, tombol utama 48 dp; layar kunci hanya judul dan tombol
+- Nama fitur dibakukan (glosarium di `docs/DESAIN.md`): *Asisten*, *Koreksi ejaan*, *Susun ulang*, *Ringkasan*, *Ekstrak tugas*, *Lengkapi metadata*, *Deteksi jadwal*, *Tugas terbuka*, *Ringkasan mingguan*, *Lindungi layar*, *Keyboard privat*, *Mode offline*, *Kapasitas konteks*, *Kalibrasi kinerja*, *Pencarian semantik*, *Prioritas alarm*, *Warna dinamis*; pengulangan pengingat menjadi *Harian/Mingguan/Bulanan*
+- Tidak ada perubahan perilaku, data, izin, atau skema basis data
+
 ## 1.9
 
 Keamanan data & privasi super ketat

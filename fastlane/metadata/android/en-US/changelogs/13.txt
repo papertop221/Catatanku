@@ -1,0 +1,4 @@
+• Cleaner, more compact design: consistent spacing, one-line Settings rows, roomier list and editor
+• Icon-only editor toolbar with a single Assistant action
+• Standardised, more professional feature names
+• No changes to data, permissions, or behaviour

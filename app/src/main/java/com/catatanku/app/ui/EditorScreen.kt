@@ -89,13 +89,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
-private fun Tool(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) = Row(
-    Modifier.clip(SmallShape).clickable(role = Role.Button, onClick = onClick).heightIn(min = 44.dp).padding(horizontal = 7.dp),
-    verticalAlignment = Alignment.CenterVertically,
-) {
-    Icon(icon, null, Modifier.size(18.dp), tint)
-    Text(label, Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelLarge, color = tint)
-}
+private fun Tool(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) = Box(
+    Modifier.size(48.dp).clip(SmallShape).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+    Alignment.Center,
+) { Icon(icon, label, Modifier.size(20.dp), tint) }
 
 private fun checklistStyle(mutedColor: Color) = VisualTransformation { src ->
     val s = src.text
@@ -259,31 +256,30 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 if (recorder.recording) {
                     Hairline()
                     Row(
-                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = Gutter, vertical = 6.dp),
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).padding(start = Gutter, end = 12.dp, top = 8.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(AppIcons.Mic, null, Modifier.size(18.dp), MaterialTheme.colorScheme.error)
                         Text(
-                            "Merekam suara  ·  ${Attachments.formatDuration(recorder.seconds)}",
-                            Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.labelLarge,
+                            "Merekam  ·  ${Attachments.formatDuration(recorder.seconds)}",
+                            Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error,
                         )
                         TextAction("Batal", color = MaterialTheme.colorScheme.error) { recorder.cancel() }
-                        SmallButton("Simpan rekaman", primary = true) {
+                        SmallButton("Simpan", primary = true) {
                             recorder.stop()?.let(vm::attachRecordedAudio) ?: vm.say("Rekaman terlalu pendek.")
                         }
                     }
                 }
                 Hairline()
                 Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                    Modifier.fillMaxWidth().padding(start = 8.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Tool(AppIcons.CheckBox, "Centang") { prefix(true) }
-                    Tool(AppIcons.Bullets, "Poin") { prefix(false) }
-                    Tool(AppIcons.Image, "Gambar") { vm.suppressNextLeaveLock(); pickImage.launch("image/*") }
+                    Tool(AppIcons.CheckBox, "Daftar centang") { prefix(true) }
+                    Tool(AppIcons.Bullets, "Daftar poin") { prefix(false) }
+                    Tool(AppIcons.Image, "Lampirkan gambar") { vm.suppressNextLeaveLock(); pickImage.launch("image/*") }
                     Tool(
                         if (recorder.recording) AppIcons.Stop else AppIcons.Mic,
-                        if (recorder.recording) "Selesai" else "Suara",
+                        if (recorder.recording) "Selesai merekam" else "Rekam suara",
                         if (recorder.recording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     ) {
                         if (recorder.recording) {
@@ -296,18 +292,19 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                             askAudio.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     }
-                    if (!d.vault) Tool(AppIcons.Folder, "Folder") { folderDialog = true }
-                    Tool(AppIcons.Pen, if (vm.aiBusy) "Bekerja…" else "Bantu tulis") { vm.aiSheet = true }
+                    if (!d.vault) Tool(AppIcons.Folder, "Pindahkan ke folder") { folderDialog = true }
+                    Spacer(Modifier.weight(1f))
+                    TextAction(if (vm.aiBusy) "Bekerja…" else "Asisten") { vm.aiSheet = true }
                 }
             }
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(scroll)) {
-            Row(Modifier.height(44.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconAction(AppIcons.Back, "Kembali ke daftar", onClick = ::closeWithFlush)
                 Muted(
                     when { d.isBlank && d.id == 0L -> ""; vm.draftSaved -> "Tersimpan"; else -> "Menyimpan…" },
-                    Modifier.weight(1f).padding(start = 4.dp), MaterialTheme.typography.labelMedium,
+                    Modifier.weight(1f).padding(start = 2.dp), MaterialTheme.typography.labelMedium,
                 )
                 if (undoStack.isNotEmpty()) IconAction(AppIcons.Undo, "Urungkan ketikan", onClick = ::undoEdit)
                 if (redoStack.isNotEmpty()) IconAction(AppIcons.Redo, "Ulangi ketikan", onClick = ::redoEdit)
@@ -326,7 +323,7 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                             ctx.startActivity(Intent.createChooser(
                                 Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, d.title).putExtra(Intent.EXTRA_TEXT, plain), null))
                         }, enabled = !d.isBlank)
-                        DropdownMenuItem({ Text("Salin teks") }, { menu = false; copyText(ctx, plain); vm.say("Teks disalin.") }, enabled = !d.isBlank)
+                        DropdownMenuItem({ Text("Salin") }, { menu = false; copyText(ctx, plain); vm.say("Teks disalin.") }, enabled = !d.isBlank)
                         DropdownMenuItem({ Text("Riwayat versi") }, { menu = false; vm.openVersions() }, enabled = d.id != 0L)
                         if (!d.inTrash) {
                             DropdownMenuItem(
@@ -347,9 +344,9 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
             }
 
-            Column(Modifier.padding(horizontal = Gutter)) {
+            Column(Modifier.padding(horizontal = Gutter).padding(top = 4.dp)) {
                 if (d.inTrash) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Catatan ini ada di Sampah.", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
+                    Text("Di Sampah", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
                     TextAction("Pulihkan", onClick = vm::restoreDraft)
                 }
                 PlainField(
@@ -360,10 +357,10 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 Muted(
                     listOfNotNull(
                         if (d.vault) "Brankas" else null,
-                        d.folder.ifBlank { null }, if (d.id != 0L) "Diubah ${shortDate(d.updated)}" else "Catatan baru",
+                        d.folder.ifBlank { null }, if (d.id != 0L) shortDate(d.updated) else null,
                         remember(d.body) { AiText.wordCount(d.body) }.takeIf { it > 0 }?.let { "$it kata" },
                     ).joinToString("  ·  "),
-                    Modifier.padding(top = 2.dp, bottom = 4.dp), MaterialTheme.typography.labelSmall,
+                    Modifier.padding(top = 6.dp, bottom = 10.dp), MaterialTheme.typography.labelSmall,
                 )
                 if (d.hasReminder && !d.inTrash) Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(
@@ -378,14 +375,14 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 } else hint?.takeIf { !hintDismissed && !d.hasReminder }?.let { h ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(AppIcons.Bell, null, Modifier.size(14.dp), timeColor)
-                        Text("Pengingat: ${whenLabel(h.at.toMillis())}", Modifier.weight(1f, fill = false).padding(start = 6.dp), style = MaterialTheme.typography.labelLarge, color = timeColor)
-                        TextAction("Tambahkan") { vm.openReminder(seed = h.at.toMillis()) }
+                        Text(whenLabel(h.at.toMillis()), Modifier.weight(1f, fill = false).padding(start = 6.dp), style = MaterialTheme.typography.labelLarge, color = timeColor)
+                        TextAction("Setel pengingat") { vm.openReminder(seed = h.at.toMillis()) }
                         IconAction(AppIcons.Close, "Abaikan saran pengingat", muted, 16.dp) { hintDismissed = true }
                     }
                 }
 
                 if (d.attachments.isNotEmpty()) {
-                    Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.padding(top = 6.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         d.attachments.forEach { name ->
                             val exists = name in vm.existingAttachments
                             if (Attachments.isImage(name)) {
@@ -420,28 +417,28 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     visualTransformation = bodyVisual,
-                    decorationBox = { inner -> Box { if (bodyField.text.isEmpty()) Text("Mulai menulis…", style = NoteType.body, color = muted); inner() } },
+                    decorationBox = { inner -> Box { if (bodyField.text.isEmpty()) Text("Tulis sesuatu", style = NoteType.body, color = muted); inner() } },
                 )
-                if (vm.canUndoAi) TextAction("Urungkan perubahan AI", Modifier.padding(top = 2.dp), onClick = vm::undoAiChange)
+                if (vm.canUndoAi) TextAction("Urungkan perubahan asisten", Modifier.padding(top = 4.dp), onClick = vm::undoAiChange)
                 if (d.body.length > AiText.maxInput && hasModel) Muted(
-                    "Catatan panjang: Ringkas, Tugas & Ejaan memproses penuh; aksi lain ±${AiText.maxInput} huruf.",
+                    "Catatan panjang: sebagian aksi asisten membaca ±${AiText.maxInput} huruf pertama.",
                     Modifier.padding(top = 4.dp),
                 )
 
-                Hairline(Modifier.padding(top = 10.dp))
+                Hairline(Modifier.padding(top = 20.dp))
                 FlowRow(
-                    Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically,
+                    Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     d.tags.forEach { t ->
                         Row(
-                            Modifier.clip(SmallShape).clickable(role = Role.Button, onClickLabel = "Hapus tag $t") { vm.edit { it.copy(tags = it.tags - t) } }.heightIn(min = 36.dp).padding(horizontal = 6.dp),
+                            Modifier.clip(SmallShape).clickable(role = Role.Button, onClickLabel = "Hapus tag $t") { vm.edit { it.copy(tags = it.tags - t) } }.heightIn(min = 40.dp).padding(end = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text("#$t", style = MaterialTheme.typography.labelLarge)
                             Icon(AppIcons.Close, null, Modifier.padding(start = 4.dp).size(12.dp), muted)
                         }
                     }
-                    Box(Modifier.heightIn(min = 36.dp).widthIn(min = 72.dp, max = 180.dp).padding(horizontal = 6.dp), Alignment.CenterStart) {
+                    Box(Modifier.heightIn(min = 40.dp).widthIn(min = 72.dp, max = 180.dp), Alignment.CenterStart) {
                         PlainField(
                             tagInput,
                             { raw ->
@@ -462,10 +459,10 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 if (aiState is AiState.Loading) Muted("Memuat model ke memori…", Modifier.padding(top = 8.dp))
 
                 if (related.isNotEmpty()) {
-                    SectionLabel("Catatan terkait", Modifier.padding(top = 12.dp, bottom = 2.dp))
+                    SectionLabel("Terkait", Modifier.padding(top = GroupGap, bottom = 2.dp))
                     related.forEach { n -> SourceRow(n) { flushPendingTag(); vm.openRelated(n) } }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -476,7 +473,7 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
             onDismissRequest = { previewImage = null },
             text = {
                 if (bmp != null) Image(bmp, "Gambar lampiran", Modifier.fillMaxWidth().clip(SmallShape), contentScale = ContentScale.FillWidth)
-                else if (done) Muted("Gambar tidak ditemukan.")
+                else if (done) Muted("Gambar tidak ditemukan")
             },
             confirmButton = { TextAction("Tutup") { previewImage = null } },
             dismissButton = {
@@ -520,15 +517,15 @@ private fun AttachmentImageRow(
                 contentScale = ContentScale.Crop,
             )
         }
-        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!exists || (done && bmp == null)) {
-                Text("Lampiran gambar hilang ($name)", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                TextAction("Hapus rujukan", color = MaterialTheme.colorScheme.error, onClick = onRemove)
+                Text("Gambar tidak ditemukan", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextAction("Hapus", color = MaterialTheme.colorScheme.error, onClick = onRemove)
             } else {
-                Muted("Gambar", Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
                 if (hasModel) {
-                    TextAction("Baca gambar", onClick = onRead)
-                    TextAction("Ambil tugas", onClick = onTasks)
+                    TextAction("Ekstrak teks", onClick = onRead)
+                    TextAction("Ekstrak tugas", onClick = onTasks)
                 }
                 IconAction(AppIcons.Close, "Hapus gambar", muted, 18.dp, onClick = onRemove)
             }
@@ -547,17 +544,16 @@ private fun AttachmentAudioRow(
     Column(Modifier.fillMaxWidth().clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!exists) {
-                Text("Lampiran suara hilang ($name)", Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                TextAction("Hapus rujukan", color = MaterialTheme.colorScheme.error, onClick = onRemove)
+                Text("Rekaman tidak ditemukan", Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextAction("Hapus", color = MaterialTheme.colorScheme.error, onClick = onRemove)
             } else {
                 IconAction(if (playing) AppIcons.Stop else AppIcons.Play, if (playing) "Hentikan putar" else "Putar rekaman", onClick = onToggle)
                 Column(Modifier.weight(1f)) {
-                    Text(if (playing) "Memutar rekaman…" else "Catatan suara", style = MaterialTheme.typography.bodyMedium)
-                    Muted("Durasi ${Attachments.formatDuration(dur)}")
+                    Text(Attachments.formatDuration(dur), style = MaterialTheme.typography.bodyMedium)
                 }
                 if (hasModel) {
-                    TextAction("Transkripsikan", onClick = onTranscribe)
-                    TextAction("Ambil tugas", onClick = onTasks)
+                    TextAction("Transkripsi", onClick = onTranscribe)
+                    TextAction("Ekstrak tugas", onClick = onTasks)
                 }
                 IconAction(AppIcons.Close, "Hapus rekaman", muted, 18.dp, onClick = onRemove)
             }

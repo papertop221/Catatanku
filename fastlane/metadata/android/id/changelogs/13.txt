@@ -1,0 +1,4 @@
+• Tampilan baru yang lebih ringkas dan rapi: jarak konsisten, Pengaturan satu baris per fitur, daftar dan editor lebih lega
+• Bilah alat editor ikon saja dengan satu tombol Asisten
+• Nama fitur dibakukan dan lebih profesional (Asisten, Koreksi ejaan, Ekstrak tugas, Lindungi layar, Mode offline, dll.)
+• Tanpa perubahan data, izin, atau perilaku

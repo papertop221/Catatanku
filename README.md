@@ -106,12 +106,12 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 - Catatan terkait muncul otomatis di editor
 
 **AI lokal** — opsional, butuh model
-- *Bantu tulis*: lanjutkan, perbaiki ejaan, rapikan struktur, ringkas, ambil daftar tugas, buat judul, instruksi bebas
+- *Asisten*: lanjutkan, koreksi ejaan, susun ulang, ringkasan, ekstrak tugas, buat judul, instruksi khusus
 - *Gambar & suara (Gemma 4 E2B)*: baca teks/isi gambar (OCR), ambil daftar tugas dari gambar, serta transkripsikan atau ambil daftar tugas dari rekaman suara
 - *Catatan panjang*: ringkas, daftar tugas, dan perbaiki ejaan memproses seluruh isi bagian demi bagian
 - *Merapikan*: isi judul, folder, dan tag yang kosong untuk satu atau semua catatan, atau otomatis saat catatan ditutup
-- *Tanya catatan*: jawaban dari hingga 4 catatan paling relevan, tampil di atas daftar lengkap dengan sumbernya
-- *Rekap 7 hari* dan daftar semua tugas yang belum dicentang
+- *Tanyakan*: jawaban dari hingga 4 catatan paling relevan, tampil di atas daftar lengkap dengan sumbernya
+- *Ringkasan mingguan* dan daftar *Tugas terbuka*
 - *Sarankan pengingat* dari jadwal atau tenggat di catatan
 - *Perluas pencarian*: "jogging" → "lari, olahraga"
 
