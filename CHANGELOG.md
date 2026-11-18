@@ -9,7 +9,9 @@ Tampilan ringkas & rapi
 - Editor: bilah alat ikon saja (berlabel untuk pembaca layar) dengan satu aksi teks *Asisten*; meta ringkas
 - Lembar bawah tanpa ikon judul, tombol utama 48 dp; layar kunci hanya judul dan tombol
 - Nama fitur dibakukan (glosarium di `docs/DESAIN.md`): *Asisten*, *Koreksi ejaan*, *Susun ulang*, *Ringkasan*, *Ekstrak tugas*, *Lengkapi metadata*, *Deteksi jadwal*, *Tugas terbuka*, *Ringkasan mingguan*, *Lindungi layar*, *Keyboard privat*, *Mode offline*, *Kapasitas konteks*, *Kalibrasi kinerja*, *Pencarian semantik*, *Prioritas alarm*, *Warna dinamis*; pengulangan pengingat menjadi *Harian/Mingguan/Bulanan*
-- Pengaturan model dashboard: enam petak kategori (Keamanan, Privasi, Cadangan, Asisten, Pengingat, Tampilan) dengan status langsung, masing-masing membuka halaman ringkas; status yang perlu tindakan tampil merah
+- Arah desain baru "Fokus": judul tampilan besar dengan baris tanggal, daftar ringkas (judul, satu baris isi, waktu rata kanan), dan **dok mengambang** di bawah (Catatan · Cari · Pengingat · Pengaturan) dengan tombol + bulat; kolom cari muncul di atas dok saat dibutuhkan
+- Satu warna aksen biru untuk aksi utama dan item dok aktif; amber tetap khusus waktu
+- Pengaturan: judul besar, pilihan tema berbentuk segmen, lalu kategori (Keamanan, Privasi, Cadangan, Asisten, Pengingat, Tampilan) dalam satu grup membulat dengan status langsung; tiap kategori membuka halaman ringkas; status yang perlu tindakan tampil merah
 - Tema Sistem / Terang / Gelap di Pengaturan → Tampilan, plus tombol matahari/bulan di bilah atas daftar; ikon bilah status mengikuti tema
 - Gerak halus dan pendek: transisi antarlayar dan antarkategori, baris catatan berpindah ke tempatnya, bagian lipat membuka dengan lembut
 - Palet sedikit lebih segar: kertas lebih bersih, permukaan bertingkat lebih jelas di terang dan gelap

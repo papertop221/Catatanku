@@ -1,5 +1,5 @@
-• Fresh, compact design in both light and dark themes
-• Dashboard-style Settings: six categories with live status
+• New "Focus" design: large titles, compact list, floating bottom dock
+• More compact Settings: categories in one group with live status
 • System/Light/Dark theme choice plus a quick toggle in the top bar
 • Smooth screen transitions; standardised feature names
 • Semantic search removed; search stays instant without a model

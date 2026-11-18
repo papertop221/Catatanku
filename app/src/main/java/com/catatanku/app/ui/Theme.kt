@@ -41,7 +41,7 @@ import com.catatanku.app.R
 private val Light = lightColorScheme(
     primary = Color(0xFF191918), onPrimary = Color(0xFFFBFBFA),
     primaryContainer = Color(0xFFEAE9E5), onPrimaryContainer = Color(0xFF191918),
-    secondary = Color(0xFF5F5E5A), onSecondary = Color.White,
+    secondary = Color(0xFF2F5BEA), onSecondary = Color.White,
     secondaryContainer = Color(0xFFEAE9E5), onSecondaryContainer = Color(0xFF191918),
     tertiary = Color(0xFF8A5200), onTertiary = Color.White,
     tertiaryContainer = Color(0xFFFBEACC), onTertiaryContainer = Color(0xFF5A3300),
@@ -61,7 +61,7 @@ private val Light = lightColorScheme(
 private val Dark = darkColorScheme(
     primary = Color(0xFFECECE9), onPrimary = Color(0xFF111110),
     primaryContainer = Color(0xFF2A2A28), onPrimaryContainer = Color(0xFFECECE9),
-    secondary = Color(0xFFA6A5A0), onSecondary = Color(0xFF111110),
+    secondary = Color(0xFF8FA8FF), onSecondary = Color(0xFF0B1640),
     secondaryContainer = Color(0xFF2A2A28), onSecondaryContainer = Color(0xFFECECE9),
     tertiary = Color(0xFFF0B450), onTertiary = Color(0xFF3A2400),
     tertiaryContainer = Color(0xFF3D2C0C), onTertiaryContainer = Color(0xFFFBE0A8),
@@ -109,6 +109,7 @@ object NoteType {
 
 private val Type = Typography().run {
     copy(
+        headlineLarge = headlineLarge.copy(fontWeight = FontWeight.Bold, fontSize = 40.sp, lineHeight = 44.sp, letterSpacing = (-1).sp),
         headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 26.sp, lineHeight = 32.sp, letterSpacing = (-0.2).sp),
         titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.1).sp),
         titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
@@ -207,6 +208,8 @@ object AppIcons {
     val Mic = icon("mic", "M12 3.5a3 3 0 0 1 3 3V12a3 3 0 0 1-6 0V6.5a3 3 0 0 1 3-3z", "M6.5 11.5a5.5 5.5 0 0 0 11 0", "M12 17v3.5M9 20.5h6")
     val Play = icon("play", "M8 6l10 6-10 6z", fills = listOf("M8 6l10 6-10 6z"))
     val Stop = icon("stop", "M7 7h10v10H7z", fills = listOf("M7 7h10v10H7z"))
+    val Notes = icon("notes", "M6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5z", "M8.5 9h7M8.5 13h7M8.5 17h4")
+    val Sliders = icon("sliders", "M4 7h10M18 7h2M4 17h4M12 17h8", "M18 7a2 2 0 1 1-4 0a2 2 0 0 1 4 0z", "M12 17a2 2 0 1 1-4 0a2 2 0 0 1 4 0z")
     val Sun = icon("sun", "M16 12a4 4 0 1 1-8 0a4 4 0 0 1 8 0z", "M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4")
     val Moon = icon("moon", "M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z")
 }

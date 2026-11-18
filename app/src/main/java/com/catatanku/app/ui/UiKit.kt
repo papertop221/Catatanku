@@ -87,6 +87,10 @@ internal fun shortDate(t: Long, today: LocalDate = LocalDate.now()): String {
 
 internal val muted @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 internal val timeColor @Composable get() = MaterialTheme.colorScheme.tertiary
+/** Aksen biru arah "Fokus": aksi utama, item dok aktif, baris tanggal. */
+internal val accent @Composable get() = MaterialTheme.colorScheme.secondary
+internal val PillShape = androidx.compose.foundation.shape.RoundedCornerShape(percent = 50)
+internal val GroupShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 
 @Composable
 internal fun Muted(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodySmall) =

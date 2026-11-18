@@ -37,6 +37,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -85,7 +89,7 @@ private fun SettingRow(
     onClick: (() -> Unit)? = null, control: @Composable () -> Unit = {},
 ) = Row(
     Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-        .heightIn(min = 52.dp).padding(start = Gutter, end = 14.dp, top = 6.dp, bottom = 6.dp),
+        .heightIn(min = 52.dp).padding(start = 18.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
     verticalAlignment = Alignment.CenterVertically,
 ) {
     Column(Modifier.weight(1f).padding(end = 12.dp)) {
@@ -116,18 +120,44 @@ private fun ExpandRow(
 
 private data class Tile(val title: String, val status: String, val alert: Boolean = false)
 
-/** Petak dashboard: datar, tanpa bayangan; status satu baris, merah bila perlu tindakan. */
+/** Satu kategori di grup Pengaturan: nama, status di kanan (merah bila perlu tindakan), panah. */
 @Composable
-private fun DashTile(t: Tile, modifier: Modifier, onClick: () -> Unit) = Column(
-    modifier.heightIn(min = 104.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
-        .clickable(role = Role.Button, onClick = onClick).padding(16.dp),
+private fun CategoryRow(t: Tile, onClick: () -> Unit) = Row(
+    Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).heightIn(min = 60.dp).padding(start = 18.dp, end = 14.dp),
+    verticalAlignment = Alignment.CenterVertically,
 ) {
-    Text(t.title, style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.weight(1f).heightIn(min = 18.dp))
+    Text(t.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
     Text(
-        t.status, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        t.status, Modifier.padding(start = 12.dp, end = 6.dp).widthIn(max = 170.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
         color = if (t.alert) MaterialTheme.colorScheme.error else muted,
     )
+    androidx.compose.material3.Icon(AppIcons.ChevronRight, null, Modifier.size(16.dp), muted)
+}
+
+/** Pilihan tema sebagai segmen pil; pil terpilih bergeser halus. */
+@Composable
+internal fun ThemeSegment(mode: ThemeMode, onPick: (ThemeMode) -> Unit, modifier: Modifier = Modifier) {
+    val dark = mode.isDark()
+    val pill = if (dark) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerLowest
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier.fillMaxWidth().height(48.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(4.dp),
+    ) {
+        val w = maxWidth / ThemeMode.entries.size
+        val x by androidx.compose.animation.core.animateDpAsState(w * mode.ordinal, tween(220), label = "tema")
+        androidx.compose.foundation.layout.Box(Modifier.offset(x = x).width(w).fillMaxHeight().clip(PillShape).background(pill))
+        Row(Modifier.fillMaxSize()) {
+            ThemeMode.entries.forEach { m ->
+                val on = m == mode
+                androidx.compose.foundation.layout.Box(
+                    Modifier.weight(1f).fillMaxHeight().clip(PillShape)
+                        .clickable(role = Role.RadioButton, onClickLabel = "Tema ${m.label}") { onPick(m) },
+                    Alignment.Center,
+                ) {
+                    Text(m.label, style = MaterialTheme.typography.labelLarge, color = if (on) MaterialTheme.colorScheme.onSurface else muted)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -152,7 +182,7 @@ private fun openAppDetailsSettings(ctx: Context) {
 private fun ModelRow(
     name: String, active: Boolean, meta: String, open: Boolean, onToggle: () -> Unit, progress: Download?, detail: String,
     canDelete: Boolean, onDelete: () -> Unit, action: @Composable () -> Unit,
-) = Column(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Rincian model", onClick = onToggle).padding(start = Gutter, end = 14.dp, top = 8.dp, bottom = 8.dp)) {
+) = Column(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Rincian model", onClick = onToggle).padding(start = 18.dp, end = 14.dp, top = 8.dp, bottom = 8.dp)) {
     Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -278,26 +308,23 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         if (sec == null) vm.go(Screen.List) else { vm.settingsSection = null; openGroup = null }
                     }
                 }
-                Text(sec ?: "Pengaturan", Modifier.padding(horizontal = Gutter).padding(bottom = if (sec == null) 20.dp else 12.dp), style = MaterialTheme.typography.headlineSmall)
+                Text(if (sec == null) "Catatanku ${vm.appVersion}" else "Pengaturan", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.labelLarge, color = accent)
+                Text(sec ?: "Pengaturan", Modifier.padding(horizontal = 20.dp).padding(top = 4.dp, bottom = 24.dp), style = MaterialTheme.typography.headlineLarge)
                 if (sec == null) {
-                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        tiles.chunked(2).forEach { pair ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                pair.forEach { t -> DashTile(t, Modifier.weight(1f)) { vm.settingsSection = t.title } }
-                            }
+                    ThemeSegment(vm.themeMode, vm::updateThemeMode, Modifier.padding(horizontal = 16.dp))
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp).clip(GroupShape).background(MaterialTheme.colorScheme.surfaceContainer)) {
+                        tiles.forEachIndexed { i, t ->
+                            if (i > 0) Hairline(Modifier.padding(start = 18.dp))
+                            CategoryRow(t) { vm.settingsSection = t.title }
                         }
                     }
-                    Muted(
-                        "Catatanku ${vm.appVersion}",
-                        Modifier.padding(start = Gutter, end = Gutter, top = 32.dp, bottom = 28.dp),
-                        MaterialTheme.typography.labelSmall,
-                    )
                 } else {
+                    Column(Modifier.padding(horizontal = 16.dp).clip(GroupShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(vertical = 6.dp)) {
                     when (sec) {
                     "Keamanan" -> {
                 SettingRow("Kunci aplikasi") { Switch(vm.lockEnabled, { vm.updateLock(it) }) }
                 if (vm.lockEnabled) {
-                    Column(Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 2.dp, bottom = 8.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 8.dp)) {
                         Muted("Kunci otomatis", Modifier.padding(bottom = 8.dp), MaterialTheme.typography.labelMedium)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             LockTimeout.entries.forEach { t -> Choice(t.label, selected = vm.lockTimeout == t) { vm.updateLockTimeout(t) } }
@@ -328,7 +355,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     if (canExact) "Alarm presisi" else null,
                 ).ifEmpty { listOf("Tidak ada") }.joinToString(", ")
                 ExpandRow("Audit privasi", openGroup == "audit", onToggle = { toggleGroup("audit") }) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         AuditLine("Enkripsi", "AES-256-GCM")
                         AuditLine("Kunci", if (hasKeystore) "Android Keystore" else "Kunci lokal")
                         AuditLine("Brankas", "${vm.vaultCount} catatan")
@@ -364,7 +391,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 )
                 if (vm.autoBackupEncrypted) SettingRow("Matikan enkripsi", titleColor = muted, onClick = { confirmDisableAutoBackupEnc = true })
                 vm.backupProgress?.let { bp ->
-                    Column(Modifier.padding(horizontal = Gutter, vertical = 6.dp)) {
+                    Column(Modifier.padding(horizontal = 18.dp, vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Muted(bp.detail.ifBlank { bp.phase.label }, Modifier.weight(1f))
                             TextAction("Batalkan", onClick = vm::cancelBackupJob)
@@ -392,13 +419,13 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 if (statusNotice != null) {
                     Text(
                         statusNotice,
-                        Modifier.padding(horizontal = Gutter, vertical = 4.dp),
+                        Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (aiState is AiState.Failed) MaterialTheme.colorScheme.error else muted,
                     )
                 }
-                (aiState as? AiState.Importing)?.let { LinearProgressIndicator({ it.percent / 100f }, Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 4.dp)) }
-                if (aiState is AiState.Loading || benchRunning) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = Gutter, vertical = 4.dp))
+                (aiState as? AiState.Importing)?.let { LinearProgressIndicator({ it.percent / 100f }, Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp)) }
+                if (aiState is AiState.Loading || benchRunning) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp))
 
                 ModelCatalog.all.forEach { spec ->
                     val installed = revision.let { vm.ai.isInstalled(spec.id) }
@@ -438,7 +465,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         SettingRow("Mode hemat memori") { Switch(vm.lightAi, vm::updateLightAi, enabled = !busy) }
                         val gpuSelected = activeProfile?.backend == AiBackendKind.GPU
                         SettingRow("Akselerasi GPU") { Switch(gpuSelected, { vm.setGpu(it) }, enabled = !busy) }
-                        Column(Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 10.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 10.dp)) {
                             Text("Kapasitas konteks", style = MaterialTheme.typography.bodyLarge)
                             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 ContextProfile.entries.forEach { cp ->
@@ -513,7 +540,7 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }
                     }
                     if (Oem.aggressive) {
-                        Column(Modifier.padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 6.dp)) {
+                        Column(Modifier.padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp)) {
                             Text("Pengaturan ${Oem.brand}", style = MaterialTheme.typography.bodyLarge)
                             Oem.steps.forEachIndexed { i, st -> Muted("${i + 1}.  $st", Modifier.padding(top = 4.dp)) }
                             TextAction("Buka mulai otomatis", Modifier.padding(top = 4.dp)) {
@@ -526,17 +553,16 @@ fun SettingsScreen(vm: AppViewModel, snack: SnackbarHostState) {
 
                     }
                     "Tampilan" -> {
-                Column(Modifier.fillMaxWidth().padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 10.dp)) {
+                Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 14.dp, top = 8.dp, bottom = 10.dp)) {
                     Text("Tema", style = MaterialTheme.typography.bodyLarge)
-                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemeMode.entries.forEach { m -> Choice(m.label, selected = vm.themeMode == m) { vm.updateThemeMode(m) } }
-                    }
+                    ThemeSegment(vm.themeMode, vm::updateThemeMode, Modifier.padding(top = 10.dp))
                 }
                 if (Build.VERSION.SDK_INT >= 31) SettingRow("Warna dinamis") { Switch(vm.dynamicColor, vm::updateDynamicColor) }
                     }
                     }
-                    Spacer(Modifier.height(28.dp))
+                    }
                 }
+                Spacer(Modifier.height(32.dp))
             }
         }
     }

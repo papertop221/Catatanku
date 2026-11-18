@@ -9,6 +9,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -59,6 +61,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.catatanku.app.ai.engine.AiState
 import com.catatanku.app.domain.model.AgentStep
@@ -96,150 +99,127 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
     val isCommand = steps != null && view != NoteView.Vault
     val canCreate = view == NoteView.All || view is NoteView.Folder || view == NoteView.Vault
 
-    Scaffold(
-        modifier = Modifier.imePadding(),
-        snackbarHost = { Notices(snack) },
-        bottomBar = {
-            Column(Modifier.background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
-                Hairline()
-                val tags = vm.allTags
-                if (tags.isNotEmpty() && view != NoteView.Trash && view != NoteView.Vault && !searching) LazyRow(
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    items(tags, key = { it }) { t ->
-                        val on = vm.tagFilter == t
-                        Box(
-                            Modifier.heightIn(min = 34.dp).clip(SmallShape).clickable(role = Role.Button) { vm.tagFilter = if (on) null else t }.padding(horizontal = 4.dp),
-                            Alignment.Center,
-                        ) {
-                            Text(
-                                "#$t",
-                                Modifier.clip(SmallShape).background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background).padding(horizontal = 10.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelLarge, color = if (on) MaterialTheme.colorScheme.onPrimary else muted,
-                            )
-                        }
-                    }
-                }
-                val offerAgent = isCommand || (hasModel && view != NoteView.Vault && vm.query.trim().split(WORDS).size >= 3)
-                AnimatedVisibility(searching && view != NoteView.Trash && view != NoteView.Vault && (hasModel || isCommand), enter = fadeIn(tween(160)) + expandVertically(tween(200)), exit = fadeOut(tween(120)) + shrinkVertically(tween(160))) { Row(Modifier.padding(horizontal = 10.dp, vertical = 2.dp)) {
-                    if (offerAgent) TextAction("Jalankan") { vm.startAgent(vm.query) }
-                    if (hasModel) {
-                        TextAction("Tanyakan") { vm.ask(vm.query) }
-                        if (vm.aiTerms.isEmpty()) TextAction(if (vm.aiBusy) "Memperluas…" else "Perluas pencarian", enabled = !vm.aiBusy, onClick = vm::expandQueryWithAi)
-                    }
-                } }
-                Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Row(
-                        Modifier.weight(1f).height(48.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(AppIcons.Search, null, Modifier.size(18.dp), muted)
-                        Spacer(Modifier.width(10.dp))
-                        PlainField(
-                            vm.query, vm::updateQuery,
-                            when {
-                                view == NoteView.Vault -> "Cari di Brankas"
-                                else -> "Cari atau beri perintah"
-                            },
-                            Modifier.weight(1f).focusRequester(searchFocus), ime = ImeAction.Search,
-                        ) {
-                            if (isCommand && steps.none { it is AgentStep.Trash || it is AgentStep.Archive }) vm.startAgent(vm.query)
-                        }
-                        if (vm.query.isNotEmpty()) IconAction(AppIcons.Close, "Hapus teks pencarian", muted, 18.dp) { vm.updateQuery("") }
-                    }
-                    if (canCreate) {
-                        Spacer(Modifier.width(10.dp))
-                        Box(
-                            Modifier.size(48.dp).clip(SmallShape).background(MaterialTheme.colorScheme.primary).clickable(role = Role.Button) { vm.open(null) },
-                            Alignment.Center,
-                        ) { Icon(AppIcons.Plus, "Catatan baru", Modifier.size(22.dp), MaterialTheme.colorScheme.onPrimary) }
-                    }
-                }
-            }
-        },
-    ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize()) {
-            Row(Modifier.padding(start = Gutter, end = 6.dp, top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) {
-                    Row(
-                        Modifier.clip(SmallShape).clickable(role = Role.Button) { viewMenu = true }.heightIn(min = 48.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            when (view) {
-                                NoteView.All -> "Catatan"
-                                is NoteView.Folder -> view.name
-                                NoteView.Reminders -> "Pengingat"
-                                NoteView.Archive -> "Arsip"
-                                NoteView.Trash -> "Sampah"
-                                NoteView.Vault -> "Brankas"
-                            },
-                            style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        )
-                        Icon(AppIcons.ChevronDown, "Ganti tampilan", Modifier.padding(start = 6.dp).size(18.dp), muted)
-                    }
-                    Menu(viewMenu, { viewMenu = false }) {
-                        fun pick(v: NoteView) { vm.switchView(v); viewMenu = false }
-                        DropdownMenuItem({ Text("Semua catatan") }, { pick(NoteView.All) })
-                        vm.folders.forEach { f ->
-                            DropdownMenuItem({ Text(f) }, { pick(NoteView.Folder(f)) })
-                        }
-                        Hairline()
-                        DropdownMenuItem({ Text("Pengingat" + if (vm.reminderCount > 0) " (${vm.reminderCount})" else "") }, { pick(NoteView.Reminders) })
-                        DropdownMenuItem({ Text("Arsip") }, { pick(NoteView.Archive) })
-                        DropdownMenuItem({ Text("Sampah" + if (vm.trashCount > 0) " (${vm.trashCount})" else "") }, { pick(NoteView.Trash) })
-                        Hairline()
-                        DropdownMenuItem(
-                            { Text("Brankas" + if (vm.vaultCount > 0) " (${vm.vaultCount})" else "") },
-                            { viewMenu = false; vm.requestOpenVault() },
-                        )
-                    }
-                }
-                if (view == NoteView.Vault) {
-                    TextAction("Kunci") { vm.lockVault() }
-                }
-                val dark = vm.themeMode.isDark()
-                IconAction(if (dark) AppIcons.Sun else AppIcons.Moon, if (dark) "Ganti ke tema terang" else "Ganti ke tema gelap") {
-                    vm.updateThemeMode(if (dark) ThemeMode.Light else ThemeMode.Dark)
-                }
-                Box {
-                    IconAction(AppIcons.More, "Menu") { moreMenu = true }
-                    Menu(moreMenu, { moreMenu = false }) {
-                        SectionLabel("Urutkan", Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
-                        Sort.entries.forEach { s ->
-                            DropdownMenuItem(
-                                { Text(s.label) }, { vm.updateSort(s); moreMenu = false },
-                                trailingIcon = { if (vm.sort == s) Icon(AppIcons.Check, "Dipilih", Modifier.size(18.dp)) },
-                            )
-                        }
-                        Hairline()
-                        DropdownMenuItem({ Text("Tugas terbuka") }, { moreMenu = false; vm.askOpenTasks() })
-                        DropdownMenuItem({ Text("Ringkasan mingguan") }, { moreMenu = false; vm.askRecap() })
-                        if (hasModel) DropdownMenuItem(
-                            { Text("Lengkapi metadata") }, { moreMenu = false; confirmOrganize = true },
-                            enabled = vm.batch == null && vm.organizableCount > 0,
-                        )
-                        if (view is NoteView.Folder) {
-                            Hairline()
-                            DropdownMenuItem({ Text("Ubah nama folder") }, { moreMenu = false; renameFolderTarget = view.name })
-                            DropdownMenuItem({ Text("Hapus folder") }, { moreMenu = false; dissolveFolderTarget = view.name })
-                        }
-                        if (view == NoteView.Trash) DropdownMenuItem({ Text("Kosongkan Sampah") }, { moreMenu = false; confirmEmpty = true }, enabled = vm.trashCount > 0)
-                        if (vm.lockEnabled) {
-                            Hairline()
-                            DropdownMenuItem({ Text("Kunci sekarang") }, { moreMenu = false; vm.lockNow() })
-                        }
-                        Hairline()
-                        DropdownMenuItem({ Text("Pengaturan") }, { moreMenu = false; vm.go(Screen.Settings) })
-                    }
-                }
-            }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val searchVisible = searchOpen || vm.query.isNotEmpty()
+    LaunchedEffect(vm.searchFocusTick) { if (vm.searchFocusTick > 0) searchOpen = true }
+    LaunchedEffect(searchOpen, vm.searchFocusTick) {
+        if (searchOpen) { kotlinx.coroutines.delay(60); runCatching { searchFocus.requestFocus() } }
+    }
+    fun closeSearch() { searchOpen = false; vm.updateQuery("") }
+    androidx.activity.compose.BackHandler(searchVisible) { closeSearch() }
+    val dark = vm.themeMode.isDark()
+    val dateLine = remember { java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMMM", ID).format(java.time.LocalDate.now()).replaceFirstChar { it.titlecase(ID) } }
 
+    Scaffold(snackbarHost = { Notices(snack) }) { pad ->
+        Box(Modifier.padding(pad).fillMaxSize().imePadding()) {
             val today = vm.today
             val showToday = view == NoteView.All && !searching && vm.tagFilter == null && !vm.askActive && (today.isNotEmpty() || vm.openTaskCount > 0)
             val split = !searching && shown.any { it.pinned } && shown.any { !it.pinned }
             val (pinned, rest) = remember(shown, split) { if (split) shown.partition { it.pinned } else shown to emptyList() }
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 128.dp)) {
+                item(key = "header", contentType = "header") {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(start = Gutter, end = 6.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(dateLine, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = accent)
+                            if (view == NoteView.Vault) TextAction("Kunci") { vm.lockVault() }
+                            IconAction(if (dark) AppIcons.Sun else AppIcons.Moon, if (dark) "Ganti ke tema terang" else "Ganti ke tema gelap") {
+                                vm.updateThemeMode(if (dark) ThemeMode.Light else ThemeMode.Dark)
+                            }
+                            Box {
+                                IconAction(AppIcons.More, "Menu") { moreMenu = true }
+                    Menu(moreMenu, { moreMenu = false }) {
+                                SectionLabel("Urutkan", Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
+                                Sort.entries.forEach { s ->
+                                    DropdownMenuItem(
+                                        { Text(s.label) }, { vm.updateSort(s); moreMenu = false },
+                                        trailingIcon = { if (vm.sort == s) Icon(AppIcons.Check, "Dipilih", Modifier.size(18.dp)) },
+                                    )
+                                }
+                                Hairline()
+                                DropdownMenuItem({ Text("Tugas terbuka") }, { moreMenu = false; vm.askOpenTasks() })
+                                DropdownMenuItem({ Text("Ringkasan mingguan") }, { moreMenu = false; vm.askRecap() })
+                                if (hasModel) DropdownMenuItem(
+                                    { Text("Lengkapi metadata") }, { moreMenu = false; confirmOrganize = true },
+                                    enabled = vm.batch == null && vm.organizableCount > 0,
+                                )
+                                if (view is NoteView.Folder) {
+                                    Hairline()
+                                    DropdownMenuItem({ Text("Ubah nama folder") }, { moreMenu = false; renameFolderTarget = view.name })
+                                    DropdownMenuItem({ Text("Hapus folder") }, { moreMenu = false; dissolveFolderTarget = view.name })
+                                }
+                                if (view == NoteView.Trash) DropdownMenuItem({ Text("Kosongkan Sampah") }, { moreMenu = false; confirmEmpty = true }, enabled = vm.trashCount > 0)
+                                if (vm.lockEnabled) {
+                                    Hairline()
+                                    DropdownMenuItem({ Text("Kunci sekarang") }, { moreMenu = false; vm.lockNow() })
+                                }
+                                Hairline()
+                                DropdownMenuItem({ Text("Pengaturan") }, { moreMenu = false; vm.go(Screen.Settings) })
+                            }
+                            }
+                        }
+                        Box(Modifier.padding(start = Gutter - 4.dp, end = Gutter)) {
+                            Row(
+                                Modifier.clip(SmallShape).clickable(role = Role.Button, onClickLabel = "Ganti tampilan") { viewMenu = true }.padding(horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    when (view) {
+                                        NoteView.All -> "Catatan"
+                                        is NoteView.Folder -> view.name
+                                        NoteView.Reminders -> "Pengingat"
+                                        NoteView.Archive -> "Arsip"
+                                        NoteView.Trash -> "Sampah"
+                                        NoteView.Vault -> "Brankas"
+                                    },
+                                    Modifier.weight(1f, fill = false), style = MaterialTheme.typography.headlineLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                                Icon(AppIcons.ChevronDown, null, Modifier.padding(start = 6.dp, top = 6.dp).size(20.dp), muted)
+                            }
+                            Menu(viewMenu, { viewMenu = false }) {
+                                fun pick(v: NoteView) { vm.switchView(v); viewMenu = false }
+                                DropdownMenuItem({ Text("Semua catatan") }, { pick(NoteView.All) })
+                                vm.folders.forEach { f ->
+                                    DropdownMenuItem({ Text(f) }, { pick(NoteView.Folder(f)) })
+                                }
+                                Hairline()
+                                DropdownMenuItem({ Text("Pengingat" + if (vm.reminderCount > 0) " (${vm.reminderCount})" else "") }, { pick(NoteView.Reminders) })
+                                DropdownMenuItem({ Text("Arsip") }, { pick(NoteView.Archive) })
+                                DropdownMenuItem({ Text("Sampah" + if (vm.trashCount > 0) " (${vm.trashCount})" else "") }, { pick(NoteView.Trash) })
+                                Hairline()
+                                DropdownMenuItem(
+                                    { Text("Brankas" + if (vm.vaultCount > 0) " (${vm.vaultCount})" else "") },
+                                    { viewMenu = false; vm.requestOpenVault() },
+                                )
+                            }
+                        }
+                        val summary = when (view) {
+                            NoteView.Trash -> "Dihapus permanen setelah 30 hari"
+                            NoteView.Vault -> "${shown.size} catatan · terenkripsi"
+                            else -> listOfNotNull(
+                                "${shown.size} catatan",
+                                today.size.takeIf { it > 0 && view == NoteView.All }?.let { "$it pengingat hari ini" },
+                            ).joinToString(" · ")
+                        }
+                        Muted(summary, Modifier.padding(start = Gutter, end = Gutter, top = 6.dp, bottom = 14.dp), MaterialTheme.typography.bodyMedium)
+                        val tags = vm.allTags
+                        if (tags.isNotEmpty() && view != NoteView.Trash && view != NoteView.Vault) LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(bottom = 10.dp),
+                        ) {
+                            items(tags, key = { it }) { t ->
+                                val on = vm.tagFilter == t
+                                Box(
+                                    Modifier.heightIn(min = 36.dp).clip(PillShape)
+                                        .background(if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceContainer)
+                                        .clickable(role = Role.Button) { vm.tagFilter = if (on) null else t }.padding(horizontal = 14.dp),
+                                    Alignment.Center,
+                                ) {
+                                    Text("#$t", style = MaterialTheme.typography.labelLarge, color = if (on) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface)
+                                }
+                            }
+                        }
+                    }
+                }
                 if (vm.askActive) item(key = "ask", contentType = "ask") { AnswerBlock(vm, aiState is AiState.Loading) }
                 if (vm.aiTerms.isNotEmpty()) item(key = "terms") { Muted("Juga mencari: " + vm.aiTerms.joinToString(", "), Modifier.padding(horizontal = Gutter, vertical = 4.dp)) }
                 vm.batch?.let { (done, total) ->
@@ -261,8 +241,6 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                 }
                 if (showToday) item(key = "today", contentType = "today") { TodayBlock(vm, today) }
-                if (view == NoteView.Trash) item(key = "trash-note") { Muted("Dihapus permanen setelah 30 hari", Modifier.padding(start = Gutter, end = Gutter, bottom = 8.dp)) }
-                if (view == NoteView.Vault) item(key = "vault-note") { Muted("Terenkripsi", Modifier.padding(start = Gutter, end = Gutter, bottom = 8.dp)) }
 
                 when {
                     !vm.loaded -> item(key = "loading") { Skeleton() }
@@ -290,6 +268,65 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                                 Box(Modifier.animateItem(fadeInSpec = tween(180), placementSpec = tween(220), fadeOutSpec = tween(120))) { NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n }) }
                             }
                         }
+                    }
+                }
+            }
+
+            // ---------- Dok mengambang ----------
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AnimatedVisibility(
+                    searchVisible,
+                    enter = fadeIn(tween(160)) + expandVertically(tween(200), expandFrom = Alignment.Bottom),
+                    exit = fadeOut(tween(120)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Bottom),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val offerAgent = isCommand || (hasModel && view != NoteView.Vault && vm.query.trim().split(WORDS).size >= 3)
+                        if (searching && view != NoteView.Trash && view != NoteView.Vault && (hasModel || isCommand)) Row(
+                            Modifier.clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 6.dp),
+                        ) {
+                            if (offerAgent) TextAction("Jalankan") { vm.startAgent(vm.query) }
+                            if (hasModel) {
+                                TextAction("Tanyakan") { vm.ask(vm.query) }
+                                if (vm.aiTerms.isEmpty()) TextAction(if (vm.aiBusy) "Memperluas…" else "Perluas", enabled = !vm.aiBusy, onClick = vm::expandQueryWithAi)
+                            }
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().height(52.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(start = 18.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(AppIcons.Search, null, Modifier.size(18.dp), muted)
+                            Spacer(Modifier.width(10.dp))
+                            PlainField(
+                                vm.query, vm::updateQuery,
+                                if (view == NoteView.Vault) "Cari di Brankas" else "Cari atau beri perintah",
+                                Modifier.weight(1f).focusRequester(searchFocus), ime = ImeAction.Search,
+                            ) {
+                                if (isCommand && steps.none { it is AgentStep.Trash || it is AgentStep.Archive }) vm.startAgent(vm.query)
+                            }
+                            IconAction(AppIcons.Close, "Tutup pencarian", muted, 18.dp) { closeSearch() }
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.weight(1f).height(60.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceAround,
+                    ) {
+                        val activeBg = if (dark) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerLowest
+                        DockItem(AppIcons.Notes, "Semua catatan", view == NoteView.All && !searchVisible, activeBg) { closeSearch(); vm.switchView(NoteView.All) }
+                        DockItem(AppIcons.Search, "Cari", searchVisible, activeBg) { if (searchVisible) closeSearch() else searchOpen = true }
+                        DockItem(AppIcons.Bell, "Pengingat", view == NoteView.Reminders && !searchVisible, activeBg) { closeSearch(); vm.switchView(NoteView.Reminders) }
+                        DockItem(AppIcons.Sliders, "Pengaturan", false, activeBg) { closeSearch(); vm.go(Screen.Settings) }
+                    }
+                    if (canCreate) {
+                        Spacer(Modifier.width(10.dp))
+                        Box(
+                            Modifier.size(60.dp).clip(CircleShape).background(accent).clickable(role = Role.Button, onClickLabel = "Catatan baru") { vm.open(null) },
+                            Alignment.Center,
+                        ) { Icon(AppIcons.Plus, "Catatan baru", Modifier.size(24.dp), MaterialTheme.colorScheme.onSecondary) }
                     }
                 }
             }
@@ -328,6 +365,15 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
 }
 
 @Composable
+private fun DockItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, activeBg: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    val bg by androidx.compose.animation.animateColorAsState(if (active) activeBg else androidx.compose.ui.graphics.Color.Transparent, tween(200), label = "dok")
+    Box(
+        Modifier.size(width = 60.dp, height = 46.dp).clip(PillShape).background(bg).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+        Alignment.Center,
+    ) { Icon(icon, label, Modifier.size(21.dp), if (active) MaterialTheme.colorScheme.onSurface else muted) }
+}
+
+@Composable
 private fun Skeleton() = Column(Modifier.padding(horizontal = Gutter, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
     repeat(5) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -344,42 +390,43 @@ private fun EmptyState(text: Pair<String, String?>) = Column(Modifier.fillMaxWid
 }
 
 @Composable
-private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fillMaxWidth().animateContentSize(tween(220))) {
+private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(
+    Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp).fillMaxWidth().clip(GroupShape)
+        .background(MaterialTheme.colorScheme.surfaceContainer).animateContentSize(tween(220)),
+) {
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::toggleToday).heightIn(min = 48.dp).padding(horizontal = Gutter),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::toggleToday).heightIn(min = 52.dp).padding(start = 18.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Hari ini", style = MaterialTheme.typography.labelLarge, color = timeColor)
+        Text("Hari ini", style = MaterialTheme.typography.titleSmall, color = timeColor)
         Muted(
-            "  ·  " + listOfNotNull(
+            "   " + listOfNotNull(
                 due.size.takeIf { it > 0 }?.let { "$it pengingat" }, vm.openTaskCount.takeIf { it > 0 }?.let { "$it tugas" },
-            ).joinToString(", "),
-            Modifier.weight(1f), MaterialTheme.typography.labelLarge,
+            ).joinToString(" · "),
+            Modifier.weight(1f), MaterialTheme.typography.bodyMedium,
         )
         Icon(if (vm.todayOpen) AppIcons.ChevronUp else AppIcons.ChevronDown, if (vm.todayOpen) "Lipat Hari ini" else "Buka Hari ini", Modifier.size(18.dp), muted)
     }
     if (vm.todayOpen) {
         due.forEach { n ->
-            Row(Modifier.fillMaxWidth().clickable { vm.open(n) }.padding(start = Gutter, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
-                    Text(n.heading.take(80).ifBlank { "(tanpa judul)" }, style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        (if (n.remindFired) "Terlewat · " else "") + whenLabel(n.remindAt), style = MaterialTheme.typography.labelSmall,
-                        color = if (n.remindFired) MaterialTheme.colorScheme.error else timeColor,
-                    )
-                }
+            Row(Modifier.fillMaxWidth().clickable { vm.open(n) }.padding(start = 18.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(n.heading.take(80).ifBlank { "(tanpa judul)" }, Modifier.weight(1f).padding(vertical = 12.dp), style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (n.remindFired) "Terlewat" else whenLabel(n.remindAt), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelMedium,
+                    color = if (n.remindFired) MaterialTheme.colorScheme.error else timeColor,
+                )
                 if (n.remindFired) TextAction("Selesai") { vm.finishReminder(n) }
             }
         }
         if (vm.openTaskCount > 0) Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::askOpenTasks).heightIn(min = 48.dp).padding(horizontal = Gutter),
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::askOpenTasks).heightIn(min = 48.dp).padding(start = 18.dp, end = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("${vm.openTaskCount} tugas terbuka", Modifier.weight(1f), style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface)
             Icon(AppIcons.ChevronRight, "Lihat tugas", Modifier.size(18.dp), muted)
         }
+        Spacer(Modifier.height(6.dp))
     }
-    Hairline(Modifier.padding(top = 4.dp))
 }
 
 @Composable
@@ -470,12 +517,12 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
         val lines = n.body.take(400).lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.take(4).toList()
         n.heading to (if (n.title.isBlank()) lines.drop(1) else lines).joinToString(" ")
     }
-    val meta = remember(n, view) {
-        listOfNotNull(
-            if (n.archived && !n.inTrash && view != NoteView.Archive) "Arsip" else null,
-            if (view !is NoteView.Folder && n.folder.isNotBlank()) n.folder else null,
-            shortDate(n.updated),
-        ).joinToString("  ·  ")
+    val time = remember(n.remindAt, n.remindFired, n.updated, n.inTrash) {
+        when {
+            n.hasReminder && !n.inTrash && n.remindFired -> "Terlewat"
+            n.hasReminder && !n.inTrash -> whenLabel(n.remindAt).removePrefix("Hari ini ")
+            else -> shortDate(n.updated)
+        }
     }
     val canSwipe = !n.inTrash && !n.vault
     Box {
@@ -484,29 +531,22 @@ private fun NoteRow(vm: AppViewModel, n: Note, view: NoteView, onMoveFolder: () 
             endLabel = if (!canSwipe) null else if (n.hasReminder) "Ubah pengingat" else "Ingatkan",
             onStart = { vm.toggleArchive(n) }, onEnd = { vm.openReminder(n) },
         ) {
-            Column(
+            Row(
                 Modifier.fillMaxWidth().combinedClickable(onClick = { vm.open(n) }, onLongClick = { menu = true }, onLongClickLabel = "Aksi cepat")
-                    .padding(horizontal = Gutter).padding(top = 14.dp),
+                    .padding(horizontal = Gutter, vertical = 12.dp),
+                verticalAlignment = Alignment.Top,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title.ifBlank { "(kosong)" }, Modifier.weight(1f), style = NoteType.rowTitle, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (n.pinned) Icon(AppIcons.PinFilled, "Disematkan", Modifier.padding(start = 8.dp).size(13.dp), muted)
-                }
-                if (snippet.isNotBlank()) Text(snippet, Modifier.padding(top = 3.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, style = NoteType.rowSnippet, color = muted)
-                Row(Modifier.padding(top = 6.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (n.hasReminder && !n.inTrash) {
-                        val tint = if (n.remindFired) MaterialTheme.colorScheme.error else timeColor
-                        val remLabel = remember(n.remindAt, n.remindRepeat, n.remindFired) {
-                            " " + (if (n.remindFired) "Terlewat · " else "") + whenLabel(n.remindAt) +
-                                if (n.remindRepeat != Repeat.None) ", ${n.remindRepeat.label.lowercase()}" else ""
-                        }
-                        Icon(AppIcons.Bell, null, Modifier.size(12.dp), tint)
-                        Text(remLabel, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
-                        Text("  ·  ", style = MaterialTheme.typography.labelSmall, color = muted)
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(title.ifBlank { "(kosong)" }, Modifier.weight(1f, fill = false), style = NoteType.rowTitle.copy(fontSize = 17.sp, lineHeight = 23.sp), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (n.pinned) Icon(AppIcons.PinFilled, "Disematkan", Modifier.padding(start = 6.dp).size(12.dp), muted)
                     }
-                    Text(meta, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (snippet.isNotBlank()) Text(snippet, Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = NoteType.rowSnippet, color = muted)
                 }
-                Hairline()
+                Text(
+                    time, Modifier.padding(start = 12.dp, top = 3.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1,
+                    color = when { n.hasReminder && !n.inTrash && n.remindFired -> MaterialTheme.colorScheme.error; n.hasReminder && !n.inTrash -> timeColor; else -> muted },
+                )
             }
         }
         Menu(menu, { menu = false }) {
