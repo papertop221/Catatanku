@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -320,9 +321,11 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
                 Hairline()
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 8.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
+                    Modifier.fillMaxWidth().padding(start = 4.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                  Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                    if (!d.inTrash) Tool(AppIcons.Template, "Templat", onClick = vm::openTemplates)
                     Box {
                         Tool(AppIcons.TextFormat, "Format teks") { formatMenu = true }
                         Menu(formatMenu, { formatMenu = false }) {
@@ -358,7 +361,8 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }
                     }
                     if (!d.vault) Tool(AppIcons.Folder, "Pindahkan ke folder") { folderDialog = true }
-                    Spacer(Modifier.weight(1f))
+                  }
+                    Spacer(Modifier.width(4.dp))
                     TextAction(if (vm.aiBusy) "Bekerja…" else "Asisten") {
                         val sel = bodyField.selection
                         vm.aiSelection = if (!sel.collapsed && sel.max <= d.body.length) sel.min until sel.max else null
@@ -394,7 +398,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                         }, enabled = !d.isBlank)
                         DropdownMenuItem({ Text("Salin") }, { menu = false; copyText(ctx, plain); vm.say("Teks disalin.") }, enabled = !d.isBlank)
                         DropdownMenuItem({ Text("Cari & ganti") }, { menu = false; findOpen = true }, enabled = !d.isBlank)
-                        DropdownMenuItem({ Text("Templat") }, { menu = false; vm.openTemplates() }, enabled = !d.inTrash)
                         DropdownMenuItem({ Text("Simpan sebagai templat") }, { menu = false; askTemplateName = true }, enabled = d.body.isNotBlank())
                         DropdownMenuItem({ Text("Gandakan") }, { menu = false; vm.duplicateDraft() }, enabled = !d.isBlank && !d.inTrash)
                         if (!d.vault) {
@@ -496,7 +499,6 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     visualTransformation = bodyVisual,
                     decorationBox = { inner -> Box { if (bodyField.text.isEmpty()) Text("Tulis sesuatu", style = NoteType.body, color = muted); inner() } },
                 )
-                if (d.body.isBlank() && !d.inTrash) TextAction("Mulai dari templat", Modifier.padding(top = 4.dp), color = accent, onClick = vm::openTemplates)
                 if (vm.canUndoAi) TextAction("Urungkan perubahan asisten", Modifier.padding(top = 4.dp), onClick = vm::undoAiChange)
                 if (d.body.length > AiText.maxInput && hasModel) Muted(
                     "Catatan panjang: sebagian aksi asisten membaca ±${AiText.maxInput} huruf pertama.",

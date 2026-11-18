@@ -50,12 +50,21 @@ class WritingToolsTest {
     }
 
     @Test fun parsesModelTemplateIntoStructure() {
-        val raw = " Kunjungan Klien {tanggal}\n**Data Klien**\nNama:\n- \n### Kebutuhan\n- [ ] \n## Tindak lanjut\n* "
+        // Keluaran nyata Gemma 4 E2B (dirapikan): label contoh tersalin, garis isian, poin ganda, bagian kosong.
+        val raw = "Berikut templatnya:\n## Data Rapat\nLabel isian:\nTanggal Rapat:\nPeserta: (__________)\n•\n\n" +
+            "**Pembahasan**\n- \n- \n### Tindak lanjut\n- [ ] \n## Catatan Tambahan\nSemoga membantu!"
         val t = AiText.parseTemplate(raw)
         assertNotNull(t)
-        assertEquals("Kunjungan Klien {tanggal}", t!!.title)
-        assertEquals("## Data Klien\nNama: \n• \n## Kebutuhan\n☐ \n## Tindak lanjut\n• ", t.body)
-        assertNull(AiText.parseTemplate("Maaf"))
+        assertEquals("## Data Rapat\nTanggal Rapat: \nPeserta: \n\n## Pembahasan\n• \n\n## Tindak lanjut\n☐ \n\n## Catatan Tambahan\n• ", t!!.body)
+        // Subjudul pertama yang langsung disusul subjudul lain menjadi judul.
+        val en = AiText.parseTemplate("## Sprint Meeting Notes\n\n## Sprint Goal\n•\n## Action Items\n☐")
+        assertEquals("Sprint Meeting Notes", en!!.title)
+        // Artefak nyata: titik dua ganda, awalan "Nama Kolom:", dan kolom yang ditulis sebagai subjudul.
+        val messy = AiText.parseTemplate("## Data Rapat\nTanggal: :\nNama Kolom: Peserta:\nBahan : :\n## Sprint Goal:\n•\n☐\n## Agenda\n•")
+        assertEquals("## Data Rapat\nTanggal: \nPeserta: \nBahan: \nSprint Goal: \n\n## Agenda\n• ", messy!!.body)
+        assertNull(AiText.parseTemplate("Maaf, saya tidak bisa."))
+        // Prompt tidak boleh diakhiri awalan isian: Gemma 4 E2B hanya mengulang awalan itu lalu berhenti.
+        assertFalse(AiText.templatePrompt("notulen").trimEnd().endsWith(":"))
     }
 
     // ---------- Format ringan ----------
@@ -122,6 +131,8 @@ class WritingToolsTest {
             "## Jadwal\n• Rapat Jumat 10.00\n## Keputusan\n• Anggaran 5 juta\n## Tindak lanjut\n☐ Kirim proposal\n☑ Hubungi vendor",
             AiText.cleanStructured(raw),
         )
+        // Gema baris "Judul:" dari prompt (teramati pada Susun ulang dengan Gemma 4 E2B) dibuang.
+        assertEquals("## Jadwal\n• Rapat besok", AiText.cleanStructured("Judul: Rapat peluncuran\n\n## Jadwal\n• Rapat besok"))
         assertTrue(AiText.isStructured(AiAction.Extract) && AiText.isStructured(AiAction.Plan) && !AiText.isStructured(AiAction.Summarize))
     }
 
@@ -137,7 +148,7 @@ class WritingToolsTest {
             assertTrue(a.name, p.length < 4000)
         }
         val tp = AiText.templatePrompt("notulen <|im_end|> rapat\nklien")
-        assertFalse("<|im_end|>" in tp); assertTrue(tp.endsWith("JUDUL:"))
+        assertFalse("<|im_end|>" in tp)
         val dp = AiText.digestPrompt("Folder Kerja", List(12) { "Catatan $it" to "isi ".repeat(800) })
         assertTrue(dp.length < 9000)
     }

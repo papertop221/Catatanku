@@ -386,9 +386,8 @@ internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean,
                     }
                     TextAction("Pakai seluruh catatan", Modifier.padding(top = 4.dp)) { vm.aiSelection = null }
                 } else {
-                    ActionRow("Templat", true, "Bawaan, buatan asisten, milik saya") { vm.aiSheet = false; vm.openTemplates() }
                     if (!hasModel) NoModel(vm)
-                    else if (vm.draft.body.isBlank()) Muted("Tulis isi catatan, atau mulai dari templat.", Modifier.padding(top = 6.dp), MaterialTheme.typography.bodyMedium)
+                    else if (vm.draft.body.isBlank()) Muted("Tulis isi catatan dulu, atau pakai Templat di bilah alat.", Modifier.padding(top = 6.dp), MaterialTheme.typography.bodyMedium)
                     Group("Tulis") {
                         ActionRow(AiAction.Continue.label, canRun) { vm.runAi(AiAction.Continue) }
                         ActionRow(AiAction.Title.label, canRun) { vm.runAi(AiAction.Title) }

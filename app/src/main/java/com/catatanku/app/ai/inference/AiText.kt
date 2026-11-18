@@ -191,7 +191,9 @@ object AiText {
      * menjadi subjudul, "- [ ]" menjadi "☐ ", "- [x]" menjadi "☑ ", dan poin "-"/"*" menjadi "• ".
      */
     fun cleanStructured(raw: String): String =
-        strip(raw).removePrefix("```").removeSuffix("```").lines().joinToString("\n") { line ->
+        // Model kadang menggemakan baris "Judul: …" dari prompt di awal hasil; buang hanya bila di baris pertama.
+        strip(raw).removePrefix("```").removeSuffix("```").trim().let { t -> if (t.startsWith("Judul:", ignoreCase = true)) t.substringAfter('\n', "") else t }
+            .lines().joinToString("\n") { line ->
             var t = line.trim()
             when {
                 t.startsWith("#") -> t = "## " + t.trimStart('#').trim().trim('*').trim()
@@ -221,31 +223,79 @@ object AiText {
 
     // ---------- Templat buatan asisten ----------
 
+    /**
+     * Prompt templat. Sengaja TIDAK diakhiri awalan seperti "JUDUL:": di Gemma 4 E2B, prompt yang berakhir dengan awalan
+     * membuat model hanya mengulang awalan itu lalu berhenti (teruji di desktop dengan litertlm-jvm). Judul diisi kode.
+     */
     fun templatePrompt(description: String): String =
-        "Buat templat catatan KOSONG yang siap diisi untuk keperluan: \"${sanitizeInput(description).replace('\n', ' ').take(160)}\".\n" +
+        "Buat kerangka templat catatan KOSONG yang siap diisi untuk keperluan: \"${sanitizeInput(description).replace('\n', ' ').take(160)}\".\n\n" +
+            "Ikuti bentuk ini (ganti kata dalam kurung siku dengan isi yang sesuai keperluan):\n" +
+            "## [Nama bagian]\n[Nama kolom]: \n• \n☐ \n\n" +
             "Aturan:\n" +
-            "1. Baris pertama: JUDUL: diikuti judul singkat untuk catatan baru (boleh memuat {tanggal}).\n" +
-            "2. Lalu kerangka catatan berisi 3 sampai 7 bagian yang paling berguna dan lazim dipakai secara profesional untuk keperluan itu, " +
-            "masing-masing subjudul diawali \"## \".\n" +
-            "3. Di bawah tiap subjudul pakai kolom isian \"Label: \" yang dibiarkan kosong, poin \"• \" kosong, atau \"☐ \" kosong untuk tugas.\n" +
-            "4. JANGAN mengisi contoh data, nama, tanggal, atau angka. Jangan menulis penjelasan.\n" +
-            "Gunakan bahasa deskripsinya. Tulis HANYA templatnya.\n\nJUDUL:"
+            "- Buat 3 sampai 6 bagian yang paling berguna dan lazim dipakai secara profesional untuk keperluan itu; tiap bagian diawali \"## \".\n" +
+            "- Isi tiap bagian dengan SALAH SATU: beberapa kolom isian singkat berakhiran titik dua (dibiarkan kosong), satu poin \"• \" kosong, atau satu \"☐ \" kosong untuk tugas.\n" +
+            "- JANGAN mengisi contoh data, nama, tanggal, atau angka. Jangan menulis kalimat pembuka, penutup, atau penjelasan.\n" +
+            "- Gunakan bahasa yang sama dengan deskripsi."
 
     data class ParsedTemplate(val title: String, val body: String)
 
+    private val PLACEHOLDER_PREFIX = Regex("^\\[?(?:Nama kolom|Nama bagian|Label isian|Label)]?:\\s*(?=\\S)", RegexOption.IGNORE_CASE)
+    private val NUMBERED_HEADING = Regex("^\\d{1,2}[.)]\\s+([^:•☐]{2,60})$")
+
+    /**
+     * Mengurai keluaran model menjadi kerangka templat. Toleran terhadap variasi: subjudul Markdown/tebal/bernomor,
+     * poin "-"/"*", "- [ ]", dan baris pembuka/penutup yang tidak diminta (dibuang).
+     */
     fun parseTemplate(raw: String): ParsedTemplate? {
-        var t = strip(raw).trim()
-        if (t.startsWith("JUDUL:", ignoreCase = true)) t = t.substring(6)
-        val nl = t.indexOf('\n')
-        val title = cleanLine(if (nl < 0) t else t.substring(0, nl)).take(80)
-        val body = cleanStructured(if (nl < 0) "" else t.substring(nl + 1)).lines().joinToString("\n") { l ->
-            when {
+        val lines = cleanStructured(raw).lines().map { it.trimEnd() }
+        val out = ArrayList<String>()
+        for (l0 in lines) {
+            var l = l0.trim()
+            if (l.startsWith("JUDUL:", ignoreCase = true) || l.startsWith("TEMPLAT", ignoreCase = true)) continue
+            NUMBERED_HEADING.find(l)?.let { l = "## " + it.groupValues[1].trim() }
+            // Artefak yang teramati pada Gemma 4 E2B: "Tanggal: :", "Nama Kolom: Tanggal:", dan kolom yang ditulis sebagai subjudul ("## Tanggal:").
+            l = l.replace(PLACEHOLDER_PREFIX, "").replace(Regex("\\s*:(\\s*:)+"), ":").replace(Regex("\\s+:"), ":")
+            if (l.startsWith("## ") && l.endsWith(":")) l = l.removePrefix("## ").trim()
+            l = when {
                 l == "•" || l == "☐" -> "$l "
-                l.endsWith(":") && !l.startsWith("## ") -> "$l "
+                l.endsWith(":") && !l.startsWith("## ") && l.length <= 60 -> "$l "
                 else -> l
             }
-        }.trim('\n')
-        if (body.length < 8 || !(body.contains("## ") || body.contains("• ") || body.contains("☐") || body.contains(": "))) return null
+            out += l
+        }
+        // Buang kalimat pengantar sebelum bagian pertama dan penutup sesudah baris struktur terakhir.
+        // Rapikan kebiasaan model kecil: label contoh yang tersalin, garis isian "____", poin kosong ganda,
+        // dan poin kosong tepat di bawah kolom isian (kolomnya sudah menjadi tempat mengisi).
+        val tidy = ArrayList<String>()
+        for (x in out) {
+            val l = x.replace(Regex("_{2,}"), "").replace(Regex("\\(\\s*\\)"), "").replace(Regex("\\s{2,}"), " ")
+                .let { if (it.endsWith(": ")) it else it.trimEnd() }.let { if (it == "•" || it == "☐") "$it " else it }
+            if (l.equals("Label isian: ", ignoreCase = true) || l.equals("Label: ", ignoreCase = true) || '[' in l && ']' in l && l.contains("Nama", ignoreCase = true)) continue
+            val prev = tidy.lastOrNull()
+            val emptyPoint = l == "• " || l == "☐ "
+            if (emptyPoint && prev != null && (prev == l || prev.endsWith(": "))) continue
+            tidy += l
+        }
+        out.clear(); out.addAll(tidy)
+        // Mulai dari subjudul pertama bila ada, agar kalimat pengantar berakhiran titik dua ("Berikut templatnya:") terbuang.
+        val firstHeading = out.indexOfFirst { it.startsWith("## ") }
+        val first = if (firstHeading >= 0) firstHeading else out.indexOfFirst { it.startsWith("• ") || it.startsWith("☐") || it.endsWith(": ") }
+        if (first < 0) return null
+        val last = out.indexOfLast { it.startsWith("## ") || it.startsWith("• ") || it.startsWith("☐") || it.endsWith(": ") }
+        val core = out.subList(first, last + 1).filter { it.isNotBlank() }.toMutableList()
+        // Subjudul pertama yang langsung disusul subjudul lain adalah judul dokumen, bukan bagian.
+        var title = ""
+        if (core.size > 1 && core[0].startsWith("## ") && core[1].startsWith("## ")) title = cleanLine(core.removeAt(0).removePrefix("## ")).take(80)
+        // Bagian tanpa isi diberi satu poin kosong agar siap diisi.
+        val filled = ArrayList<String>()
+        core.forEachIndexed { i, l ->
+            if (l.startsWith("## ") && filled.isNotEmpty()) filled += ""
+            filled += l
+            if (l.startsWith("## ") && (i == core.lastIndex || core[i + 1].startsWith("## "))) filled += "• "
+        }
+        val body = filled.joinToString("\n").trim('\n')
+        val sections = body.lines().count { it.startsWith("## ") }
+        if (body.length < 8 || (sections == 0 && body.lines().size < 3)) return null
         return ParsedTemplate(title, body)
     }
 

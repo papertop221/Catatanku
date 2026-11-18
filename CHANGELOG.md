@@ -18,6 +18,7 @@ Tampilan ringkas & rapi
 
 Fitur dasar catatan
 - **Templat**: 8 templat bawaan yang profesional (Notulen rapat, Rencana proyek, Laporan kerja, Jurnal harian, Catatan belajar, Brief klien, Daftar belanja, Evaluasi); tanggal, hari, dan jam diisi oleh kode saat dipakai. Bisa dipakai dari catatan kosong ("Mulai dari templat"), menu catatan, atau lembar Asisten
+- Tombol **Templat** ada di bilah alat editor (paling kiri), satu-satunya pintu masuk templat
 - **Templat buatan asisten**: deskripsikan keperluannya (mis. "laporan kunjungan klien") di catatan yang masih kosong; asisten menyusun kerangka tanpa data contoh, lalu bisa dipakai atau disimpan ke **Templat saya** (tersimpan terenkripsi AES-256-GCM dengan kunci Keystore). Catatan yang ada juga bisa disimpan sebagai templat
 - **Pilih banyak**: tekan lama catatan, lalu sematkan, arsipkan, pindah folder, beri tag, hapus, pulihkan, atau hapus permanen sekaligus dalam satu transaksi SQLite, dengan Urungkan
 - **Format ringan**: subjudul (`## `), tebal (`**…**`), miring (`_…_`), dan kutipan (`> `) tampil rapi langsung di editor lewat tombol Format; penanda tetap terlihat redup sehingga teks tetap portabel
@@ -30,6 +31,10 @@ Asisten yang lebih dalam
 - **Aksi pada teks terpilih**: pilih sebagian teks lalu jalankan aksi; hasilnya menggantikan atau disisipkan di bawah bagian itu saja
 - **Susun ulang** kini memakai subjudul, dan hasil asisten tampil dengan format yang sama seperti di catatan
 - **Ringkas tampilan ini**: ringkasan lintas catatan untuk folder, tag, hasil cari, atau tampilan yang dibuka, bernomor sumber; bisa disimpan sebagai catatan baru lengkap dengan tautan ke sumbernya. Ringkasan mingguan memakai alur yang sama
+
+Perbaikan sebelum rilis
+- Templat buatan asisten selalu gagal ("tidak menghasilkan templat yang rapi"): prompt yang diakhiri `JUDUL:` membuat Gemma 4 E2B hanya mengulang awalan itu lalu berhenti. Prompt ditulis ulang tanpa awalan penutup (judul diisi kode), dan pengurai kini membuang kalimat pengantar, label contoh yang tersalin, titik dua ganda, garis isian `____`, serta poin kosong ganda. Diuji dengan model sungguhan (`litertlm-jvm` 0.19.1, Gemma 4 E2B, CPU) pada deskripsi Indonesia dan Inggris
+- Susun ulang tidak lagi menggemakan baris "Judul:" dari prompt
 
 Penghapusan pencarian semantik
 - Model embedding, pencarian hibrida, dan pengaturannya dihapus; pencarian kembali murni TF-IDF + trigram (instan, tanpa model)
