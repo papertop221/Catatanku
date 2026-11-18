@@ -226,7 +226,8 @@ fun EditorScreen(vm: AppViewModel, snack: SnackbarHostState) {
             prevNoteId = d.id
             scroll.scrollTo(0)
         }
-        if (d.id == 0L && d.isBlank) {
+        // Saat layar editor sedang memudar keluar (animasi), jangan memunculkan papan ketik lagi.
+        if (d.id == 0L && d.isBlank && vm.screen == com.catatanku.app.domain.model.Screen.Editor) {
             runCatching { bodyFocus.requestFocus() }
         }
     }

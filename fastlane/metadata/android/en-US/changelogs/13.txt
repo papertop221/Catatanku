@@ -1,4 +1,5 @@
-• Cleaner, more compact design: consistent spacing, one-line Settings rows, roomier list and editor
-• Icon-only editor toolbar with a single Assistant action
-• Standardised, more professional feature names
-• No changes to data, permissions, or behaviour
+• Fresh, compact design in both light and dark themes
+• Dashboard-style Settings: six categories with live status
+• System/Light/Dark theme choice plus a quick toggle in the top bar
+• Smooth screen transitions; standardised feature names
+• Semantic search removed; search stays instant without a model

@@ -262,7 +262,7 @@ class ProcessTextActivity : ComponentActivity() {
         val wipeOnFail = SecurityPrefs.isWipeAfterFailuresEnabled(this)
 
         setContent {
-            CatatankuTheme(dynamic, incognitoKeyboard = incognito) {
+            CatatankuTheme(dynamic, incognitoKeyboard = incognito, mode = com.catatanku.app.ui.ThemeMode.parse(prefs.getString("theme_mode", null))) {
                 if (!unlocked) {
                     LockScreen(
                         onUnlock = ::requestUnlock,

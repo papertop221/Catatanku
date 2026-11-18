@@ -52,7 +52,7 @@ Diperbarui 17 November 2026, mencakup penguatan keamanan & privasi ketat pada ca
 2. **Baseline Profile** dan pengukuran cold start dengan Macrobenchmark (butuh HP atau emulator).
 3. **Satu kalimat menjadi beberapa objek**: "besok jam 7 bayar listrik 250rb" → pengingat + tugas, lewat asisten perintah yang sudah ada.
 4. **Catatan suara** dengan transkripsi di perangkat (whisper.cpp atau Vosk; keduanya sumber terbuka).
-5. **Pencarian semantik** dengan model embedding kecil, sebagai pelengkap TF-IDF, bukan pengganti.
+5. ~~Pencarian semantik~~ — dihapus di 1.10 atas keputusan pemilik: menambah beban RAM dan pengaturan tanpa manfaat sepadan; TF-IDF + trigram tetap jadi mesin pencarian.
 6. **Pindahkan APK dari repositori ke GitHub Releases** agar riwayat git tidak membengkak ±25 MB tiap rilis (1.7.1 sudah hanya di GitHub Releases; `releases/Catatanku-1.7.apk` lama dibiarkan).
 
 ## Keputusan yang sudah diambil

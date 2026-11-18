@@ -97,6 +97,12 @@ abstract class Shots(private val suffix: String) {
         shot("09-jawaban")
         rule.runOnUiThread { vm.closeAsk(); vm.go(Screen.Settings) }
         shot("10-pengaturan-aktif")
+        // 1.10: halaman kategori dari dashboard Pengaturan
+        for ((i, sec) in listOf("Keamanan", "Privasi", "Cadangan", "Asisten", "Pengingat", "Tampilan").withIndex()) {
+            rule.runOnUiThread { vm.settingsSection = sec }
+            shot("10${'a' + i}-pengaturan-${sec.lowercase()}")
+        }
+        rule.runOnUiThread { vm.settingsSection = null }
 
         // ---- 1.4: pengingat, riwayat versi, rekap, kunci ----
         rule.runOnUiThread { vm.go(Screen.List); vm.view = NoteView.Reminders }

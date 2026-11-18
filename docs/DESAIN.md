@@ -23,6 +23,9 @@ Perubahan tampilan sebaiknya mengubah berkas ini dulu, baru kodenya.
 
 Tidak ada gradasi. Warna mengikuti wallpaper tersedia sebagai pilihan di Pengaturan (Android 12+), bukan bawaan.
 
+**Tema** (mulai 1.10): Sistem (bawaan), Terang, atau Gelap; dipilih di Pengaturan → Tampilan, dan bisa dibalik
+satu ketuk lewat ikon matahari/bulan di bilah atas daftar. Ikon bilah status ikut tema aplikasi.
+
 ## Huruf
 
 - **Isi catatan** (judul, isi, baris daftar): Atkinson Hyperlegible Next, satu berkas variabel (115 KB, lisensi OFL).
@@ -33,6 +36,8 @@ Tidak ada gradasi. Warna mengikuti wallpaper tersedia sebagai pilihan di Pengatu
 
 - Dua radius: 8 dp (tombol, kolom, chip) dan 16 dp (lembar bawah, dialog).
 - Daftar berupa baris datar dengan garis pemisah. Tidak ada kartu, bayangan, atau efek kaca.
+- Satu pengecualian: **petak dashboard Pengaturan** (mulai 1.10). Permukaan datar `surfaceContainer`, radius 16 dp,
+  tanpa bayangan dan tanpa garis; isinya hanya nama kategori dan satu baris status (merah bila perlu tindakan).
 - Sasaran sentuh minimal 44–48 dp.
 
 ## Jarak (mulai 1.10)
@@ -88,9 +93,19 @@ tanpa ikon pendamping. Satu-satunya ikon di tengah teks adalah lonceng kecil pad
 | Tanyakan · Perluas pencarian · Jalankan | Tanya catatan, Jalankan perintah |
 | Kunci otomatis · PIN aplikasi · Hapus setelah 10 kali gagal · Hapus semua data | (rincian keamanan) |
 | Lindungi layar · Keyboard privat · Bersihkan papan klip · Mode offline | Blokir tangkapan layar, Keyboard penyamaran, Hapus papan klip 30 dtk, Mode Offline Mutlak |
-| Model bahasa · Pencarian semantik · Kapasitas konteks · Kalibrasi kinerja | Model AI, Pencarian makna, Panjang bacaan, Penyesuaian kecepatan |
+| Model bahasa · Kapasitas konteks · Kalibrasi kinerja | Model AI, Panjang bacaan, Penyesuaian kecepatan |
 | Izin notifikasi · Alarm presisi · Optimasi baterai · Prioritas alarm · Diagnostik | (rincian pengingat) |
-| Warna dinamis | Warna mengikuti wallpaper |
+| Tema (Sistem · Terang · Gelap) · Warna dinamis | Warna mengikuti wallpaper |
+
+## Gerak (mulai 1.10)
+
+Gerak hanya untuk menjelaskan perpindahan, tidak sebagai hiasan. Pendek dan tenang: 120–260 ms.
+
+- Pindah layar (Daftar ↔ Editor ↔ Pengaturan, dashboard ↔ kategori): pudar masuk + geser sedikit (1/14 lebar)
+  ke arah tujuan; layar lama hanya memudar.
+- Baris catatan yang muncul, hilang, atau berpindah urutan bergerak ke tempatnya (`animateItem`).
+- Bagian yang dilipat (Hari ini, rincian Pengaturan, aksi pencarian) membuka dan menutup dengan halus.
+- Tidak ada animasi masuk per elemen, pantulan, atau gerak berulang.
 
 ## Keadaan yang harus selalu didesain
 

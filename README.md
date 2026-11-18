@@ -143,7 +143,7 @@ Pengaturan → Model AI → **Unduh**. Unduhan berjalan di latar, lanjut otomati
 Untuk HP dengan RAM terbatas (< 7 GB fisik, tidak menghitung swap/RAM Boost), profil **Hemat** (jendela konteks 2.048 token) aktif secara bawaan, dan `MemoryPolicy` melepas model secara adaptif tanpa memicu `System.gc()`.
 
 Semua berlisensi Apache-2.0 dari [litert-community](https://huggingface.co/litert-community) dan bisa diunduh tanpa login.
-Sudah punya berkas `.litertlm`? Pakai **Dari berkas** (juga mendukung model embedding lokal untuk pencarian semantik hibrida opsional).
+Sudah punya berkas `.litertlm`? Pakai **Berkas lokal** di Pengaturan → Asisten.
 
 ## Privasi
 
@@ -188,8 +188,8 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Uji unit JVM murni & benchmark pencarian | 59 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `HybridSearchTest` 3, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7) + 1 `PerfTest` berjalan di Termux |
-| Mesin pencarian & semantik hibrida, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten | Uji unit JVM otomatis |
+| Uji unit JVM murni & benchmark pencarian | 56 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7) + 1 `PerfTest` berjalan di Termux |
+| Mesin pencarian, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten | Uji unit JVM otomatis |
 | Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite | 23 uji Robolectric (`ReminderTest` 20, `Shots*` 3) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
 | Benchmark AI lokal pada perangkat (CPU sweep, GPU, MTP per-tugas, KV cache 2048/3072/4096, vision GPU 1024px, audio CPU, thermal 5-run) | Diukur langsung pada Moto G86 Power 5G (`mt6878`, `gemma-4-E2B-it.litertlm`, `litertlm-android` 0.19.1) — lihat [Benchmark](docs/BENCHMARK.md) |
 | Build debug & rilis R8 (`assembleDebug`, `assembleRelease`), Android Lint, audit graf ketergantungan bebas SDK tertutup | Diverifikasi saat build & CI |

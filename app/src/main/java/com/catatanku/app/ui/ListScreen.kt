@@ -1,6 +1,13 @@
 package com.catatanku.app.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -114,13 +121,13 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     }
                 }
                 val offerAgent = isCommand || (hasModel && view != NoteView.Vault && vm.query.trim().split(WORDS).size >= 3)
-                if (searching && view != NoteView.Trash && view != NoteView.Vault && (hasModel || isCommand)) Row(Modifier.padding(horizontal = 10.dp, vertical = 2.dp)) {
+                AnimatedVisibility(searching && view != NoteView.Trash && view != NoteView.Vault && (hasModel || isCommand), enter = fadeIn(tween(160)) + expandVertically(tween(200)), exit = fadeOut(tween(120)) + shrinkVertically(tween(160))) { Row(Modifier.padding(horizontal = 10.dp, vertical = 2.dp)) {
                     if (offerAgent) TextAction("Jalankan") { vm.startAgent(vm.query) }
                     if (hasModel) {
                         TextAction("Tanyakan") { vm.ask(vm.query) }
                         if (vm.aiTerms.isEmpty()) TextAction(if (vm.aiBusy) "Memperluas…" else "Perluas pencarian", enabled = !vm.aiBusy, onClick = vm::expandQueryWithAi)
                     }
-                }
+                } }
                 Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Row(
                         Modifier.weight(1f).height(48.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer).padding(start = 14.dp),
@@ -190,6 +197,10 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                 }
                 if (view == NoteView.Vault) {
                     TextAction("Kunci") { vm.lockVault() }
+                }
+                val dark = vm.themeMode.isDark()
+                IconAction(if (dark) AppIcons.Sun else AppIcons.Moon, if (dark) "Ganti ke tema terang" else "Ganti ke tema gelap") {
+                    vm.updateThemeMode(if (dark) ThemeMode.Light else ThemeMode.Dark)
                 }
                 Box {
                     IconAction(AppIcons.More, "Menu") { moreMenu = true }
@@ -271,12 +282,12 @@ fun ListScreen(vm: AppViewModel, snack: SnackbarHostState) {
                     else -> {
                         if (split) item(key = "h-pin", contentType = "label") { SectionLabel("Disematkan", Modifier.padding(start = Gutter, top = 14.dp, bottom = 2.dp)) }
                         items(pinned, key = { it.id }, contentType = { "note" }) { n ->
-                            NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n })
+                            Box(Modifier.animateItem(fadeInSpec = tween(180), placementSpec = tween(220), fadeOutSpec = tween(120))) { NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n }) }
                         }
                         if (split) {
                             item(key = "h-rest", contentType = "label") { SectionLabel("Lainnya", Modifier.padding(start = Gutter, top = 24.dp, bottom = 2.dp)) }
                             items(rest, key = { it.id }, contentType = { "note" }) { n ->
-                                NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n })
+                                Box(Modifier.animateItem(fadeInSpec = tween(180), placementSpec = tween(220), fadeOutSpec = tween(120))) { NoteRow(vm, n, view, onMoveFolder = { moveFolderNote = n }, onDeleteForever = { deleteForeverNote = n }) }
                             }
                         }
                     }
@@ -333,7 +344,7 @@ private fun EmptyState(text: Pair<String, String?>) = Column(Modifier.fillMaxWid
 }
 
 @Composable
-private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fillMaxWidth()) {
+private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fillMaxWidth().animateContentSize(tween(220))) {
     Row(
         Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = vm::toggleToday).heightIn(min = 48.dp).padding(horizontal = Gutter),
         verticalAlignment = Alignment.CenterVertically,
@@ -372,7 +383,7 @@ private fun TodayBlock(vm: AppViewModel, due: List<Note>) = Column(Modifier.fill
 }
 
 @Composable
-private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
+private fun AnswerBlock(vm: AppViewModel, loadingModel: Boolean) = Column(Modifier.fillMaxWidth().animateContentSize(tween(220)).background(MaterialTheme.colorScheme.surfaceContainerLow)) {
     Row(Modifier.padding(start = Gutter, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(vm.askQuery, Modifier.weight(1f).padding(vertical = 12.dp), style = MaterialTheme.typography.titleMedium)
         if (vm.askRunning) TextAction("Hentikan", onClick = vm::stopAi)

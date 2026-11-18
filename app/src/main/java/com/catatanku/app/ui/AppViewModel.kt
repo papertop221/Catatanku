@@ -13,7 +13,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.catatanku.app.ai.engine.AiEvent
 import com.catatanku.app.ai.engine.LocalAi
-import com.catatanku.app.ai.engine.LocalEmbeddingProvider
 import com.catatanku.app.ai.inference.Agent
 import com.catatanku.app.ai.inference.AiText
 import com.catatanku.app.ai.performance.AiBackendKind
@@ -36,11 +35,7 @@ import com.catatanku.app.domain.model.Screen
 import com.catatanku.app.domain.model.Sort
 import com.catatanku.app.domain.model.Stats
 import com.catatanku.app.domain.model.Version
-import com.catatanku.app.domain.usecase.EmbeddingCodec
-import com.catatanku.app.domain.usecase.HybridSearch
 import com.catatanku.app.domain.usecase.SearchIndex
-import com.catatanku.app.domain.usecase.SemanticIndex
-import com.catatanku.app.domain.usecase.StoredEmbedding
 import com.catatanku.app.domain.usecase.TimeParse
 import com.catatanku.app.media.Attachments
 import com.catatanku.app.publishShortcuts
@@ -70,7 +65,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("ui", Context.MODE_PRIVATE)
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val ai = LocalAi.get(app)
-    val embeddings = LocalEmbeddingProvider.get(app)
     val appVersion: String by lazy {
         runCatching { app.packageManager.getPackageInfo(app.packageName, 0)?.versionName.orEmpty() }
             .getOrDefault("").ifBlank { "?" }
@@ -81,13 +75,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var stats by mutableStateOf(Stats(emptyList())); private set
     var loaded by mutableStateOf(false); private set
     var index by mutableStateOf(SearchIndex(emptyList())); private set
-    var semanticIndex by mutableStateOf(SemanticIndex()); private set
     var existingAttachments by mutableStateOf<Set<String>>(emptySet()); private set
     private var notesById: Map<Long, Note> = emptyMap()
     private var listStale = false
     private var writeGen = 0
     private var indexJob: Job? = null
-    private var embeddingJob: Job? = null
     private var searchJob: Job? = null
     private var backupJob: Job? = null
     internal val settling get() = indexJob?.isActive == true || searchJob?.isActive == true
@@ -189,11 +181,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var dynamicColor by mutableStateOf(prefs.getBoolean("dynamic_color", false)); private set
     fun updateDynamicColor(on: Boolean) { dynamicColor = on; prefs.edit().putBoolean("dynamic_color", on).apply() }
+    var themeMode by mutableStateOf(ThemeMode.parse(prefs.getString("theme_mode", null))); private set
+    fun updateThemeMode(m: ThemeMode) { themeMode = m; prefs.edit().putString("theme_mode", m.name).apply() }
 
     @Volatile private var dirty = prefs.getBoolean("dirty", false)
     private fun markDirty() { if (!dirty) { dirty = true; prefs.edit().putBoolean("dirty", true).apply() } }
 
     init {
+        appScope.launch { runCatching { repo.purgeSemanticData() } }
         viewModelScope.launch {
             ai.events.collect { ev ->
                 val text = when (ev) {
@@ -269,44 +264,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             index = idx
             if (query.isNotBlank()) refreshShown()
-            scheduleIncrementalEmbeddings(publicList)
-        }
-    }
-
-    /** Memperbarui vektor semantik secara inkremental di latar tanpa pernah mengganggu jalur mengetik. */
-    private fun scheduleIncrementalEmbeddings(list: List<Note>) {
-        if (!embeddings.isAvailable) {
-            if (!semanticIndex.isEmpty) semanticIndex = SemanticIndex()
-            return
-        }
-        embeddingJob?.cancel()
-        embeddingJob = viewModelScope.launch(Dispatchers.Default) {
-            val modelId = embeddings.modelId
-            if (modelId.isBlank()) return@launch
-            val live = list.filter { !it.inTrash }
-            val cached = withContext(Dispatchers.IO) {
-                repo.pruneEmbeddings(live.map { it.id }.toSet())
-                repo.embeddings(modelId)
-            }
-            val map = HashMap<Long, FloatArray>(live.size)
-            for (n in live) {
-                ensureActive()
-                val hash = EmbeddingCodec.contentHash(n.title, n.body, n.tags)
-                val hit = cached[n.id]?.takeIf { it.contentHash == hash && it.modelId == modelId }
-                if (hit != null) {
-                    map[n.id] = hit.vector
-                } else {
-                    val vec = embeddings.embedDocument(n.title, n.body, n.tags)
-                    if (vec != null) {
-                        map[n.id] = vec
-                        withContext(Dispatchers.IO) { repo.upsertEmbedding(StoredEmbedding(n.id, hash, modelId, vec)) }
-                    }
-                }
-            }
-            withContext(Dispatchers.Main) {
-                semanticIndex = SemanticIndex(map, modelId)
-                if (query.isNotBlank()) refreshShown()
-            }
         }
     }
 
@@ -399,12 +356,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ))
             v == NoteView.Trash -> show(list.filter { !it.vault && it.inTrash && (it.title + " " + it.body).contains(q.trim(), ignoreCase = true) })
             else -> {
-                val idx = index; val sem = semanticIndex; val terms = aiTerms; val byId = stats.byId
+                val idx = index; val terms = aiTerms; val byId = stats.byId
                 searchJob = viewModelScope.launch {
-                    val hits = withContext(Dispatchers.Default) {
-                        val qVec = if (embeddings.isAvailable && !sem.isEmpty) embeddings.embedQuery(q) else null
-                        HybridSearch.search(idx, sem, q, qVec, terms)
-                    }
+                    val hits = withContext(Dispatchers.Default) { idx.search(q, terms, limit = 100) }
                     show(hits.mapNotNull { byId[it.id] }.filter { !it.vault && if (v == NoteView.All) !it.inTrash else inView(it) })
                 }
             }
@@ -418,7 +372,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         query = q; aiTerms = emptyList()
         refreshShown()
     }
+    /** Kategori Pengaturan yang sedang dibuka; null = dashboard. */
+    var settingsSection by mutableStateOf<String?>(null)
     fun go(s: Screen) {
+        if (s == Screen.Settings && screen != Screen.Settings) settingsSection = null
         if (s != Screen.Editor) flushListIfStale()
         if (s == Screen.Settings && vaultUnlocked) lockVault()
         screen = s
@@ -1336,22 +1293,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         catch (e: Throwable) { say("Impor gagal: ${e.message}") }
     }
 
-    fun importEmbeddingModel(uri: Uri) = viewModelScope.launch {
-        try {
-            embeddings.importModel(uri)
-            say("Model pencarian semantik terpasang; indeks disiapkan di latar.")
-            scheduleIncrementalEmbeddings(notes)
-        } catch (e: Throwable) {
-            say("Impor model embedding gagal: ${e.message}")
-        }
-    }
-
-    fun deleteEmbeddingModel() = viewModelScope.launch {
-        embeddings.deleteModel()
-        semanticIndex = SemanticIndex()
-        say("Model pencarian semantik dihapus.")
-    }
-
     fun loadModel() = viewModelScope.launch {
         try { ai.load(force = true); say("Model siap.") } catch (_: Throwable) {}
     }
@@ -1665,7 +1606,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun scrubSensitiveMemory() {
         indexJob?.cancel(); indexJob = null
-        embeddingJob?.cancel(); embeddingJob = null
         searchJob?.cancel(); searchJob = null
         running?.cancel(); running = null
         batchJob?.cancel(); batchJob = null
@@ -1682,7 +1622,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         notesById = emptyMap()
         openTaskCount = 0
         index = SearchIndex(emptyList())
-        semanticIndex = SemanticIndex()
         draft = Note(); clean = null; opened = null; undoAi = null; aiJob = null; aiSheet = false; versions = null
         reminderFor = null; reminderSeed = null
         askQuery = ""; askAnswer = ""; askSources = emptyList(); openTasksList = emptyList(); askRunning = false
@@ -1690,7 +1629,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         loaded = false
         DeviceVaultKey.clearMemoryCache()
         ai.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
-        appScope.launch { embeddings.release() }
     }
 
     fun lockNow() {
@@ -1793,7 +1731,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 runCatching { ai.unload() }
-                runCatching { embeddings.release() }
                 runCatching {
                     repo.allNotes(includeVault = true).forEach { Reminders.clear(ctx, it.id) }
                 }
@@ -1824,7 +1761,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun onTrimMemory(level: Int) {
         ai.onTrimMemory(level)
         if (level >= com.catatanku.app.ai.performance.MemoryPolicy.TRIM_RUNNING_LOW) {
-            appScope.launch { embeddings.release() }
-        }
+            }
     }
 }

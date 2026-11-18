@@ -31,6 +31,13 @@ import com.catatanku.app.reminders.Reminders
 import com.catatanku.app.security.InputSecurity
 import com.catatanku.app.ui.AppViewModel
 import com.catatanku.app.ui.CatatankuTheme
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import com.catatanku.app.ui.EditorScreen
 import com.catatanku.app.ui.ListScreen
 import com.catatanku.app.ui.LockScreen
@@ -211,7 +218,7 @@ class MainActivity : ComponentActivity() {
         applySecureFlag()
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
-            CatatankuTheme(vm.dynamicColor, incognitoKeyboard = vm.incognitoKeyboard) {
+            CatatankuTheme(vm.dynamicColor, incognitoKeyboard = vm.incognitoKeyboard, mode = vm.themeMode) {
                 val snack = remember { SnackbarHostState() }
                 // Pesan baru menggantikan yang sedang tampil, supaya "Urungkan" selalu milik aksi terakhir.
                 LaunchedEffect(Unit) {
@@ -252,7 +259,17 @@ class MainActivity : ComponentActivity() {
                             onCancel = vm::cancelVaultUnlockRequest,
                         )
                     }
-                    else -> when (vm.screen) {
+                    else -> AnimatedContent(
+                        vm.screen,
+                        transitionSpec = {
+                            // Gerak pendek dan tenang: layar baru masuk sedikit dari arah tujuannya sambil memudar.
+                            val forward = targetState != Screen.List
+                            val dx = { w: Int -> (if (forward) w else -w) / 14 }
+                            (fadeIn(tween(220, easing = LinearOutSlowInEasing)) + slideInHorizontally(tween(260, easing = LinearOutSlowInEasing), dx))
+                                .togetherWith(fadeOut(tween(140)))
+                        },
+                        label = "layar",
+                    ) { screen -> when (screen) {
                         Screen.List -> {
                             // Kembali menutup dulu apa yang sedang terbuka di atas daftar, baru keluar dari aplikasi.
                             BackHandler(vm.askActive || vm.query.isNotEmpty() || vm.tagFilter != null || vm.view != NoteView.All) {
@@ -267,7 +284,7 @@ class MainActivity : ComponentActivity() {
                         }
                         Screen.Editor -> { BackHandler { vm.closeEditor() }; EditorScreen(vm, snack) }
                         Screen.Settings -> { BackHandler { vm.go(Screen.List) }; SettingsScreen(vm, snack) }
-                    }
+                    } }
                 }
             }
         }

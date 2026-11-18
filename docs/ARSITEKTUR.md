@@ -11,7 +11,7 @@ Semua di `app/src/main/java/com/catatanku/app/`.
 |---|---|---|
 | `MainActivity.kt`, `ReminderReceiver.kt`, `SystemIntegration.kt` | Pintu masuk Manifest (`MainActivity`, `ProcessTextActivity`, `QuickNoteTile`, `ReminderReceiver`) | Tidak |
 | `domain/model/` (`NoteModels.kt`, `BackupModels.kt`) | Model domain (`Note`, `Version`, `Repeat`, `AiAction`, `AgentStep`, model manifest/progres cadangan) | Ya |
-| `domain/usecase/` (`SearchEngine.kt`, `HybridSearch.kt`, `TimeParse.kt`) | Indeks TF-IDF + trigram, pencarian hibrida (TF-IDF + kemiripan vektor embedding lokal), pengenal waktu bahasa Indonesia | Ya |
+| `domain/usecase/` (`SearchEngine.kt`, `EmbeddingCodec.kt`, `TimeParse.kt`) | Indeks TF-IDF + trigram, waktu deterministik, sisa codec embedding (hanya untuk migrasi lama) | Ya |
 | `data/backup/` (`BackupArchive.kt`, `BackupCodec.kt`, `JsonStream.kt`) | Ekspor/impor ZIP lengkap (`catatanku-backup.zip`), SHA-256 `checksums.json`, pelindung traversal/ZIP bomb, JSON streaming O(1) | Ya |
 | `data/database/NoteDb.kt` | SQLite terenkripsi AES-256-GCM (`catatan.db`, skema v6: tabel `notes`, `versions`, `embeddings`), migrasi v1→v6, kolom `vault`, impor transaksional | Tidak |
 | `data/repository/NoteRepository.kt` | Repositori tunggal, pemulihan atomik berbasis *staging* + rollback, dan `AutoBackup` harian terenkripsi | Tidak |
@@ -237,14 +237,14 @@ SQLite lewat `SQLiteOpenHelper` (`NoteDb`): tabel `notes`, `versions`, dan `embe
 Skema v2 menambah `folder`, `archived`, `deleted`.
 Skema v3 menambah kolom pengingat (`remind_at`, `remind_repeat`, `remind_alarm`, `remind_fired`) dan tabel `versions`.
 Skema v4 menambah kolom `attachments` untuk lampiran gambar (`img_*.jpg`) dan catatan suara (`aud_*.wav`) di `filesDir/attachments/`.
-Skema v5 menambah tabel `embeddings` untuk pencarian semantik lokal bertanda model + hash konten inkremental.
+Skema v5 menambah tabel `embeddings` untuk pencarian semantik. Fitur itu dihapus di 1.10: tabel tetap ada agar migrasi lama berjalan, tetapi isinya dan berkas model embedding dimusnahkan sekali saat pertama dibuka (`NoteRepository.purgeSemanticData`) dan tidak ada lagi yang menulis ke sana.
 Skema v6 menambah kolom `vault` untuk catatan tersembunyi Brankas dan migrasi enkripsi otomatis di `onOpen`.
 
 ## AI lokal & Pencarian Semantik Hibrida
 
 - **Pemilihan backend berbasis data (`AiPerformance.kt`, `BENCHMARK.md`)**: di Moto G86 Power 5G (`mt6878`), `CPU-4` (`Backend.CPU(threadCount = 4)`) + profil konteks **Hemat (`maxNumTokens = 2048`)** dengan `SpeculativeDecodingMode.ADAPTIVE` per tugas memberikan muat ±1 detik, hemat ±575–680 MB RAM dibanding GPU, serta menyamai/mengungguli GPU di tugas teks harian. Vision/OCR memakai GPU + turunan gambar sementara ≤ 1024 px di `cacheDir` tanpa mengubah gambar asli (`vision-gpu-1024`: ±11,5 dtk, -452 MB RSS). Perangkat lain memulai dari bawaan konservatif CPU-4 lalu dapat menyimpan profil terukur via **Penyesuaian kecepatan** (`Ukur kecepatan`) di Pengaturan (`PerformanceProfileStore`).
 - **Kebijakan memori adaptif (`MemoryPolicy`)**: menggunakan RAM fisik aktual tanpa swap/RAM Boost, `ActivityManager.MemoryInfo` (`availMem`, `lowMemory`), dan sinyal `onTrimMemory` untuk memilih jendela konteks & idle timeout tanpa pemanggilan `System.gc()` agresif.
-- **Pencarian hibrida (`HybridSearch.kt`)**: menggabungkan skor TF-IDF + trigram (`alpha = 0,65`) dengan kemiripan kosinus embedding lokal (`beta = 0,35`) saat model embedding aktif diimpor (`LocalEmbeddingProvider`), dan jatuh kembali murni ke TF-IDF bila tidak tersedia.
+- **Pencarian**: murni `SearchIndex` (TF-IDF + trigram, instan, deterministik), opsional diperluas kata kunci dari model bahasa atas permintaan.
 
 Simpan otomatis berjalan tiap jeda mengetik (0,7 detik) dan ditulis **sinkron**, agar tidak ada catatan ganda bila
 simpan terpicu dua kali berdekatan. Supaya murah, basis data memakai WAL dengan `synchronous=NORMAL`: satu simpan
@@ -271,7 +271,6 @@ waktu, baris datar tanpa kartu dan bayangan, dan satu set ikon garis buatan send
 | Kelas | Isi |
 |---|---|
 | `SearchEngineTest` | Morfologi, salah ketik, kecocokan palsu, catatan terkait |
-| `HybridSearchTest` | `EmbeddingCodec`, fallback TF-IDF, evaluasi pencarian hibrida bahasa Indonesia (persis vs parafrasa) |
 | `AiTextTest` & `AiQualityTest` | Pengurai keluaran model, pembersih Markdown, tombol centang, anggaran prompt 2048/3072/4096, pemotongan catatan panjang, mutu bahasa Indonesia |
 | `BackupArchiveTest` | Ekspor/impor `catatanku-backup.zip` (100 catatan + gambar/audio + versi), enkripsi AES-256-GCM + salah sandi/terpotong, verifikasi SHA-256, anti-traversal/ZIP bomb, JSON lama, pembatalan |
 | `SecurityHardeningTest` | Enkripsi `VaultCrypto` & lampiran `CTKA\x01`, `AppPinCrypto`, `BackupCrypto` streaming `CTKE`/`CTKH` hibrida, isolasi Brankas saat ekspor polos, sanitisasi Bidi/LLM & bom piksel |

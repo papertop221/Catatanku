@@ -1,4 +1,5 @@
-• Tampilan baru yang lebih ringkas dan rapi: jarak konsisten, Pengaturan satu baris per fitur, daftar dan editor lebih lega
-• Bilah alat editor ikon saja dengan satu tombol Asisten
-• Nama fitur dibakukan dan lebih profesional (Asisten, Koreksi ejaan, Ekstrak tugas, Lindungi layar, Mode offline, dll.)
-• Tanpa perubahan data, izin, atau perilaku
+• Tampilan baru yang ringkas, segar, dan rapi di tema terang maupun gelap
+• Pengaturan model dashboard: enam kategori dengan status langsung
+• Pilihan tema Sistem/Terang/Gelap dan tombol cepat di bilah atas
+• Transisi halus antarlayar; nama fitur dibakukan
+• Pencarian semantik dihapus; pencarian tetap instan tanpa model

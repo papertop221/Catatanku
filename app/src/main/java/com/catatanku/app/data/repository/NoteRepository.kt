@@ -12,7 +12,6 @@ import com.catatanku.app.domain.model.BackupRestoreReport
 import com.catatanku.app.domain.model.BackupVersionEntry
 import com.catatanku.app.domain.model.Note
 import com.catatanku.app.domain.model.Version
-import com.catatanku.app.domain.usecase.StoredEmbedding
 import com.catatanku.app.media.Attachments
 import com.catatanku.app.reminders.Reminders
 import com.catatanku.app.reminders.toLocal
@@ -173,9 +172,19 @@ class NoteRepository(private val ctx: Context) {
         }
     }
 
-    fun embeddings(modelId: String): Map<Long, StoredEmbedding> = db.embeddings(modelId)
-    fun upsertEmbedding(entry: StoredEmbedding) = db.upsertEmbedding(entry)
-    fun pruneEmbeddings(liveIds: Set<Long>) = db.deleteEmbeddingsExcept(liveIds)
+    /**
+     * Pencarian semantik dihapus di 1.10: vektor lama di tabel `embeddings` dan berkas model embedding
+     * dimusnahkan sekali, agar tidak ada sisa data turunan catatan yang tertinggal. Skema tabel tetap (migrasi).
+     */
+    fun purgeSemanticData() {
+        if (prefs.getBoolean("semantic_purged", false)) return
+        db.deleteEmbeddingsExcept(emptySet())
+        val dir = java.io.File(ctx.filesDir, "models")
+        listOf("embedding.litertlm", "embedding_import.tmp").forEach { name ->
+            java.io.File(dir, name).takeIf { it.exists() }?.let { DeviceVaultKey.shredFile(it); it.delete() }
+        }
+        prefs.edit().putBoolean("semantic_purged", true).apply()
+    }
 }
 
 object AutoBackup {
