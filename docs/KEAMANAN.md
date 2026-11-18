@@ -4,7 +4,7 @@ Dokumen ini merangkum kontrol keamanan berlapis, batas ancaman (*threat model*),
 
 ## 1. Invarian Privasi (Zero Exfiltration)
 
-- **100% pemrosesan lokal:** Penyimpanan catatan, Brankas, riwayat versi, pencarian TF-IDF, indeks vektor semantik (`embeddings`), pengingat, lampiran, dan inferensi AI (`litertlm-android`) berjalan sepenuhnya di perangkat.
+- **100% pemrosesan lokal:** Penyimpanan catatan, Brankas, riwayat versi, pencarian TF-IDF, pengingat, lampiran, dan inferensi AI (`litertlm-android`) berjalan sepenuhnya di perangkat.
 - **Tanpa SDK tertutup/pelacak:** Tidak ada Google Play Services, Firebase, ML Kit, Ads, Crashlytics, maupun analitik. Diverifikasi otomatis di CI pada graf dependensi `releaseRuntimeClasspath`.
 - **Mode Offline Mutlak (`strict_offline`):** Pengguna dapat mengaktifkan Mode Offline Mutlak di Pengaturan → Privasi untuk memblokir seluruh permintaan unduhan model melalui `DownloadManager` dan membatalkan unduhan berjalan; seluruh fitur aplikasi dan impor model lokal dari berkas tetap berjalan 100%.
 - **Nol ekstraksi cloud/perangkat:** `AndroidManifest.xml` menonaktifkan `android:allowBackup="false"`, mengecualikan seluruh domain (`root`, `database`, `sharedpref`, `file`, `external`) pada `fullBackupContent` (`backup_rules.xml`) maupun `dataExtractionRules` Android 12+ (`data_extraction_rules.xml`), sehingga tidak ada data catatan, lampiran, atau kunci yang terbawa oleh cadangan cloud ataupun transfer kabel antarperangkat.
@@ -29,7 +29,7 @@ Dokumen ini merangkum kontrol keamanan berlapis, batas ancaman (*threat model*),
 - **Kunci otomatis seketika & pembersihan RAM (`AppViewModel.kt`):**
   - Saat aplikasi terkunci di awal buka (`locked = true`), catatan dan indeks tidak dimuat ke RAM sebelum autentikasi berhasil.
   - Pilihan waktu kunci otomatis: **Segera** (bawaan baru, `0 ms`), 15 detik, atau 1 menit, dengan pengecualian terkendali hanya saat meluncurkan pemilih berkas/dialog izin sistem (`suppressNextLeaveLock`) dan kunci seketika saat layar mati (`Intent.ACTION_SCREEN_OFF`) atau lewat aksi *Kunci sekarang*.
-  - Begitu terkunci, seluruh catatan, draf aktif, riwayat versi, indeks pencarian/semantik, hasil tanya/AI, cache kunci DEK di RAM, serta berkas sementara langsung dibersihkan (`scrubSensitiveMemory`, `DeviceVaultKey.clearMemoryCache`).
+  - Begitu terkunci, seluruh catatan, draf aktif, riwayat versi, indeks pencarian, hasil tanya/AI, cache kunci DEK di RAM, serta berkas sementara langsung dibersihkan (`scrubSensitiveMemory`, `DeviceVaultKey.clearMemoryCache`).
 - **Gerbang intent & `ProcessTextActivity` (`SystemIntegration.kt`):**
   - Menu teks terpilih (`ProcessTextActivity`) ikut menuntut buka kunci saat Kunci Aplikasi aktif sebelum menampilkan opsi atau menyimpan catatan.
   - `pendingIntent` di `MainActivity` tidak tertimpa intent `ACTION_MAIN` kosong; notifikasi pengingat menyembunyikan **judul sekaligus isi** catatan saat kunci aktif atau catatan milik Brankas, dan `EXTRA_OPEN` tetap dilindungi token acak 128-bit `SecureRandom` (*constant-time*).

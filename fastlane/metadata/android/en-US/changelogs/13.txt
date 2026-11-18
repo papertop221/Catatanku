@@ -1,0 +1,5 @@
+• New "Focus" design with a floating dock and light/dark theme choice
+• Professional templates, assistant-made templates, and My templates
+• Multi-select, light formatting, [[note links]], find & replace, duplicate, export to .md/.txt
+• Deeper assistant: plan from a goal, key points, formal/casual tone, translation, actions on selected text, cross-note summaries
+• Semantic search removed; search stays instant without a model

@@ -433,7 +433,7 @@ class LocalAi private constructor(private val context: Context) {
             val modelType = runCatching {
                 ModelInfo.from(tmp.absolutePath).use { it.modelType }
             }.getOrElse { error("Berkas ini bukan format model LiteRT-LM yang sah.") }
-            if (modelType == ModelType.EMBEDDING) error("Berkas ini model embedding; impor melalui bagian Pencarian makna.")
+            if (modelType == ModelType.EMBEDDING) error("Berkas ini model embedding dan tidak didukung. Pilih model bahasa .litertlm.")
             val hash = sha256(tmp)
             importFile.delete()
             if (!tmp.renameTo(importFile)) error("Gagal menyimpan model.")

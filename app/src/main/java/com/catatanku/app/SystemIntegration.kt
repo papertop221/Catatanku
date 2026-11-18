@@ -262,7 +262,7 @@ class ProcessTextActivity : ComponentActivity() {
         val wipeOnFail = SecurityPrefs.isWipeAfterFailuresEnabled(this)
 
         setContent {
-            CatatankuTheme(dynamic, incognitoKeyboard = incognito) {
+            CatatankuTheme(dynamic, incognitoKeyboard = incognito, mode = com.catatanku.app.ui.ThemeMode.parse(prefs.getString("theme_mode", null))) {
                 if (!unlocked) {
                     LockScreen(
                         onUnlock = ::requestUnlock,
@@ -284,22 +284,22 @@ class ProcessTextActivity : ComponentActivity() {
                     if (out == null) {
                         Text(text, Modifier.padding(top = 4.dp, bottom = 6.dp), style = NoteType.rowSnippet, color = muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         @androidx.compose.runtime.Composable
-                        fun Option(title: String, hint: String, enabled: Boolean = true, hintColor: androidx.compose.ui.graphics.Color = muted, onClick: () -> Unit) = Row(
-                            Modifier.fillMaxWidth().clip(SmallShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick).heightIn(min = 44.dp),
+                        fun Option(title: String, hint: String = "", enabled: Boolean = true, hintColor: androidx.compose.ui.graphics.Color = muted, onClick: () -> Unit) = Row(
+                            Modifier.fillMaxWidth().clip(SmallShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick).heightIn(min = 48.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else muted.copy(alpha = 0.5f))
                             Text(hint, Modifier.padding(start = 10.dp), color = hintColor, style = MaterialTheme.typography.bodySmall)
                         }
-                        Option("Simpan sebagai catatan", "Tanpa AI") { save(text) }
+                        Option("Simpan sebagai catatan") { save(text) }
                         // Waktu yang disebut di teks dikenali tanpa model.
                         if (time != null) Option("Simpan dan ingatkan", whenLabel(time), hintColor = timeColor) { save(text, time) }
-                        Hairline(Modifier.padding(vertical = 2.dp))
-                        Option("Ringkas", "3–5 poin", hasModel) { run(AiAction.Summarize, text) }
-                        Option("Perbaiki ejaan", "Makna tetap", hasModel) { run(AiAction.Fix, text) }
-                        Option("Ambil daftar tugas", "Daftar centang", hasModel) { run(AiAction.Tasks, text) }
-                        if (!hasModel) Muted("Butuh model AI di Pengaturan.", Modifier.padding(top = 4.dp))
-                        else if (text.length > AiText.maxInput) Muted("AI membaca ±${AiText.maxInput} huruf pertama.", Modifier.padding(top = 4.dp))
+                        Hairline(Modifier.padding(vertical = 6.dp))
+                        Option(AiAction.Summarize.label, enabled = hasModel) { run(AiAction.Summarize, text) }
+                        Option(AiAction.Fix.label, enabled = hasModel) { run(AiAction.Fix, text) }
+                        Option(AiAction.Tasks.label, enabled = hasModel) { run(AiAction.Tasks, text) }
+                        if (!hasModel) Muted("Asisten belum aktif", Modifier.padding(top = 6.dp))
+                        else if (text.length > AiText.maxInput) Muted("Membaca ±${AiText.maxInput} huruf pertama", Modifier.padding(top = 6.dp))
                     } else {
                         if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp))
                         Column(Modifier.heightIn(min = 60.dp, max = 300.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
@@ -319,11 +319,11 @@ class ProcessTextActivity : ComponentActivity() {
                                     save(out, remind)
                                 } else PrimaryButton("Simpan sebagai catatan", Modifier.fillMaxWidth()) { save(out) }
                                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    TextAction("Salin hasil") { copyText(this@ProcessTextActivity, out); toast("Hasil disalin"); finish() }
+                                    TextAction("Salin") { copyText(this@ProcessTextActivity, out); toast("Hasil disalin"); finish() }
                                     if (!readOnly && remind != null) TextAction("Simpan + pengingat") { save(out, remind) }
                                     else if (!readOnly) TextAction("Simpan sebagai catatan") { save(out) }
                                     else if (remind != null) TextAction("Simpan tanpa pengingat") { save(out) }
-                                    TextAction("Buang hasil") { result = null; detectedRemindAt = null }
+                                    TextAction("Buang") { result = null; detectedRemindAt = null }
                                 }
                             }
                         }

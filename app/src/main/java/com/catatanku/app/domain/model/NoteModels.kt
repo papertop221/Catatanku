@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 
 /** Pengulangan pengingat. Urutan dipakai sebagai nilai di basis data; jangan diubah. */
 enum class Repeat(val label: String) {
-    None("Sekali"), Daily("Setiap hari"), Weekly("Setiap minggu"), Monthly("Setiap bulan");
+    None("Sekali"), Daily("Harian"), Weekly("Mingguan"), Monthly("Bulanan");
 
     /** Jadwal berikutnya setelah [now] untuk pengingat yang semula jatuh pada [at]. */
     fun next(at: LocalDateTime, now: LocalDateTime): LocalDateTime? {
@@ -89,13 +89,19 @@ enum class AiAction(
     /** Catatan yang lebih panjang dari jendela model diproses bagian demi bagian, bukan dipotong. */
     val wholeNote: Boolean = false,
 ) {
-    Continue("Lanjutkan tulisan", "Menulis satu–dua paragraf berikutnya"),
-    Fix("Perbaiki ejaan", "Ejaan dan tata bahasa, makna tetap", replaces = true, wholeNote = true),
-    Tidy("Rapikan struktur", "Dikelompokkan dengan subjudul dan poin", replaces = true),
-    Summarize("Ringkas", "Menjadi 3–5 poin", wholeNote = true),
-    Tasks("Ambil daftar tugas", "Tugas dijadikan daftar centang", wholeNote = true),
-    Title("Buat judul", "Maksimal enam kata", forTitle = true),
-    Custom("Instruksi bebas", ""),
+    Continue("Lanjutkan", "Satu–dua paragraf berikutnya"),
+    Plan("Rencana dari tujuan", "Langkah centang berurutan", wholeNote = false),
+    Extract("Poin penting", "Jadwal, keputusan, angka, kontak"),
+    Formal("Nada formal", "Profesional, makna tetap", replaces = true),
+    Casual("Nada santai", "Ramah, makna tetap", replaces = true),
+    Translate("Terjemahkan", "Indonesia ↔ Inggris", replaces = true),
+    Explain("Jelaskan", "Bahasa sederhana"),
+    Fix("Koreksi ejaan", "Ejaan dan tata bahasa", replaces = true, wholeNote = true),
+    Tidy("Susun ulang", "Subjudul dan poin", replaces = true),
+    Summarize("Ringkasan", "3–5 poin", wholeNote = true),
+    Tasks("Ekstrak tugas", "Daftar centang", wholeNote = true),
+    Title("Buat judul", "Maks. enam kata", forTitle = true),
+    Custom("Instruksi khusus", ""),
 }
 
 /** Hasil bantu-tulis AI yang menunggu keputusan pengguna (tidak pernah diterapkan otomatis). */
@@ -107,7 +113,17 @@ data class AiJob(
     val progress: String? = null,        // mis. "Bagian 2 dari 4" untuk catatan panjang
     val customTitle: String? = null,     // mis. "Baca gambar" atau "Transkripsikan suara"
     val suggestedRemindAt: Long? = null, // waktu pengingat yang terdeteksi dari gambar/suara/teks
-)
+    /** Bila aksi dijalankan pada teks terpilih: posisi dan teks aslinya, agar hasil menggantikan bagian itu saja. */
+    val selStart: Int = -1,
+    val selEnd: Int = -1,
+    val selText: String = "",
+    /** Templat buatan AI: nama dan judul usulan, hasil ditaruh di [text]. */
+    val templateName: String? = null,
+    val templateTitle: String = "",
+) {
+    val onSelection: Boolean get() = selStart >= 0 && selEnd > selStart
+    val isTemplate: Boolean get() = templateName != null
+}
 
 /** Satu langkah yang bisa dikerjakan asisten atas perintah pengguna. */
 sealed interface AgentStep {

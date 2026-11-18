@@ -14,6 +14,10 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import android.app.Activity
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -37,15 +41,15 @@ import com.catatanku.app.R
 private val Light = lightColorScheme(
     primary = Color(0xFF191918), onPrimary = Color(0xFFFBFBFA),
     primaryContainer = Color(0xFFEAE9E5), onPrimaryContainer = Color(0xFF191918),
-    secondary = Color(0xFF5F5E5A), onSecondary = Color.White,
+    secondary = Color(0xFF2F5BEA), onSecondary = Color.White,
     secondaryContainer = Color(0xFFEAE9E5), onSecondaryContainer = Color(0xFF191918),
     tertiary = Color(0xFF8A5200), onTertiary = Color.White,
     tertiaryContainer = Color(0xFFFBEACC), onTertiaryContainer = Color(0xFF5A3300),
-    background = Color(0xFFFBFBFA), onBackground = Color(0xFF191918),
-    surface = Color(0xFFFBFBFA), onSurface = Color(0xFF191918),
+    background = Color(0xFFFCFCFB), onBackground = Color(0xFF191918),
+    surface = Color(0xFFFCFCFB), onSurface = Color(0xFF191918),
     surfaceVariant = Color(0xFFF1F0ED), onSurfaceVariant = Color(0xFF5F5E5A),
-    surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF6F5F2),
-    surfaceContainer = Color(0xFFF1F0ED), surfaceContainerHigh = Color(0xFFEAE9E5),
+    surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF7F7F5),
+    surfaceContainer = Color(0xFFF2F2EF), surfaceContainerHigh = Color(0xFFEBEBE7),
     surfaceContainerHighest = Color(0xFFE3E2DD),
     outline = Color(0xFFB5B4AE), outlineVariant = Color(0xFFE6E5E1),
     error = Color(0xFFB3261E), onError = Color.White,
@@ -57,15 +61,15 @@ private val Light = lightColorScheme(
 private val Dark = darkColorScheme(
     primary = Color(0xFFECECE9), onPrimary = Color(0xFF111110),
     primaryContainer = Color(0xFF2A2A28), onPrimaryContainer = Color(0xFFECECE9),
-    secondary = Color(0xFFA6A5A0), onSecondary = Color(0xFF111110),
+    secondary = Color(0xFF8FA8FF), onSecondary = Color(0xFF0B1640),
     secondaryContainer = Color(0xFF2A2A28), onSecondaryContainer = Color(0xFFECECE9),
     tertiary = Color(0xFFF0B450), onTertiary = Color(0xFF3A2400),
     tertiaryContainer = Color(0xFF3D2C0C), onTertiaryContainer = Color(0xFFFBE0A8),
     background = Color.Black, onBackground = Color(0xFFECECE9),
     surface = Color.Black, onSurface = Color(0xFFECECE9),
     surfaceVariant = Color(0xFF1A1A19), onSurfaceVariant = Color(0xFFA6A5A0),
-    surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF161615),
-    surfaceContainer = Color(0xFF1A1A19), surfaceContainerHigh = Color(0xFF222221),
+    surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF121212),
+    surfaceContainer = Color(0xFF171717), surfaceContainerHigh = Color(0xFF212121),
     surfaceContainerHighest = Color(0xFF2C2C2A),
     outline = Color(0xFF5E5D58), outlineVariant = Color(0xFF2A2A28),
     error = Color(0xFFF28B82), onError = Color(0xFF601410),
@@ -74,9 +78,16 @@ private val Dark = darkColorScheme(
     surfaceTint = Color.Transparent, scrim = Color.Black,
 )
 
+/** Pilihan tema; disimpan sebagai nama enum di preferensi "theme_mode". */
+enum class ThemeMode(val label: String) { System("Sistem"), Light("Terang"), Dark("Gelap");
+    companion object { fun parse(v: String?) = entries.firstOrNull { it.name == v } ?: System }
+}
+
 @Composable
-private fun scheme(dynamic: Boolean): ColorScheme {
-    val dark = isSystemInDarkTheme()
+fun ThemeMode.isDark(): Boolean = when (this) { ThemeMode.System -> isSystemInDarkTheme(); ThemeMode.Light -> false; ThemeMode.Dark -> true }
+
+@Composable
+private fun scheme(dynamic: Boolean, dark: Boolean): ColorScheme {
     if (!dynamic || Build.VERSION.SDK_INT < 31) return if (dark) Dark else Light
     val ctx = LocalContext.current
     return if (dark) dynamicDarkColorScheme(ctx).copy(background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black)
@@ -90,7 +101,7 @@ private fun noteFont(weight: FontWeight) = Font(
 val NoteFont = FontFamily(noteFont(FontWeight.Normal), noteFont(FontWeight.Medium), noteFont(FontWeight.SemiBold))
 
 object NoteType {
-    val title = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp)
+    val title = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, lineHeight = 32.sp)
     val body = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 26.sp)
     val rowTitle = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp)
     val rowSnippet = TextStyle(fontFamily = NoteFont, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp)
@@ -98,8 +109,9 @@ object NoteType {
 
 private val Type = Typography().run {
     copy(
-        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp),
-        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
+        headlineLarge = headlineLarge.copy(fontWeight = FontWeight.Bold, fontSize = 40.sp, lineHeight = 44.sp, letterSpacing = (-1).sp),
+        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 26.sp, lineHeight = 32.sp, letterSpacing = (-0.2).sp),
+        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.1).sp),
         titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
         bodyLarge = bodyLarge.copy(lineHeight = 24.sp, letterSpacing = 0.1.sp),
         bodyMedium = bodyMedium.copy(lineHeight = 20.sp, letterSpacing = 0.1.sp),
@@ -131,8 +143,21 @@ private fun IncognitoKeyboardHost(enabled: Boolean, content: @Composable () -> U
 }
 
 @Composable
-fun CatatankuTheme(dynamic: Boolean = false, incognitoKeyboard: Boolean = true, content: @Composable () -> Unit) = MaterialTheme(
-    colorScheme = scheme(dynamic),
+fun CatatankuTheme(dynamic: Boolean = false, incognitoKeyboard: Boolean = true, mode: ThemeMode = ThemeMode.System, content: @Composable () -> Unit) {
+    val dark = mode.isDark()
+    val view = LocalView.current
+    if (!view.isInEditMode) SideEffect {
+        // Ikon bilah status/navigasi mengikuti tema aplikasi, bukan tema sistem, saat tema dipilih manual.
+        (view.context as? Activity)?.window?.let { w ->
+            WindowCompat.getInsetsController(w, view).apply { isAppearanceLightStatusBars = !dark; isAppearanceLightNavigationBars = !dark }
+        }
+    }
+    CatatankuThemeInner(dynamic, dark, incognitoKeyboard, content)
+}
+
+@Composable
+private fun CatatankuThemeInner(dynamic: Boolean, dark: Boolean, incognitoKeyboard: Boolean, content: @Composable () -> Unit) = MaterialTheme(
+    colorScheme = scheme(dynamic, dark),
     typography = Type,
     shapes = Shapes(
         extraSmall = RoundedCornerShape(8.dp), small = SmallShape, medium = SmallShape,
@@ -183,4 +208,10 @@ object AppIcons {
     val Mic = icon("mic", "M12 3.5a3 3 0 0 1 3 3V12a3 3 0 0 1-6 0V6.5a3 3 0 0 1 3-3z", "M6.5 11.5a5.5 5.5 0 0 0 11 0", "M12 17v3.5M9 20.5h6")
     val Play = icon("play", "M8 6l10 6-10 6z", fills = listOf("M8 6l10 6-10 6z"))
     val Stop = icon("stop", "M7 7h10v10H7z", fills = listOf("M7 7h10v10H7z"))
+    val Notes = icon("notes", "M6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5z", "M8.5 9h7M8.5 13h7M8.5 17h4")
+    val Sliders = icon("sliders", "M4 7h10M18 7h2M4 17h4M12 17h8", "M18 7a2 2 0 1 1-4 0a2 2 0 0 1 4 0z", "M12 17a2 2 0 1 1-4 0a2 2 0 0 1 4 0z")
+    val TextFormat = icon("text-format", "M4 7V5.5h11V7", "M9.5 5.5V18.5", "M7.5 18.5h4", "M14 13v-1h6v1", "M17 12v6.5", "M16 18.5h2")
+    val Template = icon("template", "M5.5 4.5h13A1 1 0 0 1 19.5 5.5v13a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1z", "M4.5 9h15", "M10 9v10.5")
+    val Sun = icon("sun", "M16 12a4 4 0 1 1-8 0a4 4 0 0 1 8 0z", "M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4")
+    val Moon = icon("moon", "M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z")
 }

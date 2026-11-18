@@ -57,6 +57,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.catatanku.app.domain.model.Note
 import com.catatanku.app.domain.model.Repeat
 import com.catatanku.app.reminders.toLocal
@@ -66,7 +68,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal val ID: Locale = Locale.forLanguageTag("id-ID")
-internal val Gutter = 16.dp
+internal val Gutter = 20.dp
+/** Jarak sebelum judul kelompok; lihat DESAIN.md → Jarak. */
+internal val GroupGap = 28.dp
 
 private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH.mm", ID)
 private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM", ID)
@@ -83,14 +87,57 @@ internal fun shortDate(t: Long, today: LocalDate = LocalDate.now()): String {
 
 internal val muted @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 internal val timeColor @Composable get() = MaterialTheme.colorScheme.tertiary
+/** Aksen biru arah "Fokus": aksi utama, item dok aktif, baris tanggal. */
+internal val accent @Composable get() = MaterialTheme.colorScheme.secondary
+internal val PillShape = androidx.compose.foundation.shape.RoundedCornerShape(percent = 50)
+internal val GroupShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 
 @Composable
-internal fun Muted(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodySmall) =
-    Text(text, modifier, color = muted, style = style)
+internal fun Muted(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodySmall, maxLines: Int = Int.MAX_VALUE) =
+    Text(text, modifier, color = muted, style = style, maxLines = maxLines, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+
+/**
+ * Gaya tampilan untuk teks catatan: butir ☑ redup dan dicoret, format ringan ([TextFormat]), tautan berwarna, dan sorotan
+ * hasil cari. Teks tidak diubah (pemetaan offset identitas), sehingga aman dipakai sebagai VisualTransformation editor.
+ */
+internal fun formatAnnotated(
+    text: String, mutedColor: Color, linkColor: Color = mutedColor, highlight: Color? = null, matches: List<IntRange> = emptyList(),
+): androidx.compose.ui.text.AnnotatedString {
+    val b = androidx.compose.ui.text.AnnotatedString.Builder(text)
+    val limit = minOf(text.length, com.catatanku.app.domain.usecase.TextFormat.STYLE_LIMIT)
+    if ('☑' in text) {
+        var pos = 0
+        while (pos < limit) {
+            val end = text.indexOf('\n', pos).let { if (it < 0) text.length else it }
+            var box = pos
+            while (box < end && text[box] == ' ') box++
+            if (box < end && text[box] == '☑') {
+                b.addStyle(androidx.compose.ui.text.SpanStyle(color = mutedColor), box, box + 1)
+                if (box + 1 < end) b.addStyle(androidx.compose.ui.text.SpanStyle(color = mutedColor, textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough), box + 1, end)
+            }
+            pos = end + 1
+        }
+    }
+    com.catatanku.app.domain.usecase.TextFormat.spans(text).forEach { sp ->
+        val style = when (sp.kind) {
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Heading1 -> androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Heading2 -> androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Bold -> androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Italic -> androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Quote -> androidx.compose.ui.text.SpanStyle(color = mutedColor, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Link -> androidx.compose.ui.text.SpanStyle(color = linkColor, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Marker -> androidx.compose.ui.text.SpanStyle(color = mutedColor.copy(alpha = 0.55f), fontWeight = FontWeight.Normal, fontSize = 15.sp)
+            com.catatanku.app.domain.usecase.TextFormat.Kind.Match -> null
+        }
+        if (style != null) b.addStyle(style, sp.start, sp.end)
+    }
+    if (highlight != null) matches.forEach { r -> if (r.last < text.length) b.addStyle(androidx.compose.ui.text.SpanStyle(background = highlight), r.first, r.last + 1) }
+    return b.toAnnotatedString()
+}
 
 @Composable
 internal fun SectionLabel(text: String, modifier: Modifier = Modifier) =
-    Text(text, modifier, color = muted, style = MaterialTheme.typography.labelMedium)
+    Text(text.uppercase(ID), modifier, color = muted, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp, fontWeight = FontWeight.Medium))
 
 @Composable
 internal fun Hairline(modifier: Modifier = Modifier) = HorizontalDivider(modifier, thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -101,23 +148,23 @@ internal fun IconAction(icon: ImageVector, label: String, tint: Color = Material
 
 @Composable
 internal fun TextAction(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, color: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) =
-    TextButton(onClick, modifier.heightIn(min = 40.dp), enabled = enabled, shape = SmallShape, colors = ButtonDefaults.textButtonColors(contentColor = color), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+    TextButton(onClick, modifier.heightIn(min = 44.dp), enabled = enabled, shape = SmallShape, colors = ButtonDefaults.textButtonColors(contentColor = color), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
         Text(text, style = MaterialTheme.typography.labelLarge)
     }
 
 @Composable
 internal fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
-    Button(onClick, modifier.heightIn(min = 44.dp), enabled = enabled, shape = SmallShape, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) { Text(text) }
+    Button(onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = SmallShape, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) { Text(text, style = MaterialTheme.typography.labelLarge) }
 
 @Composable
 internal fun SecondaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
-    OutlinedButton(onClick, modifier.heightIn(min = 44.dp), enabled = enabled, shape = SmallShape, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text(text) }
+    OutlinedButton(onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = SmallShape, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) { Text(text, style = MaterialTheme.typography.labelLarge) }
 
 @Composable
 internal fun SmallButton(text: String, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val pad = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-    if (primary) Button(onClick, Modifier.heightIn(min = 36.dp), enabled = enabled, shape = SmallShape, contentPadding = pad) { Text(text) }
-    else OutlinedButton(onClick, Modifier.heightIn(min = 36.dp), enabled = enabled, shape = SmallShape, contentPadding = pad, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text(text) }
+    val pad = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+    if (primary) Button(onClick, Modifier.heightIn(min = 36.dp), enabled = enabled, shape = SmallShape, contentPadding = pad) { Text(text, style = MaterialTheme.typography.labelLarge) }
+    else OutlinedButton(onClick, Modifier.heightIn(min = 36.dp), enabled = enabled, shape = SmallShape, contentPadding = pad, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
 
 @Composable
@@ -130,7 +177,7 @@ internal fun Choice(text: String, selected: Boolean = false, enabled: Boolean = 
                 else -> MaterialTheme.colorScheme.surfaceContainerHigh
             }
         )
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 10.dp),
+        .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 12.dp),
     Alignment.Center,
 ) {
     Text(
@@ -190,20 +237,17 @@ internal fun Menu(expanded: Boolean, onDismiss: () -> Unit, content: @Composable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun Sheet(title: String, onDismiss: () -> Unit, icon: ImageVector? = null, iconTint: Color = Color.Unspecified, content: @Composable ColumnScope.() -> Unit) = ModalBottomSheet(
+internal fun Sheet(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) = ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     tonalElevation = 0.dp,
     dragHandle = {
-        Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 32.dp, height = 3.dp).clip(RoundedShape4).background(MaterialTheme.colorScheme.outlineVariant))
+        Box(Modifier.padding(top = 12.dp, bottom = 10.dp).size(width = 32.dp, height = 4.dp).clip(RoundedShape4).background(MaterialTheme.colorScheme.outlineVariant))
     },
 ) {
-    Column(Modifier.padding(horizontal = Gutter).padding(bottom = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (icon != null) Icon(icon, null, Modifier.padding(end = 8.dp).size(18.dp), if (iconTint == Color.Unspecified) MaterialTheme.colorScheme.onSurface else iconTint)
-            Text(title, style = MaterialTheme.typography.titleMedium)
-        }
+    Column(Modifier.padding(horizontal = Gutter).padding(top = 6.dp, bottom = 20.dp)) {
+        Text(title, Modifier.padding(bottom = 4.dp), style = MaterialTheme.typography.titleLarge)
         content()
     }
 }
@@ -249,12 +293,11 @@ internal fun copyText(ctx: Context, text: String) {
 internal fun reminderText(n: Note): String = listOfNotNull(
     (if (n.remindFired) "Terlewat · " else "") + whenLabel(n.remindAt),
     n.remindRepeat.takeIf { it != Repeat.None }?.label?.lowercase(),
-    if (n.remindAlarm) "alarm" else null,
 ).joinToString("  ·  ")
 
 @Composable
 internal fun SourceRow(n: Note, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.fillMaxWidth().clip(SmallShape).clickable(onClick = onClick).heightIn(min = 44.dp).padding(vertical = 5.dp)) {
+    Column(modifier.fillMaxWidth().clip(SmallShape).clickable(onClick = onClick).heightIn(min = 48.dp).padding(vertical = 8.dp)) {
         val first = n.body.take(240).trim().lineSequence().firstOrNull().orEmpty()
         Text(n.title.ifBlank { first }, style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         if (n.title.isNotBlank() && first.isNotBlank()) Text(first.take(120), style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

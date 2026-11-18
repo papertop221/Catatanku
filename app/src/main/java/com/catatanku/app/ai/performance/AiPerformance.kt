@@ -47,7 +47,13 @@ enum class AiTaskBudget(val taskKey: String, val maxOutputTokens: Int, val useMt
     RECAP("recap", 320, useMtp = true),
     ORGANIZE("organize", 128, useMtp = false),
     MEDIA_READ("media_read", 512, useMtp = false),
-    MEDIA_TRANSCRIBE("media_transcribe", 512, useMtp = false);
+    MEDIA_TRANSCRIBE("media_transcribe", 512, useMtp = false),
+    PLAN("plan", 320, useMtp = true),
+    EXTRACT("extract", 384, useMtp = true),
+    REWRITE("rewrite", 512, useMtp = true),
+    EXPLAIN("explain", 192, useMtp = true),
+    TEMPLATE("template", 384, useMtp = true),
+    DIGEST("digest", 384, useMtp = true);
 
     companion object {
         fun forAction(action: AiAction): AiTaskBudget = when (action) {
@@ -58,6 +64,10 @@ enum class AiTaskBudget(val taskKey: String, val maxOutputTokens: Int, val useMt
             AiAction.Tidy -> TIDY
             AiAction.Continue -> CONTINUE
             AiAction.Custom -> CUSTOM
+            AiAction.Plan -> PLAN
+            AiAction.Extract -> EXTRACT
+            AiAction.Formal, AiAction.Casual, AiAction.Translate -> REWRITE
+            AiAction.Explain -> EXPLAIN
         }
     }
 }

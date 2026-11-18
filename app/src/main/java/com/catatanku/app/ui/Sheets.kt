@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -113,24 +114,23 @@ fun LockScreen(
             AppViewModel.PinResult.WRONG -> {
                 errorMsg = if (wipeAfterFailures) {
                     val left = (com.catatanku.app.security.AppPinCrypto.DEFAULT_WIPE_ATTEMPTS - (failedAttempts + 1)).coerceAtLeast(0)
-                    "PIN/sandi salah. Sisa $left percobaan sebelum data dihapus."
+                    "PIN salah. Sisa $left percobaan sebelum data dihapus."
                 } else {
-                    "PIN/sandi salah (${failedAttempts + 1} kali)."
+                    "PIN salah"
                 }
             }
             AppViewModel.PinResult.WIPED -> errorMsg = "Seluruh data telah dihapus."
         }
     }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding(), Alignment.Center) {
-        Column(Modifier.padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(AppIcons.Lock, null, Modifier.size(28.dp), muted)
-            Text(title, Modifier.padding(top = 10.dp, bottom = 12.dp), style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.padding(horizontal = 32.dp).widthIn(max = 360.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, Modifier.padding(bottom = 24.dp), style = MaterialTheme.typography.headlineSmall)
             if (hasAppPin) {
                 OutlinedTextField(
                     value = pin,
                     onValueChange = { pin = it.take(com.catatanku.app.security.AppPinCrypto.MAX_PIN_LEN) },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    placeholder = { Text("Masukkan PIN atau sandi") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    placeholder = { Text("PIN") },
                     singleLine = true,
                     enabled = remMs <= 0L,
                     visualTransformation = PasswordVisualTransformation(),
@@ -140,7 +140,7 @@ fun LockScreen(
                 )
                 if (remMs > 0L) {
                     Text(
-                        "Terkunci sementara (${(remMs + 999) / 1000} detik).",
+                        "Coba lagi dalam ${(remMs + 999) / 1000} detik",
                         Modifier.padding(bottom = 8.dp),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
@@ -153,9 +153,9 @@ fun LockScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                PrimaryButton("Buka dengan PIN", Modifier.fillMaxWidth(), enabled = pin.isNotEmpty() && remMs <= 0L, onClick = ::submitPin)
+                PrimaryButton("Buka kunci", Modifier.fillMaxWidth(), enabled = pin.isNotEmpty() && remMs <= 0L, onClick = ::submitPin)
                 if (canDeviceUnlock) {
-                    TextAction("Pakai sidik jari / kunci layar HP", Modifier.padding(top = 4.dp), onClick = onUnlock)
+                    TextAction("Gunakan biometrik", Modifier.padding(top = 8.dp), onClick = onUnlock)
                 }
             } else {
                 PrimaryButton("Buka kunci", onClick = onUnlock)
@@ -195,43 +195,37 @@ fun ReminderSheet(vm: AppViewModel) {
     fun save() = vm.saveReminder(at.toMillis(), repeat, alarm)
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { save() }
 
-    Sheet("Pengingat", vm::closeReminder, AppIcons.Bell, timeColor) {
-        Muted(
-            (if (suggested != null) "Diambil dari catatan · " else "") + note.heading.take(60),
-            Modifier.padding(top = 2.dp, bottom = 8.dp),
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Sheet("Pengingat", vm::closeReminder) {
+        Muted(note.heading.take(60), Modifier.padding(bottom = 16.dp), MaterialTheme.typography.bodyMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             presets.forEach { (label, t) -> Choice(label, selected = at == t) { at = t } }
         }
-        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val field = Modifier.heightIn(min = 44.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            Box(field.weight(1f).clickable(role = Role.Button, onClickLabel = "Ubah tanggal") { pickDate = true }.padding(horizontal = 12.dp), Alignment.CenterStart) {
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val field = Modifier.heightIn(min = 48.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            Box(field.weight(1f).clickable(role = Role.Button, onClickLabel = "Ubah tanggal") { pickDate = true }.padding(horizontal = 14.dp), Alignment.CenterStart) {
                 Text(SimpleDateFormat("EEEE, d MMM yyyy", ID).format(Date(at.toMillis())), style = MaterialTheme.typography.bodyLarge)
             }
             Box(field.clickable(role = Role.Button, onClickLabel = "Ubah jam") { pickTime = true }.padding(horizontal = 14.dp), Alignment.Center) {
                 Text("%02d.%02d".format(at.hour, at.minute), style = MaterialTheme.typography.bodyLarge)
             }
         }
-        if (!valid) Text("Waktu itu sudah lewat. Pilih waktu yang akan datang.", Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        if (!valid) Text("Waktu sudah lewat", Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
 
-        SectionLabel("Ulangi", Modifier.padding(top = 10.dp, bottom = 4.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionLabel("Ulangi", Modifier.padding(top = 24.dp, bottom = 8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Repeat.entries.forEach { r -> Choice(r.label, selected = repeat == r) { repeat = r } }
         }
-        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).padding(end = 10.dp)) {
-                Text("Bunyi seperti alarm", style = MaterialTheme.typography.bodyLarge)
-                Muted("Berdering memakai volume alarm.")
-            }
+        Row(Modifier.padding(top = 16.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Mode alarm", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
             Switch(alarm, { alarm = it })
         }
-        PrimaryButton("Simpan pengingat", Modifier.fillMaxWidth().padding(top = 10.dp), enabled = valid) {
+        PrimaryButton("Simpan pengingat", Modifier.fillMaxWidth().padding(top = 20.dp), enabled = valid) {
             if (Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) {
                 vm.suppressNextLeaveLock()
                 askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else save()
         }
-        TextAction("Salin juga ke Kalender HP", Modifier.fillMaxWidth().padding(top = 2.dp), enabled = valid) {
+        TextAction("Tambahkan ke kalender", Modifier.fillMaxWidth().padding(top = 4.dp), enabled = valid) {
             vm.suppressNextLeaveLock()
             if (!addToCalendar(ctx, note.heading.ifBlank { "Pengingat catatan" }, note.body, at.toMillis(), repeat)) vm.say("Tidak ada aplikasi kalender di HP ini.")
         }
@@ -299,48 +293,44 @@ fun AgentSheet(vm: AppViewModel) {
     val ctx = LocalContext.current
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.runAgent() }
     Sheet(if (run.results != null) "Selesai" else "Rencana", vm::closeAgent) {
-        Muted("“${run.command.take(140)}”", Modifier.padding(top = 2.dp, bottom = 8.dp))
+        Muted("“${run.command.take(140)}”", Modifier.padding(bottom = 16.dp), MaterialTheme.typography.bodyMedium)
         when {
             run.planning -> {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
-                Muted("Membaca perintah…", Modifier.padding(vertical = 8.dp), MaterialTheme.typography.bodyMedium)
+                Muted("Menyusun rencana…", Modifier.padding(vertical = 12.dp), MaterialTheme.typography.bodyMedium)
                 SecondaryButton("Batalkan", Modifier.fillMaxWidth(), onClick = vm::closeAgent)
             }
             run.error != null -> {
                 Text(run.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 Muted(
-                    "Contoh yang dipahami:\n• ingatkan saya bayar listrik besok jam 7 malam\n• catat belanja: susu, telur, roti\n" +
-                        "• tambahkan tugas beli oli ke catatan servis motor\n• centang beli oli di catatan servis motor\n" +
-                        "• beri tag kerja ke catatan rapat, lalu sematkan\n• arsipkan catatan resep nasi goreng",
-                    Modifier.padding(top = 8.dp, bottom = 8.dp), MaterialTheme.typography.bodyMedium,
+                    "Contoh:\ningatkan saya bayar listrik besok jam 7 malam\ncatat belanja: susu, telur, roti\n" +
+                        "tambahkan tugas beli oli ke catatan servis motor",
+                    Modifier.padding(top = 12.dp, bottom = 16.dp), MaterialTheme.typography.bodyMedium,
                 )
                 SecondaryButton("Tutup", Modifier.fillMaxWidth(), onClick = vm::closeAgent)
             }
             run.results != null -> {
                 run.results.forEach { r ->
-                    Row(Modifier.padding(vertical = 3.dp)) {
-                        Icon(AppIcons.Check, null, Modifier.padding(top = 3.dp, end = 8.dp).size(16.dp), muted)
-                        Text(r, style = MaterialTheme.typography.bodyLarge)
-                    }
+                    Text(r, Modifier.padding(vertical = 4.dp), style = MaterialTheme.typography.bodyLarge)
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(16.dp))
                 PrimaryButton("Tutup", Modifier.fillMaxWidth(), onClick = vm::closeAgent)
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    if (vm.agentCanUndo) TextAction("Urungkan perintah", onClick = vm::undoAgent) else Spacer(Modifier.width(1.dp))
+                    if (vm.agentCanUndo) TextAction("Urungkan", onClick = vm::undoAgent) else Spacer(Modifier.width(1.dp))
                     if (vm.stats.byId[run.touched]?.inTrash == false) TextAction("Buka catatan", onClick = vm::openAgentNote)
                 }
             }
             else -> {
                 run.items.forEachIndexed { i, item ->
                     val (label, detail) = agentLabel(item)
-                    Row(Modifier.padding(vertical = 4.dp)) {
+                    Row(Modifier.padding(vertical = 6.dp)) {
                         Muted("${i + 1}", Modifier.width(22.dp).padding(top = 2.dp), MaterialTheme.typography.labelLarge)
                         Column(Modifier.weight(1f)) {
                             Text(label, style = MaterialTheme.typography.bodyLarge)
                             if (item.problem != null) Text(item.problem, Modifier.padding(top = 2.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             else detail?.let { Muted(it, Modifier.padding(top = 2.dp)) }
                             if (item.options.size > 1) {
-                                Muted("Bukan itu? Pilih catatannya:", Modifier.padding(top = 6.dp, bottom = 4.dp), MaterialTheme.typography.labelSmall)
+                                Muted("Pilih catatan", Modifier.padding(top = 8.dp, bottom = 6.dp), MaterialTheme.typography.labelSmall)
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     item.options.forEach { n -> Choice(n.heading.take(26).ifBlank { "(kosong)" }, selected = n.id == item.target?.id) { vm.agentPick(i, n) } }
                                 }
@@ -348,63 +338,90 @@ fun AgentSheet(vm: AppViewModel) {
                         }
                     }
                 }
-                PrimaryButton(if (run.items.size > 1) "Jalankan ${run.items.size} langkah" else "Jalankan rencana", Modifier.fillMaxWidth().padding(top = 10.dp), enabled = vm.agentReady) {
+                PrimaryButton(if (run.items.size > 1) "Jalankan ${run.items.size} langkah" else "Jalankan rencana", Modifier.fillMaxWidth().padding(top = 20.dp), enabled = vm.agentReady) {
                     if (vm.agentSetsReminder && Build.VERSION.SDK_INT >= 33 && !Reminders.canNotify(ctx)) {
                         vm.suppressNextLeaveLock()
                         askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else vm.runAgent()
                 }
-                TextAction("Batalkan", Modifier.fillMaxWidth().padding(top = 2.dp), onClick = vm::closeAgent)
+                TextAction("Batalkan", Modifier.fillMaxWidth().padding(top = 4.dp), onClick = vm::closeAgent)
             }
         }
     }
 }
 
 @Composable
-private fun ActionRow(label: String, hint: String, enabled: Boolean, onClick: () -> Unit) {
+private fun ActionRow(label: String, enabled: Boolean, hint: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(SmallShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick).heightIn(min = 44.dp),
+        Modifier.fillMaxWidth().clip(SmallShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick).heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else muted.copy(alpha = 0.5f))
-        Muted(hint, Modifier.padding(start = 10.dp), MaterialTheme.typography.bodySmall)
+        if (hint != null) Muted(hint, Modifier.padding(start = 12.dp), MaterialTheme.typography.bodySmall)
     }
+}
+
+@Composable
+private fun Group(label: String, content: @Composable () -> Unit) {
+    SectionLabel(label, Modifier.padding(top = 16.dp, bottom = 2.dp))
+    content()
 }
 
 @Composable
 internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean, onCopy: (String) -> Unit) {
     val job = vm.aiJob
     var instr by rememberSaveable { mutableStateOf("") }
-    Sheet(job?.customTitle ?: job?.action?.label ?: "Bantu tulis", vm::dismissAi) {
-        Spacer(Modifier.height(4.dp))
+    val sel = vm.aiSelection
+    Sheet(job?.customTitle ?: job?.action?.label ?: "Asisten", vm::dismissAi) {
         when {
-            !hasModel -> {
-                Muted("Bantu tulis memakai model AI lokal di HP ini.", style = MaterialTheme.typography.bodyMedium)
-                PrimaryButton("Pilih model", Modifier.fillMaxWidth().padding(top = 10.dp)) { vm.dismissAi(); vm.saveDraft(); vm.go(Screen.Settings) }
-            }
-            job == null -> {
-                val canRun = vm.draft.body.isNotBlank()
-                if (!canRun) Muted("Tulis sesuatu dulu.", Modifier.padding(bottom = 4.dp), MaterialTheme.typography.bodyMedium)
-                AiAction.entries.filter { it != AiAction.Custom }.forEach { a -> ActionRow(a.label, a.hint, canRun) { vm.runAi(a) } }
-                ActionRow("Isi judul, folder & tag", "Yang masih kosong", canRun) { vm.aiSheet = false; vm.organizeDraft() }
-                ActionRow("Sarankan pengingat", "Dari jadwal catatan", canRun && !vm.draft.hasReminder) { vm.suggestReminder() }
+            job == null -> Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
+                val canRun = hasModel && vm.draft.body.isNotBlank()
+                if (sel != null) {
+                    val words = AiText.wordCount(vm.draft.body.substring(sel.first, (sel.last + 1).coerceAtMost(vm.draft.body.length)))
+                    Muted("Teks terpilih · $words kata", Modifier.padding(top = 2.dp), MaterialTheme.typography.bodyMedium)
+                    if (!hasModel) NoModel(vm)
+                    Group("Pada teks terpilih") {
+                        listOf(AiAction.Summarize, AiAction.Fix, AiAction.Formal, AiAction.Casual, AiAction.Translate, AiAction.Explain, AiAction.Plan, AiAction.Extract)
+                            .forEach { a -> ActionRow(a.label, hasModel) { vm.runAi(a) } }
+                    }
+                    TextAction("Pakai seluruh catatan", Modifier.padding(top = 4.dp)) { vm.aiSelection = null }
+                } else {
+                    if (!hasModel) NoModel(vm)
+                    else if (vm.draft.body.isBlank()) Muted("Tulis isi catatan dulu, atau pakai Templat di bilah alat.", Modifier.padding(top = 6.dp), MaterialTheme.typography.bodyMedium)
+                    Group("Tulis") {
+                        ActionRow(AiAction.Continue.label, canRun) { vm.runAi(AiAction.Continue) }
+                        ActionRow(AiAction.Title.label, canRun) { vm.runAi(AiAction.Title) }
+                    }
+                    Group("Perbaiki") {
+                        listOf(AiAction.Fix, AiAction.Tidy, AiAction.Formal, AiAction.Casual, AiAction.Translate).forEach { a -> ActionRow(a.label, canRun) { vm.runAi(a) } }
+                    }
+                    Group("Olah") {
+                        listOf(AiAction.Summarize, AiAction.Tasks, AiAction.Plan, AiAction.Extract).forEach { a -> ActionRow(a.label, canRun) { vm.runAi(a) } }
+                    }
+                    Group("Atur") {
+                        ActionRow("Lengkapi metadata", canRun) { vm.aiSheet = false; vm.organizeDraft() }
+                        ActionRow("Deteksi jadwal", canRun && !vm.draft.hasReminder) { vm.suggestReminder() }
+                    }
+                }
                 Row(
-                    Modifier.padding(top = 6.dp).fillMaxWidth().clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(start = 12.dp, end = 4.dp).heightIn(min = 44.dp),
+                    Modifier.padding(top = 16.dp).fillMaxWidth().clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(start = 18.dp, end = 4.dp).heightIn(min = 48.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    PlainField(instr, { instr = it }, "Atau tulis instruksi sendiri", Modifier.weight(1f), ime = ImeAction.Send) {
+                    PlainField(instr, { instr = it }, if (sel != null) "Instruksi untuk teks terpilih" else "Instruksi khusus", Modifier.weight(1f), ime = ImeAction.Send) {
                         if (instr.isNotBlank() && canRun) vm.runAi(AiAction.Custom, instr)
                     }
-                    TextAction("Kirim instruksi", enabled = instr.isNotBlank() && canRun) { vm.runAi(AiAction.Custom, instr) }
+                    TextAction("Kirim", enabled = instr.isNotBlank() && canRun) { vm.runAi(AiAction.Custom, instr) }
                 }
             }
             else -> {
+                Spacer(Modifier.height(4.dp))
                 if (job.running) LinearProgressIndicator(Modifier.fillMaxWidth())
                 job.progress?.let { Muted(it, Modifier.padding(top = 6.dp), MaterialTheme.typography.labelMedium) }
-                Column(Modifier.heightIn(min = 60.dp, max = 300.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                if (job.onSelection) Muted("Pada teks terpilih", Modifier.padding(top = 6.dp), MaterialTheme.typography.labelMedium)
+                Column(Modifier.heightIn(min = 60.dp, max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 10.dp)) {
                     if (job.running && job.text.isEmpty()) Muted(if (loadingModel) "Memuat model ke memori…" else "Menulis…", style = MaterialTheme.typography.bodyMedium)
                     job.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (job.text.isNotEmpty()) Text(job.text, style = NoteType.body, color = MaterialTheme.colorScheme.onSurface)
+                    if (job.text.isNotEmpty()) StyledText(job.text)
                 }
                 if (job.running) SecondaryButton("Hentikan", Modifier.fillMaxWidth(), onClick = vm::stopAi)
                 else if (job.text.isNotBlank()) {
@@ -413,13 +430,12 @@ internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean,
                     if (remindTime != null) {
                         Row(
                             Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceContainer)
-                                .clickable { attachReminder = !attachReminder }.padding(horizontal = 12.dp, vertical = 6.dp),
+                                .clickable { attachReminder = !attachReminder }.padding(horizontal = 14.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(AppIcons.Bell, null, Modifier.size(16.dp), timeColor)
-                            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                                Text("Pasang pengingat · ${whenLabel(remindTime)}", style = MaterialTheme.typography.labelLarge, color = timeColor)
-                                if (vm.draft.hasReminder) Muted("Mengganti pengingat catatan ini saat ini.")
+                            Column(Modifier.weight(1f).padding(end = 10.dp)) {
+                                Text("Pengingat  ·  ${whenLabel(remindTime)}", style = MaterialTheme.typography.labelLarge, color = timeColor)
+                                if (vm.draft.hasReminder) Muted("Menggantikan pengingat saat ini")
                             }
                             Switch(attachReminder, { attachReminder = it })
                         }
@@ -429,24 +445,124 @@ internal fun AiSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean,
                     PrimaryButton(
                         when {
                             job.action.forTitle -> "Pakai sebagai judul"
-                            primaryReplaces && selectedRemind != null -> "Ganti isi & pasang pengingat"
+                            job.onSelection && primaryReplaces -> "Ganti teks terpilih"
+                            job.onSelection -> "Sisipkan di bawah pilihan"
+                            primaryReplaces && selectedRemind != null -> "Ganti isi dan setel pengingat"
                             primaryReplaces -> "Ganti isi catatan"
-                            selectedRemind != null -> "Tambahkan & pasang pengingat"
+                            selectedRemind != null -> "Tambahkan dan setel pengingat"
                             else -> "Tambahkan ke catatan"
                         },
                         Modifier.fillMaxWidth(),
                     ) { vm.applyAi(replace = primaryReplaces, remindAt = selectedRemind) }
                     Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        if (!job.action.forTitle) TextAction(if (primaryReplaces) "Tambahkan saja" else "Ganti isi") {
+                        if (!job.action.forTitle) TextAction(if (primaryReplaces) (if (job.onSelection) "Sisipkan" else "Tambahkan") else (if (job.onSelection) "Ganti pilihan" else "Ganti isi")) {
                             vm.applyAi(replace = !primaryReplaces, remindAt = selectedRemind)
                         }
-                        TextAction("Salin hasil") { onCopy(job.text) }
-                        TextAction("Buang hasil", onClick = vm::dismissAi)
+                        TextAction("Salin") { onCopy(job.text) }
+                        TextAction("Buang", onClick = vm::dismissAi)
                     }
                 } else SecondaryButton("Tutup", Modifier.fillMaxWidth(), onClick = vm::dismissAi)
             }
         }
     }
+}
+
+@Composable
+private fun NoModel(vm: AppViewModel) = Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Muted("Asisten memerlukan model bahasa lokal.", Modifier.weight(1f), MaterialTheme.typography.bodyMedium)
+    TextAction("Pilih model") { vm.dismissAi(); vm.closeTemplates(); vm.saveDraft(); vm.go(Screen.Settings) }
+}
+
+/** Teks hasil asisten dengan format ringan (subjudul, tebal) agar pratinjau sama dengan hasil di catatan. */
+@Composable
+internal fun StyledText(text: String, modifier: Modifier = Modifier) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    val mutedCol = muted
+    val styled = remember(text, ink, mutedCol) { formatAnnotated(text, mutedCol) }
+    Text(styled, modifier, style = NoteType.body, color = ink)
+}
+
+/** Bagian sebuah templat (subjudul "## "), untuk keterangan singkat di daftar templat. */
+private fun sectionsOf(body: String): String =
+    body.lines().filter { it.startsWith("## ") }.joinToString(" · ") { it.removePrefix("## ").trim() }.ifBlank { body.lineSequence().firstOrNull().orEmpty().trim() }.take(70)
+
+@Composable
+internal fun TemplateSheet(vm: AppViewModel, hasModel: Boolean, loadingModel: Boolean) {
+    val job = vm.aiJob?.takeIf { it.isTemplate }
+    var desc by rememberSaveable { mutableStateOf("") }
+    var confirmDelete by remember { mutableStateOf<com.catatanku.app.domain.usecase.NoteTemplate?>(null) }
+    Sheet(if (job != null) job.templateName ?: "Templat baru" else "Templat", vm::closeTemplates) {
+        if (job != null) {
+            Spacer(Modifier.height(4.dp))
+            if (job.running) LinearProgressIndicator(Modifier.fillMaxWidth())
+            Column(Modifier.heightIn(min = 80.dp, max = 360.dp).verticalScroll(rememberScrollState()).padding(vertical = 10.dp)) {
+                if (job.running && job.text.isEmpty()) Muted(if (loadingModel) "Memuat model ke memori…" else "Menyusun templat…", style = MaterialTheme.typography.bodyMedium)
+                job.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (job.templateTitle.isNotBlank()) Text(com.catatanku.app.domain.usecase.Templates.fill(job.templateTitle), Modifier.padding(bottom = 6.dp), style = NoteType.rowTitle, color = MaterialTheme.colorScheme.onSurface)
+                if (job.text.isNotEmpty()) StyledText(job.text)
+            }
+            when {
+                job.running -> SecondaryButton("Hentikan", Modifier.fillMaxWidth(), onClick = vm::stopAi)
+                job.text.isNotBlank() -> {
+                    PrimaryButton("Pakai templat", Modifier.fillMaxWidth()) { vm.applyAi(replace = false); vm.say("Templat dipakai.", "Urungkan") { vm.undoAiChange() } }
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextAction("Simpan dan pakai", onClick = vm::saveGeneratedTemplateAndApply)
+                        TextAction("Buang") { vm.stopAi(); vm.openTemplates() }
+                    }
+                }
+                else -> SecondaryButton("Kembali", Modifier.fillMaxWidth()) { vm.openTemplates() }
+            }
+            return@Sheet
+        }
+        Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
+            Row(
+                Modifier.padding(top = 8.dp).fillMaxWidth().clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(start = 18.dp, end = 4.dp).heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PlainField(desc, { desc = it.take(160) }, "Deskripsikan templat baru", Modifier.weight(1f), ime = ImeAction.Send) {
+                    if (desc.isNotBlank() && hasModel) vm.generateTemplate(desc)
+                }
+                TextAction("Buat", enabled = desc.isNotBlank() && hasModel) { vm.generateTemplate(desc) }
+            }
+            Muted(if (hasModel) "Contoh: notulen rapat klien, laporan kunjungan, rencana konten mingguan" else "Templat buatan asisten memerlukan model bahasa lokal; templat bawaan tetap bisa dipakai.", Modifier.padding(top = 8.dp, start = 4.dp))
+            if (vm.userTemplates.isNotEmpty()) Group("Templat saya") {
+                vm.userTemplates.forEach { t ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).clip(SmallShape).clickable(role = Role.Button) { vm.applyTemplate(t) }.heightIn(min = 52.dp).padding(vertical = 6.dp)) {
+                            Text(t.name, style = MaterialTheme.typography.bodyLarge)
+                            Muted(sectionsOf(t.body), maxLines = 1)
+                        }
+                        IconAction(AppIcons.Close, "Hapus templat ${t.name}", muted, 16.dp) { confirmDelete = t }
+                    }
+                }
+            }
+            Group("Bawaan") {
+                com.catatanku.app.domain.usecase.Templates.builtIn.forEach { t ->
+                    Column(Modifier.fillMaxWidth().clip(SmallShape).clickable(role = Role.Button) { vm.applyTemplate(t) }.heightIn(min = 52.dp).padding(vertical = 6.dp)) {
+                        Text(t.name, style = MaterialTheme.typography.bodyLarge)
+                        Muted(sectionsOf(t.body), maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+    confirmDelete?.let { t ->
+        Confirm("Hapus templat?", "“${t.name}” dihapus dari Templat saya. Catatan yang sudah dibuat tidak berubah.", "Hapus templat", destructive = true,
+            onDismiss = { confirmDelete = null }) { vm.deleteTemplate(t) }
+    }
+}
+
+@Composable
+internal fun NameDialog(title: String, initial: String, placeholder: String, confirm: String, onDismiss: () -> Unit, onOk: (String) -> Unit) {
+    var name by rememberSaveable(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+        text = { OutlinedTextField(name, { name = it.take(40) }, Modifier.fillMaxWidth(), placeholder = { Text(placeholder) }, singleLine = true, shape = SmallShape) },
+        confirmButton = { TextAction(confirm, enabled = name.isNotBlank()) { onOk(name.trim()); onDismiss() } },
+        dismissButton = { TextAction("Batal", onClick = onDismiss) },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    )
 }
 
 @Composable
@@ -456,7 +572,7 @@ internal fun VersionsSheet(vm: AppViewModel, list: List<Version>) {
         val v = preview
         when {
             list.isEmpty() -> Muted(
-                "Belum ada versi lama (${NoteDb.KEEP_VERSIONS} versi terakhir disimpan saat catatan diubah).",
+                "Belum ada versi sebelumnya",
                 Modifier.padding(vertical = 8.dp), MaterialTheme.typography.bodyMedium,
             )
             v == null -> Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
@@ -473,7 +589,7 @@ internal fun VersionsSheet(vm: AppViewModel, list: List<Version>) {
                     Text(v.body, style = NoteType.rowSnippet, color = MaterialTheme.colorScheme.onSurface)
                 }
                 PrimaryButton("Pulihkan versi ini", Modifier.fillMaxWidth()) { vm.restoreVersion(v) }
-                TextAction("Kembali ke daftar versi", Modifier.fillMaxWidth().padding(top = 4.dp)) { preview = null }
+                TextAction("Kembali", Modifier.fillMaxWidth().padding(top = 4.dp)) { preview = null }
             }
         }
     }

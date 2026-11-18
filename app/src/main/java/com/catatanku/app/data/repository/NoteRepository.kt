@@ -12,7 +12,6 @@ import com.catatanku.app.domain.model.BackupRestoreReport
 import com.catatanku.app.domain.model.BackupVersionEntry
 import com.catatanku.app.domain.model.Note
 import com.catatanku.app.domain.model.Version
-import com.catatanku.app.domain.usecase.StoredEmbedding
 import com.catatanku.app.media.Attachments
 import com.catatanku.app.reminders.Reminders
 import com.catatanku.app.reminders.toLocal
@@ -65,6 +64,22 @@ class NoteRepository(private val ctx: Context) {
         if (!alarmSame && !newWithoutReminder) Reminders.sync(ctx, n.copy(id = id))
         prefs.edit().putBoolean("dirty", true).apply()
         return id
+    }
+
+    /** Menyimpan banyak catatan dalam satu transaksi SQLite (aksi massal), lalu menyelaraskan pengingatnya. */
+    fun persistAll(changed: List<Note>, before: Map<Long, Note>) {
+        if (changed.isEmpty()) return
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            changed.forEach { db.upsert(it) }
+            w.setTransactionSuccessful()
+        } finally { w.endTransaction() }
+        changed.forEach { n ->
+            val b = before[n.id]
+            if (b == null || b.remindAt != n.remindAt || b.inTrash != n.inTrash || b.vault != n.vault || b.remindFired != n.remindFired) Reminders.sync(ctx, n)
+        }
+        prefs.edit().putBoolean("dirty", true).apply()
     }
 
     fun buildBackupRecords(includeVault: Boolean = true): List<BackupNoteRecord> {
@@ -173,9 +188,19 @@ class NoteRepository(private val ctx: Context) {
         }
     }
 
-    fun embeddings(modelId: String): Map<Long, StoredEmbedding> = db.embeddings(modelId)
-    fun upsertEmbedding(entry: StoredEmbedding) = db.upsertEmbedding(entry)
-    fun pruneEmbeddings(liveIds: Set<Long>) = db.deleteEmbeddingsExcept(liveIds)
+    /**
+     * Pencarian semantik dihapus di 1.10: vektor lama di tabel `embeddings` dan berkas model embedding
+     * dimusnahkan sekali, agar tidak ada sisa data turunan catatan yang tertinggal. Skema tabel tetap (migrasi).
+     */
+    fun purgeSemanticData() {
+        if (prefs.getBoolean("semantic_purged", false)) return
+        db.deleteEmbeddingsExcept(emptySet())
+        val dir = java.io.File(ctx.filesDir, "models")
+        listOf("embedding.litertlm", "embedding_import.tmp").forEach { name ->
+            java.io.File(dir, name).takeIf { it.exists() }?.let { DeviceVaultKey.shredFile(it); it.delete() }
+        }
+        prefs.edit().putBoolean("semantic_purged", true).apply()
+    }
 }
 
 object AutoBackup {

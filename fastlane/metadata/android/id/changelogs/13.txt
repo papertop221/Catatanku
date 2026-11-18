@@ -1,0 +1,5 @@
+• Desain baru "Fokus" dengan dok mengambang dan pilihan tema terang/gelap
+• Templat profesional, templat buatan asisten, dan Templat saya
+• Pilih banyak catatan, format ringan, tautan [[catatan]], cari & ganti, gandakan, ekspor .md/.txt
+• Asisten lebih dalam: rencana dari tujuan, poin penting, nada formal/santai, terjemahan, aksi pada teks terpilih, ringkasan lintas catatan
+• Pencarian semantik dihapus; pencarian tetap instan tanpa model

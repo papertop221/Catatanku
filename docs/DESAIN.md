@@ -18,10 +18,14 @@ Perubahan tampilan sebaiknya mengubah berkas ini dulu, baru kodenya.
 | Tinta | `#191918` | `#ECECE9` | Teks, ikon, tombol utama |
 | Tinta redup | `#5F5E5A` | `#A6A5A0` | Keterangan, meta |
 | Garis | `#E6E5E1` | `#2A2A28` | Pemisah baris |
+| Biru (aksen, mulai 1.10) | `#2F5BEA` | `#8FA8FF` | Aksi utama (tombol +), item dok yang aktif, baris tanggal di atas judul. Tidak untuk teks isi |
 | Amber | `#8A5200` | `#F0B450` | **Waktu saja**: pengingat, tenggat, blok "Hari ini" |
 | Merah | `#B3261E` | `#F28B82` | Yang terlewat dan tindakan yang menghapus |
 
 Tidak ada gradasi. Warna mengikuti wallpaper tersedia sebagai pilihan di Pengaturan (Android 12+), bukan bawaan.
+
+**Tema** (mulai 1.10): Sistem (bawaan), Terang, atau Gelap; dipilih di Pengaturan → Tampilan, dan bisa dibalik
+satu ketuk lewat ikon matahari/bulan di bilah atas daftar. Ikon bilah status ikut tema aplikasi.
 
 ## Huruf
 
@@ -31,29 +35,92 @@ Tidak ada gradasi. Warna mengikuti wallpaper tersedia sebagai pilihan di Pengatu
 
 ## Bentuk dan permukaan
 
-- Dua radius: 8 dp (tombol, kolom, chip) dan 16 dp (lembar bawah, dialog).
+- Radius: 8 dp (tombol, kolom, chip), 16 dp (lembar bawah, dialog), 20 dp (grup Pengaturan, blok Hari ini), dan
+  penuh/pil untuk dok, tombol +, dan kolom cari yang mengambang (mulai 1.10, arah "Fokus").
 - Daftar berupa baris datar dengan garis pemisah. Tidak ada kartu, bayangan, atau efek kaca.
+- Pengecualian: **grup membulat** (Pengaturan, blok Hari ini) dan **dok mengambang**. Permukaan datar
+  `surfaceContainer`, tanpa bayangan dan tanpa garis tepi.
 - Sasaran sentuh minimal 44–48 dp.
+
+## Jarak (mulai 1.10)
+
+Satu ritme 4 dp; nilai di luar daftar ini tidak dipakai.
+
+| Token | Nilai | Dipakai untuk |
+|---|---|---|
+| Tepi (`Gutter`) | 20 dp | Jarak kiri-kanan semua isi layar dan lembar |
+| Baris | 12 dp atas & bawah | Baris catatan di daftar; baris Pengaturan minimal 52 dp |
+| Kelompok | 28 dp | Jarak sebelum judul kelompok (Pengaturan, lembar) |
+| Rapat | 4–8 dp | Antara judul dan keterangannya, antar-chip |
+
+Judul kelompok ditulis kapital kecil (`labelSmall`, jarak huruf lebar), tanpa garis pemisah di atasnya:
+jarak kosonglah yang memisahkan kelompok.
 
 ## Ikon
 
-Satu set garis buatan sendiri di `AppIcons` (24 dp, tebal 1,75, ujung membulat). Ikon selalu ditemani kata; bila
-berdiri sendiri (bilah atas), ia punya keterangan untuk pembaca layar. Tidak ada emoji.
+Satu set garis buatan sendiri di `AppIcons` (24 dp, tebal 1,75, ujung membulat). Tidak ada emoji.
+
+Ikon hanya dipakai di **bilah atas** dan **bilah alat editor**, berdiri sendiri tanpa label, dan selalu punya
+keterangan untuk pembaca layar. Di tempat lain (menu, lembar, Pengaturan, judul lembar, layar kunci) cukup kata,
+tanpa ikon pendamping. Satu-satunya ikon di tengah teks adalah lonceng kecil pada waktu pengingat.
 
 ## Tata letak
 
-- **Satu layar utama, tanpa tab.** Atas: tampilan yang dipilih. Tengah: blok "Hari ini" (hanya bila ada isinya),
-  lalu daftar. Bawah, sejangkauan ibu jari: filter tag, kolom cari, tombol catatan baru.
+- **Satu layar utama, arah "Fokus" (mulai 1.10).** Atas: baris tanggal (biru), judul tampilan besar (40 sp, tebal;
+  ketuk untuk ganti tampilan), satu baris ringkasan, lalu filter tag. Tengah: blok "Hari ini" (hanya bila ada isinya)
+  dan daftar: judul, satu baris isi, waktu rata kanan. Bawah, mengambang sejangkauan ibu jari: **dok** berbentuk pil
+  (Catatan · Cari · Pengingat · Pengaturan) dan tombol + bulat biru. Kolom cari muncul di atas dok saat Cari diketuk.
+- **Pengaturan**: judul besar, pilihan tema (Sistem · Terang · Gelap) sebagai segmen, lalu satu grup membulat berisi
+  kategori dengan status di kanan. Tiap kategori membuka halaman sendiri dengan isi dalam grup membulat yang sama.
 - **Jawaban tampil di atas daftar**, bukan di layar tersendiri.
 - **Geser baris**: kanan = arsipkan, kiri = pengingat. Aksi yang sama ada di menu tekan-lama.
 - **Editor**: tanpa tombol simpan; penanda "Tersimpan" di bilah atas. Alat menempel di atas papan ketik.
 
 ## Bahasa
 
+- Satu hal, satu nama, di seluruh aplikasi. Nama fitur singkat dan baku (lihat glosarium di bawah).
+- Keterangan di bawah judul baris hanya untuk **keadaan** (galat, status yang perlu tindakan), bukan untuk
+  menjelaskan fitur. Penjelasan dan peringatan tinggal di dialog konfirmasi.
 - Tombol = kata kerja + objek: "Simpan pengingat", "Jalankan rencana", "Hapus model". Bukan "OK" atau "Ya".
 - Keadaan kosong menyebut langkah berikutnya.
 - Pesan galat menyebut apa yang terjadi dan apa yang bisa dilakukan.
 - Tindakan yang menyingkirkan catatan selalu menawarkan "Urungkan".
+
+### Glosarium nama fitur (mulai 1.10)
+
+| Nama | Menggantikan |
+|---|---|
+| Asisten | Bantu tulis, Fitur AI |
+| Lanjutkan · Koreksi ejaan · Susun ulang · Ringkasan · Ekstrak tugas · Buat judul · Instruksi khusus | Lanjutkan tulisan, Perbaiki ejaan, Rapikan struktur, Ringkas, Ambil daftar tugas, Instruksi bebas |
+| Lengkapi metadata | Isi judul, folder & tag (yang kosong) |
+| Deteksi jadwal | Sarankan pengingat |
+| Ekstrak teks · Transkripsi | Baca gambar, Transkripsikan |
+| Tugas terbuka · Ringkasan mingguan | Tugas belum selesai, Rekap 7 hari |
+| Tanyakan · Perluas pencarian · Jalankan | Tanya catatan, Jalankan perintah |
+| Kunci otomatis · PIN aplikasi · Hapus setelah 10 kali gagal · Hapus semua data | (rincian keamanan) |
+| Lindungi layar · Keyboard privat · Bersihkan papan klip · Mode offline | Blokir tangkapan layar, Keyboard penyamaran, Hapus papan klip 30 dtk, Mode Offline Mutlak |
+| Model bahasa · Kapasitas konteks · Kalibrasi kinerja | Model AI, Panjang bacaan, Penyesuaian kecepatan |
+| Izin notifikasi · Alarm presisi · Optimasi baterai · Prioritas alarm · Diagnostik | (rincian pengingat) |
+| Tema (Sistem · Terang · Gelap) · Warna dinamis | Warna mengikuti wallpaper |
+| Templat · Templat saya · Mulai dari templat | (baru) |
+| Rencana dari tujuan · Poin penting · Nada formal · Nada santai · Terjemahkan · Jelaskan | (baru) |
+| Ringkas tampilan ini · Simpan sebagai catatan · Pilih catatan · Ditautkan dari | (baru) |
+
+## Format teks (mulai 1.10)
+
+Format ringan mirip Markdown: `## ` subjudul, `**tebal**`, `_miring_`, `> ` kutipan, `[[judul]]` tautan. Penandanya
+tidak disembunyikan, hanya diredupkan, agar teks tetap utuh saat disalin, dibagikan, atau diekspor. Tautan memakai
+warna aksen dan garis bawah. Cuplikan di daftar membuang penanda.
+
+## Gerak (mulai 1.10)
+
+Gerak hanya untuk menjelaskan perpindahan, tidak sebagai hiasan. Pendek dan tenang: 120–260 ms.
+
+- Pindah layar (Daftar ↔ Editor ↔ Pengaturan, dashboard ↔ kategori): pudar masuk + geser sedikit (1/14 lebar)
+  ke arah tujuan; layar lama hanya memudar.
+- Baris catatan yang muncul, hilang, atau berpindah urutan bergerak ke tempatnya (`animateItem`).
+- Bagian yang dilipat (Hari ini, rincian Pengaturan, aksi pencarian) membuka dan menutup dengan halus.
+- Tidak ada animasi masuk per elemen, pantulan, atau gerak berulang.
 
 ## Keadaan yang harus selalu didesain
 

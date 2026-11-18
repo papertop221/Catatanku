@@ -39,7 +39,6 @@ data class ModelSpec(
 
 object ModelCatalog {
     const val IMPORT_ID = "import"
-    const val EMBEDDING_IMPORT_ID = "import-embedding"
     private const val HF = "https://huggingface.co/litert-community"
 
     val all = listOf(

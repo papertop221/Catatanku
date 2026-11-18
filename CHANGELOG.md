@@ -1,5 +1,46 @@
 # Riwayat perubahan
 
+## 1.10
+
+Tampilan ringkas & rapi
+- Ritme jarak baru yang konsisten (tepi 20 dp, baris lebih lega, jarak 28 dp antar-kelompok); tercatat di `docs/DESAIN.md` → Jarak
+- Pengaturan ditata ulang: judul kelompok kapital kecil tanpa garis, satu baris per fitur dengan nilai di kanan, keterangan hanya untuk status yang perlu tindakan; pengaturan model lanjutan dan diagnostik pengingat dilipat
+- Daftar: baris catatan lebih lega, meta hanya pengingat · folder · waktu (tag tetap di bilah filter); keadaan kosong lebih singkat
+- Editor: bilah alat ikon saja (berlabel untuk pembaca layar) dengan satu aksi teks *Asisten*; meta ringkas
+- Lembar bawah tanpa ikon judul, tombol utama 48 dp; layar kunci hanya judul dan tombol
+- Nama fitur dibakukan (glosarium di `docs/DESAIN.md`): *Asisten*, *Koreksi ejaan*, *Susun ulang*, *Ringkasan*, *Ekstrak tugas*, *Lengkapi metadata*, *Deteksi jadwal*, *Tugas terbuka*, *Ringkasan mingguan*, *Lindungi layar*, *Keyboard privat*, *Mode offline*, *Kapasitas konteks*, *Kalibrasi kinerja*, *Pencarian semantik*, *Prioritas alarm*, *Warna dinamis*; pengulangan pengingat menjadi *Harian/Mingguan/Bulanan*
+- Arah desain baru "Fokus": judul tampilan besar dengan baris tanggal, daftar ringkas (judul, satu baris isi, waktu rata kanan), dan **dok mengambang** di bawah (Catatan · Cari · Pengingat · Pengaturan) dengan tombol + bulat; kolom cari muncul di atas dok saat dibutuhkan
+- Satu warna aksen biru untuk aksi utama dan item dok aktif; amber tetap khusus waktu
+- Pengaturan: judul besar, pilihan tema berbentuk segmen, lalu kategori (Keamanan, Privasi, Cadangan, Asisten, Pengingat, Tampilan) dalam satu grup membulat dengan status langsung; tiap kategori membuka halaman ringkas; status yang perlu tindakan tampil merah
+- Tema Sistem / Terang / Gelap di Pengaturan → Tampilan, plus tombol matahari/bulan di bilah atas daftar; ikon bilah status mengikuti tema
+- Gerak halus dan pendek: transisi antarlayar dan antarkategori, baris catatan berpindah ke tempatnya, bagian lipat membuka dengan lembut
+- Palet sedikit lebih segar: kertas lebih bersih, permukaan bertingkat lebih jelas di terang dan gelap
+
+Fitur dasar catatan
+- **Templat**: 8 templat bawaan yang profesional (Notulen rapat, Rencana proyek, Laporan kerja, Jurnal harian, Catatan belajar, Brief klien, Daftar belanja, Evaluasi); tanggal, hari, dan jam diisi oleh kode saat dipakai. Bisa dipakai dari catatan kosong ("Mulai dari templat"), menu catatan, atau lembar Asisten
+- Tombol **Templat** ada di bilah alat editor (paling kiri), satu-satunya pintu masuk templat
+- **Templat buatan asisten**: deskripsikan keperluannya (mis. "laporan kunjungan klien") di catatan yang masih kosong; asisten menyusun kerangka tanpa data contoh, lalu bisa dipakai atau disimpan ke **Templat saya** (tersimpan terenkripsi AES-256-GCM dengan kunci Keystore). Catatan yang ada juga bisa disimpan sebagai templat
+- **Pilih banyak**: tekan lama catatan, lalu sematkan, arsipkan, pindah folder, beri tag, hapus, pulihkan, atau hapus permanen sekaligus dalam satu transaksi SQLite, dengan Urungkan
+- **Format ringan**: subjudul (`## `), tebal (`**…**`), miring (`_…_`), dan kutipan (`> `) tampil rapi langsung di editor lewat tombol Format; penanda tetap terlihat redup sehingga teks tetap portabel
+- **Tautan antarcatatan**: tulis `[[judul]]` (dengan saran judul saat mengetik) lalu ketuk untuk membuka catatan itu atau membuatnya; bagian **Ditautkan dari** menampilkan catatan yang menautkan ke catatan ini
+- **Utilitas**: Cari & ganti di dalam catatan (dengan sorotan dan Urungkan), Gandakan, serta ekspor satu catatan ke `.md` atau `.txt` (catatan Brankas tidak diekspor sebagai teks polos)
+
+Asisten yang lebih dalam
+- Lembar Asisten dikelompokkan: Tulis, Perbaiki, Olah, Atur
+- Aksi baru: **Rencana dari tujuan** (langkah centang berurutan; tenggat yang disebut ditawarkan sebagai pengingat, waktunya dihitung oleh kode), **Poin penting** (jadwal, keputusan, angka & biaya, kontak, tindak lanjut), **Nada formal**, **Nada santai**, **Terjemahkan** (Indonesia ↔ Inggris), dan **Jelaskan**
+- **Aksi pada teks terpilih**: pilih sebagian teks lalu jalankan aksi; hasilnya menggantikan atau disisipkan di bawah bagian itu saja
+- **Susun ulang** kini memakai subjudul, dan hasil asisten tampil dengan format yang sama seperti di catatan
+- **Ringkas tampilan ini**: ringkasan lintas catatan untuk folder, tag, hasil cari, atau tampilan yang dibuka, bernomor sumber; bisa disimpan sebagai catatan baru lengkap dengan tautan ke sumbernya. Ringkasan mingguan memakai alur yang sama
+
+Perbaikan sebelum rilis
+- Templat buatan asisten selalu gagal ("tidak menghasilkan templat yang rapi"): prompt yang diakhiri `JUDUL:` membuat Gemma 4 E2B hanya mengulang awalan itu lalu berhenti. Prompt ditulis ulang tanpa awalan penutup (judul diisi kode), dan pengurai kini membuang kalimat pengantar, label contoh yang tersalin, titik dua ganda, garis isian `____`, serta poin kosong ganda. Diuji dengan model sungguhan (`litertlm-jvm` 0.19.1, Gemma 4 E2B, CPU) pada deskripsi Indonesia dan Inggris
+- Susun ulang tidak lagi menggemakan baris "Judul:" dari prompt
+
+Penghapusan pencarian semantik
+- Model embedding, pencarian hibrida, dan pengaturannya dihapus; pencarian kembali murni TF-IDF + trigram (instan, tanpa model)
+- Vektor lama di tabel `embeddings` dan berkas model embedding dihapus sekali saat aplikasi pertama dibuka; skema basis data tidak berubah sehingga migrasi lama tetap berjalan
+- Tidak ada perubahan pada catatan, izin, atau skema basis data
+
 ## 1.9
 
 Keamanan data & privasi super ketat

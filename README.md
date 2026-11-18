@@ -8,18 +8,18 @@
 
 *An offline-first Android notes app with reminders and an on-device AI assistant. No account, no cloud, no tracking.*
 
-[![Versi](https://img.shields.io/badge/versi-1.8.1-191918)](CHANGELOG.md)
+[![Versi](https://img.shields.io/badge/versi-1.10-191918)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-191918)](#pasang)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache--2.0-191918)](LICENSE)
 [![Offline](https://img.shields.io/badge/data-tetap%20di%20perangkat-8A5200)](#privasi)
 
-### [Unduh Catatanku 1.8.1 (APK, 24,9 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.8.1/Catatanku-1.8.1.apk)
+### [Unduh Catatanku 1.10 (APK, 25,1 MB)](https://github.com/papertop221/Catatanku/releases/download/v1.10/Catatanku-1.10.apk)
 
 Android 8.0 ke atas · arm64 · [Riwayat perubahan](CHANGELOG.md)
 
 </div>
 
-![Daftar, editor, lembar pengingat, dan rencana asisten dalam mode terang](docs/screenshots/terang.png)
+![Daftar dengan dok mengambang, editor berformat, lembar Templat, dan Pengaturan dalam mode terang](docs/screenshots/terang.png)
 ![Tampilan yang sama dalam mode gelap](docs/screenshots/gelap.png)
 
 ## Sekilas
@@ -84,7 +84,11 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 - Bagikan/salin, terima teks, gambar (`image/*`), dan suara (`audio/*`) dari aplikasi lain
 - Menu teks terpilih di aplikasi lain (browser, obrolan, PDF): simpan langsung sebagai catatan, simpan dengan pengingat, atau ringkas/perbaiki ejaan/ambil daftar tugas dengan AI lokal (dan ganti teks di aplikasi asal bila kolomnya bisa disunting)
 - Tile Setelan Cepat "Catatan baru", pintasan tekan-lama ikon aplikasi, pintu masuk asisten perangkat (`ACTION_ASSIST`), dan intent publik (`NEW_NOTE`, `SHOW_REMINDERS`, `SHOW_TASKS`)
-- Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; tekan lama untuk sematkan, pindahkan ke folder, tandai pengingat selesai, arsipkan, atau hapus
+- **Templat**: 8 templat bawaan (Notulen rapat, Rencana proyek, Laporan kerja, Jurnal harian, Catatan belajar, Brief klien, Daftar belanja, Evaluasi), templat buatan asisten dari deskripsi singkat, dan *Templat saya* (tersimpan terenkripsi)
+- **Format ringan**: subjudul `## `, `**tebal**`, `_miring_`, kutipan `> `, langsung tampil rapi di editor
+- **Tautan antarcatatan** `[[judul]]` dengan saran judul saat mengetik, plus daftar *Ditautkan dari*
+- Cari & ganti di dalam catatan, gandakan catatan, ekspor satu catatan ke `.md`/`.txt`
+- Geser baris ke kanan untuk mengarsipkan, ke kiri untuk pengingat; **tekan lama untuk memilih banyak** lalu sematkan, arsipkan, pindah folder, beri tag, atau hapus sekaligus (bisa diurungkan)
 - Blok "Hari ini": pengingat yang terlewat atau jatuh hari ini, dan jumlah tugas yang belum dicentang
 
 **Pengingat**
@@ -106,20 +110,21 @@ versi baru di atas 1.3 atau lebih lama, jadi:
 - Catatan terkait muncul otomatis di editor
 
 **AI lokal** — opsional, butuh model
-- *Bantu tulis*: lanjutkan, perbaiki ejaan, rapikan struktur, ringkas, ambil daftar tugas, buat judul, instruksi bebas
+- *Asisten*: lanjutkan, buat judul, koreksi ejaan, susun ulang, nada formal/santai, terjemahkan (Indonesia ↔ Inggris), ringkasan, ekstrak tugas, **rencana dari tujuan** (dengan tenggat sebagai pengingat), **poin penting** (jadwal, keputusan, angka, kontak, tindak lanjut), dan instruksi khusus
+- *Pada teks terpilih*: pilih sebagian teks lalu ringkas, koreksi, ubah nada, terjemahkan, atau jelaskan; hasilnya hanya mengganti bagian itu
 - *Gambar & suara (Gemma 4 E2B)*: baca teks/isi gambar (OCR), ambil daftar tugas dari gambar, serta transkripsikan atau ambil daftar tugas dari rekaman suara
 - *Catatan panjang*: ringkas, daftar tugas, dan perbaiki ejaan memproses seluruh isi bagian demi bagian
 - *Merapikan*: isi judul, folder, dan tag yang kosong untuk satu atau semua catatan, atau otomatis saat catatan ditutup
-- *Tanya catatan*: jawaban dari hingga 4 catatan paling relevan, tampil di atas daftar lengkap dengan sumbernya
-- *Rekap 7 hari* dan daftar semua tugas yang belum dicentang
+- *Tanyakan*: jawaban dari hingga 4 catatan paling relevan, tampil di atas daftar lengkap dengan sumbernya
+- *Ringkas tampilan ini* (folder, tag, hasil cari) dan *Ringkasan mingguan*, bernomor sumber dan bisa disimpan sebagai catatan; daftar *Tugas terbuka*
 - *Sarankan pengingat* dari jadwal atau tenggat di catatan
 - *Perluas pencarian*: "jogging" → "lari, olahraga"
 
 Hasil AI selalu ditinjau dulu sebelum diterapkan; "Ganti isi" bisa diurungkan, dan merapikan tidak pernah menimpa isian yang sudah ada.
 
 **Tampilan**
-- Satu layar tanpa tab; kolom cari, filter tag, dan tombol catatan baru di bawah, sejangkauan ibu jari
-- Mode terang dan gelap (hitam pekat); pilihan warna mengikuti wallpaper di Android 12+
+- Arah desain "Fokus": judul besar, daftar ringkas, dan dok mengambang (Catatan · Cari · Pengingat · Pengaturan) sejangkauan ibu jari
+- Tema Sistem, Terang, atau Gelap (hitam pekat) dengan tombol cepat; warna mengikuti wallpaper di Android 12+
 - Aturan desainnya tertulis di [DESAIN.md](docs/DESAIN.md)
 
 **Keamanan dan cadangan**
@@ -143,7 +148,7 @@ Pengaturan → Model AI → **Unduh**. Unduhan berjalan di latar, lanjut otomati
 Untuk HP dengan RAM terbatas (< 7 GB fisik, tidak menghitung swap/RAM Boost), profil **Hemat** (jendela konteks 2.048 token) aktif secara bawaan, dan `MemoryPolicy` melepas model secara adaptif tanpa memicu `System.gc()`.
 
 Semua berlisensi Apache-2.0 dari [litert-community](https://huggingface.co/litert-community) dan bisa diunduh tanpa login.
-Sudah punya berkas `.litertlm`? Pakai **Dari berkas** (juga mendukung model embedding lokal untuk pencarian semantik hibrida opsional).
+Sudah punya berkas `.litertlm`? Pakai **Berkas lokal** di Pengaturan → Asisten.
 
 ## Privasi
 
@@ -188,10 +193,11 @@ Simpan berkas `.jks` dan sandinya di tempat aman: bila hilang, pembaruan berikut
 
 | Bagian | Status |
 |---|---|
-| Uji unit JVM murni & benchmark pencarian | 59 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `HybridSearchTest` 3, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7) + 1 `PerfTest` berjalan di Termux |
-| Mesin pencarian & semantik hibrida, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten | Uji unit JVM otomatis |
-| Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite | 23 uji Robolectric (`ReminderTest` 20, `Shots*` 3) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
+| Uji unit JVM murni & benchmark pencarian | 69 uji unit JVM (`AgentTest` 7, `AiTextTest` 17, `AiQualityTest` 4, `BackupArchiveTest` 7, `PerformanceAndMemoryTest` 5, `SearchEngineTest` 9, `TimeParseTest` 7, `WritingToolsTest` 13) + 1 `PerfTest` (dilewati kecuali `-Pperf=true`) |
+| Templat, format ringan, tautan `[[…]]`, cari & ganti, ekspor, biaya gaya per ketikan, mesin pencarian, pengurai keluaran & kualitas prompt AI, profil performa & `MemoryPolicy`, cadangan ZIP lengkap & enkripsi AES-256-GCM, pengenal waktu, pengurai perintah asisten | Uji unit JVM otomatis |
+| Pengingat (`EXTRA_DUE`, pelindung duplikat, perubahan jam & izin exact alarm, mode tahan hemat baterai), riwayat versi, migrasi v2 → v3 → v4 → v5, transaksi impor SQLite | 30 uji Robolectric (`ReminderTest` 22, `SecurityHardeningTest` 5, `Shots*` 3 yang merender 31 layar terang, gelap, dan tinggi) terkompilasi & dijalankan via Linux `glibc` / CI (`.github/workflows/ci.yml`) |
 | Benchmark AI lokal pada perangkat (CPU sweep, GPU, MTP per-tugas, KV cache 2048/3072/4096, vision GPU 1024px, audio CPU, thermal 5-run) | Diukur langsung pada Moto G86 Power 5G (`mt6878`, `gemma-4-E2B-it.litertlm`, `litertlm-android` 0.19.1) — lihat [Benchmark](docs/BENCHMARK.md) |
+| Prompt templat dan aksi Asisten 1.10 (templat dari deskripsi, rencana, poin penting, nada, terjemahan, jelaskan, susun ulang, ringkasan lintas catatan) | Dijalankan dengan Gemma 4 E2B sungguhan lewat `litertlm-jvm` 0.19.1 (CPU desktop); belum diukur di HP |
 | Build debug & rilis R8 (`assembleDebug`, `assembleRelease`), Android Lint, audit graf ketergantungan bebas SDK tertutup | Diverifikasi saat build & CI |
 | Skenario sentuh interaktif APK penuh, transkripsi suara ucapan bahasa Indonesia nyata, serta keandalan alarm latar belakang pada merek OEM agresif (Oppo/Vivo/Xiaomi/Huawei/Transsion) | **Belum diuji langsung di perangkat OEM masing-masing** |
 
